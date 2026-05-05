@@ -123,6 +123,11 @@ export default function Bancos({ selectedSede, sedeId }) {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
+  const selectedSedeName =
+    typeof selectedSede === "object" && selectedSede !== null
+      ? selectedSede.nombre
+      : selectedSede || "Todas las sedes";
+
   async function loadData(currentSedeId = sedeId) {
     setLoading(true);
 

@@ -33,7 +33,7 @@ export async function getCuentasBancarias(sedeId = null) {
 
   if (error) throw error;
 
-  return data.map(mapCuentaBancaria);
+  return data.map(mapCuenta);
 }
 
 export async function createCuentaBancaria(form) {
