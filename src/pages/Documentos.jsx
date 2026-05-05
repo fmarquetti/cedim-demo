@@ -1,48 +1,38 @@
-import { useMemo, useRef, useState } from "react";
-import { Plus, Trash2, Eye, CheckCircle, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Trash2, Eye, CheckCircle, Upload, RefreshCw } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import jsQR from "jsqr";
 import Modal from "../components/Modal";
+import { getSedes } from "../services/sedeService";
+import {
+  createDocumento,
+  deleteDocumento,
+  getDocumentos,
+  updateEstadoDocumento,
+} from "../services/documentoService";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
-const initialDocumentos = [
-  {
-    id: 1,
-    fecha: "31/05/2025",
-    tipo: "Factura",
-    descripcion: "Factura OSDE mayo 2025",
-    asociadoA: "OSDE",
-    sede: "Sede Centro",
-    archivo: "factura_osde_mayo_2025.pdf",
-    estado: "Validado",
-  },
-  {
-    id: 2,
-    fecha: "30/05/2025",
-    tipo: "Comprobante",
-    descripcion: "Pago proveedor reactivos",
-    asociadoA: "Laboratorios BACON",
-    sede: "Sede Norte",
-    archivo: "comprobante_bacon_30052025.pdf",
-    estado: "Pendiente revisión",
-  },
-  {
-    id: 3,
-    fecha: "29/05/2025",
-    tipo: "Extracto bancario",
-    descripcion: "Extracto Banco Galicia",
-    asociadoA: "Banco Galicia",
-    sede: "Todas",
-    archivo: "extracto_galicia_mayo.csv",
-    estado: "Conciliado",
-  },
-];
+const emptyForm = {
+  fecha: new Date().toISOString().split("T")[0],
+  tipo: "Factura",
+  descripcion: "",
+  asociadoA: "",
+  sedeId: "",
+  archivo: "",
+  estado: "Pendiente revisión",
+};
 
-function filterBySede(items, selectedSede) {
-  if (!selectedSede || selectedSede === "Todas las sedes") return items;
-  return items.filter((item) => item.sede === selectedSede || item.sede === "Todas");
+function normalizeText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function getStatusClass(text) {
+  return normalizeText(text).replaceAll(" ", "-");
 }
 
 function decodeBase64Url(base64Url) {
@@ -101,34 +91,76 @@ function formatImporte(value) {
   });
 }
 
-export default function Documentos({ selectedSede }) {
+export default function Documentos({ selectedSede, sedeId }) {
   const facturaInputRef = useRef(null);
 
-  const [documentos, setDocumentos] = useState(initialDocumentos);
+  const [documentos, setDocumentos] = useState([]);
+  const [sedes, setSedes] = useState([]);
+
   const [search, setSearch] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState("Todos");
+
   const [modal, setModal] = useState(null);
   const [selectedDocumento, setSelectedDocumento] = useState(null);
   const [importandoFactura, setImportandoFactura] = useState(false);
 
-  const [form, setForm] = useState({
-    fecha: "",
-    tipo: "Factura",
-    descripcion: "",
-    asociadoA: "",
-    sede: "Sede Centro",
-    archivo: "",
-    estado: "Pendiente revisión",
-  });
+  const [form, setForm] = useState(emptyForm);
 
-  const documentosPorSede = filterBySede(documentos, selectedSede);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
+
+  const selectedSedeName =
+    typeof selectedSede === "object" && selectedSede !== null
+      ? selectedSede.nombre
+      : selectedSede || "Todas las sedes";
+
+  const sedeBloqueada = sedeId && sedeId !== "todas";
+
+  async function loadData(currentSedeId = sedeId) {
+    setLoading(true);
+
+    try {
+      const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
+
+      const [documentosData, sedesData] = await Promise.all([
+        getDocumentos(idParaFiltro),
+        getSedes(),
+      ]);
+
+      setDocumentos(documentosData || []);
+      setSedes(sedesData || []);
+
+      setForm((prev) => ({
+        ...prev,
+        sedeId: prev.sedeId || idParaFiltro || sedesData?.[0]?.id || "",
+      }));
+    } catch (error) {
+      console.error("Error cargando documentos:", error);
+      alert(error.message || "No se pudieron cargar los documentos.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData(sedeId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sedeId]);
+
+  const documentosPorSede = documentos;
 
   const documentosFiltrados = useMemo(() => {
+    const searchValue = normalizeText(search);
+
     return documentosPorSede.filter((item) => {
       const matchSearch =
-        item.descripcion.toLowerCase().includes(search.toLowerCase()) ||
-        item.asociadoA.toLowerCase().includes(search.toLowerCase()) ||
-        item.archivo.toLowerCase().includes(search.toLowerCase());
+        !searchValue ||
+        normalizeText(item.descripcion).includes(searchValue) ||
+        normalizeText(item.asociadoA).includes(searchValue) ||
+        normalizeText(item.archivo).includes(searchValue) ||
+        normalizeText(item.sede).includes(searchValue);
 
       const matchTipo = tipoFiltro === "Todos" || item.tipo === tipoFiltro;
 
@@ -141,29 +173,73 @@ export default function Documentos({ selectedSede }) {
   const validados = documentosPorSede.filter((d) => d.estado === "Validado").length;
   const conciliados = documentosPorSede.filter((d) => d.estado === "Conciliado").length;
 
-  function handleCreate(e) {
+  function openNuevo() {
+    setForm({
+      ...emptyForm,
+      fecha: new Date().toISOString().split("T")[0],
+      sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+    });
+
+    setModal("nuevo");
+  }
+
+  async function handleCreate(e) {
     e.preventDefault();
 
-    setDocumentos((prev) => [
-      {
-        id: Date.now(),
+    setSaving(true);
+
+    try {
+      await createDocumento({
         ...form,
         archivo: form.archivo || "archivo_simulado.pdf",
-      },
-      ...prev,
-    ]);
+      });
 
-    setModal(null);
+      await loadData(sedeId);
+
+      setForm({
+        ...emptyForm,
+        fecha: new Date().toISOString().split("T")[0],
+        sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+      });
+
+      setModal(null);
+    } catch (error) {
+      console.error("Error guardando documento:", error);
+      alert(error.message || "No se pudo guardar el documento.");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function handleDelete(id) {
-    setDocumentos((prev) => prev.filter((item) => item.id !== id));
+  async function handleDelete(id) {
+    const confirmed = window.confirm("¿Eliminar este documento?");
+    if (!confirmed) return;
+
+    setDeletingId(id);
+
+    try {
+      await deleteDocumento(id);
+      await loadData(sedeId);
+    } catch (error) {
+      console.error("Error eliminando documento:", error);
+      alert(error.message || "No se pudo eliminar el documento.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
-  function validarDocumento(id) {
-    setDocumentos((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, estado: "Validado" } : item))
-    );
+  async function validarDocumento(id) {
+    setUpdatingId(id);
+
+    try {
+      await updateEstadoDocumento(id, "Validado");
+      await loadData(sedeId);
+    } catch (error) {
+      console.error("Error validando documento:", error);
+      alert(error.message || "No se pudo validar el documento.");
+    } finally {
+      setUpdatingId(null);
+    }
   }
 
   function abrirDetalle(documento) {
@@ -215,13 +291,12 @@ export default function Documentos({ selectedSede }) {
       const puntoVenta = String(datos.ptoVta || "").padStart(4, "0");
       const numeroComprobante = String(datos.nroCmp || "").padStart(8, "0");
 
-      const nuevoDocumento = {
-        id: Date.now(),
-        fecha: formatFecha(datos.fecha),
+      await createDocumento({
+        fecha: datos.fecha,
         tipo: "Factura",
         descripcion: `${tipoComprobante} ${puntoVenta}-${numeroComprobante} - ${formatImporte(datos.importe)}`,
         asociadoA: `CUIT ${datos.cuit}`,
-        sede: selectedSede && selectedSede !== "Todas las sedes" ? selectedSede : "Todas",
+        sedeId: sedeBloqueada ? sedeId : form.sedeId || sedes[0]?.id || null,
         archivo: file.name,
         estado: "Pendiente revisión",
         datosFiscales: {
@@ -231,10 +306,11 @@ export default function Documentos({ selectedSede }) {
           puntoVenta,
           numeroComprobante,
         },
-      };
+      });
 
-      setDocumentos((prev) => [nuevoDocumento, ...prev]);
+      await loadData(sedeId);
     } catch (error) {
+      console.error("Error importando factura:", error);
       alert(error.message || "No se pudo importar la factura.");
     } finally {
       setImportandoFactura(false);
@@ -247,7 +323,10 @@ export default function Documentos({ selectedSede }) {
       <div className="page-header">
         <div>
           <h2>Documentos</h2>
-          <p>Facturas, comprobantes, extractos, resultados y archivos asociados.</p>
+          <p>
+            Facturas, comprobantes, extractos, resultados y archivos asociados.
+            {selectedSedeName ? ` Vista actual: ${selectedSedeName}.` : ""}
+          </p>
         </div>
 
         <div className="header-actions">
@@ -261,6 +340,14 @@ export default function Documentos({ selectedSede }) {
 
           <button
             className="secondary-button"
+            onClick={() => loadData(sedeId)}
+            disabled={loading}
+          >
+            <RefreshCw size={16} /> Actualizar
+          </button>
+
+          <button
+            className="secondary-button"
             onClick={() => facturaInputRef.current?.click()}
             disabled={importandoFactura}
           >
@@ -268,7 +355,7 @@ export default function Documentos({ selectedSede }) {
             {importandoFactura ? "Leyendo factura..." : "Importar factura PDF"}
           </button>
 
-          <button className="primary-button" onClick={() => setModal("nuevo")}>
+          <button className="primary-button" onClick={openNuevo}>
             <Plus size={16} /> Subir documento
           </button>
         </div>
@@ -310,7 +397,7 @@ export default function Documentos({ selectedSede }) {
 
       <div className="filters-bar">
         <input
-          placeholder="Buscar por descripción, entidad o archivo..."
+          placeholder="Buscar por descripción, entidad, sede o archivo..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -341,40 +428,55 @@ export default function Documentos({ selectedSede }) {
           </thead>
 
           <tbody>
-            {documentosFiltrados.map((item) => (
-              <tr key={item.id}>
-                <td>{item.fecha}</td>
-                <td>{item.tipo}</td>
-                <td>{item.descripcion}</td>
-                <td>{item.asociadoA}</td>
-                <td>{item.sede}</td>
-                <td>{item.archivo}</td>
-                <td>
-                  <span className={`status-badge ${item.estado.toLowerCase().replaceAll(" ", "-")}`}>
-                    {item.estado}
-                  </span>
-                </td>
-                <td>
-                  <div className="table-actions">
-                    <button onClick={() => abrirDetalle(item)}>
-                      <Eye size={16} />
-                    </button>
-
-                    {item.estado === "Pendiente revisión" && (
-                      <button onClick={() => validarDocumento(item.id)}>
-                        <CheckCircle size={16} />
-                      </button>
-                    )}
-
-                    <button onClick={() => handleDelete(item.id)}>
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
+            {loading && (
+              <tr>
+                <td colSpan="8">Cargando documentos...</td>
               </tr>
-            ))}
+            )}
 
-            {documentosFiltrados.length === 0 && (
+            {!loading &&
+              documentosFiltrados.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.fecha}</td>
+                  <td>{item.tipo}</td>
+                  <td>{item.descripcion}</td>
+                  <td>{item.asociadoA}</td>
+                  <td>{item.sede}</td>
+                  <td>{item.archivo}</td>
+                  <td>
+                    <span className={`status-badge ${getStatusClass(item.estado)}`}>
+                      {item.estado}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="table-actions">
+                      <button onClick={() => abrirDetalle(item)} title="Ver detalle">
+                        <Eye size={16} />
+                      </button>
+
+                      {item.estado === "Pendiente revisión" && (
+                        <button
+                          onClick={() => validarDocumento(item.id)}
+                          disabled={updatingId === item.id}
+                          title="Validar documento"
+                        >
+                          <CheckCircle size={16} />
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        disabled={deletingId === item.id}
+                        title="Eliminar"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+            {!loading && documentosFiltrados.length === 0 && (
               <tr>
                 <td colSpan="8">No se encontraron documentos.</td>
               </tr>
@@ -398,7 +500,10 @@ export default function Documentos({ selectedSede }) {
 
             <label>
               Tipo
-              <select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
+              <select
+                value={form.tipo}
+                onChange={(e) => setForm({ ...form, tipo: e.target.value })}
+              >
                 <option>Factura</option>
                 <option>Comprobante</option>
                 <option>Extracto bancario</option>
@@ -418,13 +523,17 @@ export default function Documentos({ selectedSede }) {
 
             <label>
               Sede
-              <select value={form.sede} onChange={(e) => setForm({ ...form, sede: e.target.value })}>
-                <option>Todas</option>
-                <option>Sede Centro</option>
-                <option>Sede Norte</option>
-                <option>Sede Sur</option>
-                <option>Sede Oeste</option>
-                <option>Sede Pilar</option>
+              <select
+                value={form.sedeId}
+                onChange={(e) => setForm({ ...form, sedeId: e.target.value })}
+                disabled={sedeBloqueada}
+              >
+                <option value="">Todas</option>
+                {sedes.map((sede) => (
+                  <option key={sede.id} value={sede.id}>
+                    {sede.nombre}
+                  </option>
+                ))}
               </select>
             </label>
 
@@ -446,11 +555,16 @@ export default function Documentos({ selectedSede }) {
             </label>
 
             <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={() => setModal(null)}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setModal(null)}
+              >
                 Cancelar
               </button>
-              <button type="submit" className="primary-button">
-                Guardar documento
+
+              <button type="submit" className="primary-button" disabled={saving}>
+                {saving ? "Guardando..." : "Guardar documento"}
               </button>
             </div>
           </form>

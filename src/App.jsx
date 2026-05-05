@@ -16,19 +16,29 @@ import Turnos from "./pages/Turnos";
 import Sedes from "./pages/Sedes";
 import Usuarios from "./pages/Usuarios";
 import Configuracion from "./pages/Configuracion";
-import { ToastProvider } from "./components/ToastProvider";
 import SetPassword from "./pages/setPassword";
 
 import Footer from "./components/Footer";
-
 import HelpAssistant from "./components/HelpAssistant";
+import { ToastProvider } from "./components/ToastProvider";
 
-const getPage = (activePage, selectedSede) => {
-  const sedeId = typeof selectedSede === "object" && selectedSede !== null
-    ? selectedSede.id
-    : "todas";
+function getSedeId(selectedSede) {
+  if (!selectedSede) return "todas";
 
-  const props = { selectedSede, sedeId };
+  if (typeof selectedSede === "object") {
+    return selectedSede.id || selectedSede.sedeId || "todas";
+  }
+
+  return "todas";
+}
+
+function getPage(activePage, selectedSede) {
+  const sedeId = getSedeId(selectedSede);
+
+  const props = {
+    selectedSede,
+    sedeId,
+  };
 
   const pages = {
     dashboard: <Dashboard {...props} />,
@@ -45,8 +55,27 @@ const getPage = (activePage, selectedSede) => {
     configuracion: <Configuracion {...props} />,
   };
 
-  return pages[activePage];
-};
+  return pages[activePage] || pages.dashboard;
+}
+
+function getEffectiveSelectedSede(currentUser, selectedSede) {
+  if (currentUser?.access !== "Una sede") {
+    return selectedSede;
+  }
+
+  if (currentUser?.sede && typeof currentUser.sede === "object") {
+    return currentUser.sede;
+  }
+
+  if (currentUser?.sedeId) {
+    return {
+      id: currentUser.sedeId,
+      nombre: currentUser.sede || currentUser.sedeNombre || "Sede asignada",
+    };
+  }
+
+  return selectedSede;
+}
 
 export default function App() {
   const [activePage, setActivePage] = useState("dashboard");
@@ -63,8 +92,7 @@ export default function App() {
     return <Login onLogin={setCurrentUser} />;
   }
 
-  const effectiveSelectedSede =
-    currentUser.access === "Una sede" ? currentUser.sede : selectedSede;
+  const effectiveSelectedSede = getEffectiveSelectedSede(currentUser, selectedSede);
 
   return (
     <div className="app-layout">
@@ -86,8 +114,10 @@ export default function App() {
           {getPage(activePage, effectiveSelectedSede)}
         </div>
 
-      <Footer />
+        <Footer />
+
         <HelpAssistant activePage={activePage} setActivePage={setActivePage} />
+
         <ToastProvider />
       </main>
     </div>
