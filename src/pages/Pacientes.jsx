@@ -7,6 +7,9 @@ import {
   RefreshCw,
   Upload,
   ExternalLink,
+  Pencil,
+  X,
+  History,
 } from "lucide-react";
 
 import Modal from "../components/Modal";
@@ -14,8 +17,10 @@ import { getSedes } from "../services/sedeService";
 import {
   createPacienteEstudio,
   deletePacienteEstudio,
+  getPacienteEstudioLog,
   getPacientesEstudios,
   updateEstadoPacienteEstudio,
+  updatePacienteEstudio,
 } from "../services/pacienteService";
 import {
   uploadArchivo,
@@ -69,8 +74,28 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function Pacientes({ selectedSede, sedeId }) {
+function formFromPaciente(paciente) {
+  return {
+    fecha: paciente.fechaDb || new Date().toISOString().split("T")[0],
+    paciente: paciente.paciente || "",
+    dni: paciente.dni || "",
+    obraSocial: paciente.obraSocial || "",
+    sedeId: paciente.sedeId || "",
+    estudio: paciente.estudio || "",
+    prioridad: paciente.prioridad || "Normal",
+    estado: paciente.estado || "Muestra pendiente",
+    observaciones: paciente.observaciones || "",
+    archivo: paciente.archivo || "",
+    archivoPath: paciente.archivoPath || "",
+    archivoTipo: paciente.archivoTipo || "",
+    archivoSize: paciente.archivoSize || 0,
+    linkEstudio: paciente.linkEstudio || "",
+  };
+}
+
+export default function Pacientes({ selectedSede, sedeId, currentUser }) {
   const adjuntoInputRef = useRef(null);
+  const editAdjuntoInputRef = useRef(null);
 
   const [pacientes, setPacientes] = useState([]);
   const [sedes, setSedes] = useState([]);
@@ -85,6 +110,13 @@ export default function Pacientes({ selectedSede, sedeId }) {
 
   const [form, setForm] = useState(emptyForm);
   const [formFile, setFormFile] = useState(null);
+
+  const [editForm, setEditForm] = useState(emptyForm);
+  const [editFile, setEditFile] = useState(null);
+  const [removeEditFile, setRemoveEditFile] = useState(false);
+
+  const [historial, setHistorial] = useState([]);
+  const [loadingHistorial, setLoadingHistorial] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -208,6 +240,34 @@ export default function Pacientes({ selectedSede, sedeId }) {
     setModal("nuevo");
   }
 
+  function openEditar(paciente) {
+    setSelectedPaciente(paciente);
+    setEditForm(formFromPaciente(paciente));
+    setEditFile(null);
+    setRemoveEditFile(false);
+    setModal("editar");
+  }
+
+  async function abrirDetalle(paciente) {
+    setSelectedPaciente(paciente);
+    setModal("detalle");
+    await cargarHistorial(paciente.id);
+  }
+
+  async function cargarHistorial(pacienteId) {
+    setLoadingHistorial(true);
+
+    try {
+      const data = await getPacienteEstudioLog(pacienteId);
+      setHistorial(data || []);
+    } catch (error) {
+      console.error("Error cargando historial:", error);
+      setHistorial([]);
+    } finally {
+      setLoadingHistorial(false);
+    }
+  }
+
   function handleAdjuntoPaciente(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -222,6 +282,37 @@ export default function Pacientes({ selectedSede, sedeId }) {
     }));
 
     e.target.value = "";
+  }
+
+  function handleEditAdjunto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setEditFile(file);
+    setRemoveEditFile(false);
+
+    setEditForm((prev) => ({
+      ...prev,
+      archivo: file.name,
+      archivoTipo: file.type || "",
+      archivoSize: file.size || 0,
+    }));
+
+    e.target.value = "";
+  }
+
+  function quitarAdjuntoEdicion() {
+    setEditFile(null);
+    setRemoveEditFile(true);
+
+    setEditForm((prev) => ({
+      ...prev,
+      archivo: "",
+      archivoPath: "",
+      archivoUrl: "",
+      archivoTipo: "",
+      archivoSize: 0,
+    }));
   }
 
   async function handleCreate(e) {
@@ -241,13 +332,16 @@ export default function Pacientes({ selectedSede, sedeId }) {
         uploaded = await uploadArchivo(formFile, "pacientes");
       }
 
-      await createPacienteEstudio({
-        ...form,
-        archivo: uploaded?.nombre || form.archivo || "",
-        archivoPath: uploaded?.path || form.archivoPath || "",
-        archivoTipo: uploaded?.tipo || form.archivoTipo || "",
-        archivoSize: uploaded?.size || form.archivoSize || 0,
-      });
+      await createPacienteEstudio(
+        {
+          ...form,
+          archivo: uploaded?.nombre || form.archivo || "",
+          archivoPath: uploaded?.path || form.archivoPath || "",
+          archivoTipo: uploaded?.tipo || form.archivoTipo || "",
+          archivoSize: uploaded?.size || form.archivoSize || 0,
+        },
+        currentUser
+      );
 
       await loadData(sedeId);
 
@@ -262,6 +356,67 @@ export default function Pacientes({ selectedSede, sedeId }) {
     } catch (error) {
       console.error("Error guardando orden:", error);
       alert(error.message || "No se pudo guardar la orden.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleUpdate(e) {
+    e.preventDefault();
+
+    if (!selectedPaciente) return;
+
+    if (!editForm.sedeId) {
+      alert("Seleccioná una sede.");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      let uploaded = null;
+      const oldArchivoPath = selectedPaciente.archivoPath;
+
+      if (editFile) {
+        uploaded = await uploadArchivo(editFile, "pacientes");
+      }
+
+      const payload = {
+        ...editForm,
+        archivo: uploaded?.nombre || editForm.archivo || "",
+        archivoPath: uploaded?.path || editForm.archivoPath || "",
+        archivoTipo: uploaded?.tipo || editForm.archivoTipo || "",
+        archivoSize: uploaded?.size || editForm.archivoSize || 0,
+      };
+
+      if (removeEditFile) {
+        payload.archivo = "";
+        payload.archivoPath = "";
+        payload.archivoTipo = "";
+        payload.archivoSize = 0;
+      }
+
+      await updatePacienteEstudio(
+        selectedPaciente.id,
+        payload,
+        currentUser,
+        "Se editaron datos, observaciones, link o adjuntos de la orden."
+      );
+
+      if ((editFile || removeEditFile) && oldArchivoPath) {
+        await deleteArchivo(oldArchivoPath);
+      }
+
+      await loadData(sedeId);
+
+      setSelectedPaciente(null);
+      setEditForm(emptyForm);
+      setEditFile(null);
+      setRemoveEditFile(false);
+      setModal(null);
+    } catch (error) {
+      console.error("Error actualizando orden:", error);
+      alert(error.message || "No se pudo actualizar la orden.");
     } finally {
       setSaving(false);
     }
@@ -302,7 +457,7 @@ export default function Pacientes({ selectedSede, sedeId }) {
     setUpdatingId(id);
 
     try {
-      await updateEstadoPacienteEstudio(id, nuevoEstado);
+      await updateEstadoPacienteEstudio(id, nuevoEstado, currentUser);
       await loadData(sedeId);
     } catch (error) {
       console.error("Error actualizando estado:", error);
@@ -331,11 +486,6 @@ export default function Pacientes({ selectedSede, sedeId }) {
     }
   }
 
-  function abrirDetalle(paciente) {
-    setSelectedPaciente(paciente);
-    setModal("detalle");
-  }
-
   function handleSort(field) {
     if (sortField === field) {
       setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
@@ -351,7 +501,7 @@ export default function Pacientes({ selectedSede, sedeId }) {
         <div>
           <h2>Pacientes y estudios</h2>
           <p>
-            Gestión de órdenes, muestras, estudios, adjuntos y emisión de resultados.
+            Gestión de órdenes, muestras, estudios, adjuntos, links e historial.
             {selectedSedeName ? ` Vista actual: ${selectedSedeName}.` : ""}
           </p>
         </div>
@@ -505,8 +655,12 @@ export default function Pacientes({ selectedSede, sedeId }) {
                   </td>
                   <td>
                     <div className="table-actions">
-                      <button onClick={() => abrirDetalle(item)} title="Ver detalle">
+                      <button onClick={() => abrirDetalle(item)} title="Ver detalle e historial">
                         <Eye size={16} />
+                      </button>
+
+                      <button onClick={() => openEditar(item)} title="Editar orden">
+                        <Pencil size={16} />
                       </button>
 
                       {item.estado !== "Resultado emitido" && (
@@ -688,6 +842,173 @@ export default function Pacientes({ selectedSede, sedeId }) {
         </Modal>
       )}
 
+      {modal === "editar" && selectedPaciente && (
+        <Modal title={`Editar orden - ${selectedPaciente.paciente}`} onClose={() => setModal(null)}>
+          <form className="form-grid" onSubmit={handleUpdate}>
+            <label>
+              Fecha
+              <input
+                type="date"
+                required
+                value={editForm.fecha}
+                onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })}
+              />
+            </label>
+
+            <label>
+              Paciente
+              <input
+                required
+                value={editForm.paciente}
+                onChange={(e) => setEditForm({ ...editForm, paciente: e.target.value })}
+              />
+            </label>
+
+            <label>
+              DNI
+              <input
+                required
+                value={editForm.dni}
+                onChange={(e) => setEditForm({ ...editForm, dni: e.target.value })}
+              />
+            </label>
+
+            <label>
+              Obra social / Prepaga
+              <input
+                value={editForm.obraSocial}
+                onChange={(e) => setEditForm({ ...editForm, obraSocial: e.target.value })}
+              />
+            </label>
+
+            <label>
+              Sede
+              <select
+                value={editForm.sedeId}
+                onChange={(e) => setEditForm({ ...editForm, sedeId: e.target.value })}
+                disabled={sedeBloqueada}
+                required
+              >
+                <option value="">Seleccionar sede</option>
+                {sedes.map((sede) => (
+                  <option key={sede.id} value={sede.id}>
+                    {sede.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Prioridad
+              <select
+                value={editForm.prioridad}
+                onChange={(e) => setEditForm({ ...editForm, prioridad: e.target.value })}
+              >
+                <option>Normal</option>
+                <option>Urgente</option>
+              </select>
+            </label>
+
+            <label>
+              Estado
+              <select
+                value={editForm.estado}
+                onChange={(e) => setEditForm({ ...editForm, estado: e.target.value })}
+              >
+                <option>Muestra pendiente</option>
+                <option>Muestra recibida</option>
+                <option>En proceso</option>
+                <option>Resultado emitido</option>
+              </select>
+            </label>
+
+            <label className="full">
+              Estudio solicitado
+              <input
+                required
+                value={editForm.estudio}
+                onChange={(e) => setEditForm({ ...editForm, estudio: e.target.value })}
+              />
+            </label>
+
+            <label className="full">
+              Link de estudio online
+              <input
+                placeholder="https://..."
+                value={editForm.linkEstudio}
+                onChange={(e) => setEditForm({ ...editForm, linkEstudio: e.target.value })}
+              />
+            </label>
+
+            <div className="full">
+              <input
+                ref={editAdjuntoInputRef}
+                type="file"
+                accept="application/pdf,image/*"
+                capture="environment"
+                hidden
+                onChange={handleEditAdjunto}
+              />
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => editAdjuntoInputRef.current?.click()}
+                >
+                  <Upload size={16} /> Reemplazar / adjuntar archivo
+                </button>
+
+                {(editForm.archivo || editForm.archivoPath) && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={quitarAdjuntoEdicion}
+                  >
+                    <X size={16} /> Quitar adjunto
+                  </button>
+                )}
+              </div>
+
+              {editForm.archivo && (
+                <small style={{ display: "block", marginTop: 8 }}>
+                  Archivo actual/seleccionado: {editForm.archivo} ·{" "}
+                  {formatFileSize(editForm.archivoSize)}
+                </small>
+              )}
+
+              {removeEditFile && (
+                <small style={{ display: "block", marginTop: 8, color: "#b42318" }}>
+                  El adjunto será eliminado al guardar.
+                </small>
+              )}
+            </div>
+
+            <label className="full">
+              Observaciones
+              <input
+                value={editForm.observaciones}
+                onChange={(e) => setEditForm({ ...editForm, observaciones: e.target.value })}
+              />
+            </label>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setModal(null)}
+              >
+                Cancelar
+              </button>
+
+              <button type="submit" className="primary-button" disabled={saving}>
+                {saving ? "Guardando..." : "Guardar cambios"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
       {modal === "detalle" && selectedPaciente && (
         <Modal
           title={`Detalle de ${selectedPaciente.paciente}`}
@@ -769,6 +1090,45 @@ export default function Pacientes({ selectedSede, sedeId }) {
             <div className="full">
               <span>Observaciones</span>
               <strong>{selectedPaciente.observaciones || "Sin observaciones"}</strong>
+            </div>
+
+            <div className="full">
+              <span>
+                <History size={14} /> Historial de seguimiento
+              </span>
+
+              {loadingHistorial && <strong>Cargando historial...</strong>}
+
+              {!loadingHistorial && historial.length === 0 && (
+                <strong>Sin movimientos registrados.</strong>
+              )}
+
+              {!loadingHistorial &&
+                historial.map((item) => (
+                  <div key={item.id} style={{ marginTop: 10 }}>
+                    <strong>{item.accion}</strong>
+                    <small style={{ display: "block", color: "var(--muted)" }}>
+                      {item.createdAtText} · {item.usuarioNombre || "Usuario"}
+                      {item.usuarioEmail ? ` (${item.usuarioEmail})` : ""}
+                    </small>
+                    {item.estadoAnterior || item.estadoNuevo ? (
+                      <small style={{ display: "block", color: "var(--muted)" }}>
+                        Estado: {item.estadoAnterior || "-"} → {item.estadoNuevo || "-"}
+                      </small>
+                    ) : null}
+                    {item.detalle && (
+                      <small style={{ display: "block", color: "var(--muted)" }}>
+                        {item.detalle}
+                      </small>
+                    )}
+                  </div>
+                ))}
+            </div>
+
+            <div className="full">
+              <button className="primary-button" onClick={() => openEditar(selectedPaciente)}>
+                <Pencil size={16} /> Editar datos / adjuntos
+              </button>
             </div>
           </div>
         </Modal>

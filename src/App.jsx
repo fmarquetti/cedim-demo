@@ -32,12 +32,13 @@ function getSedeId(selectedSede) {
   return "todas";
 }
 
-function getPage(activePage, selectedSede) {
+function getPage(activePage, selectedSede, currentUser) {
   const sedeId = getSedeId(selectedSede);
 
   const props = {
     selectedSede,
     sedeId,
+    currentUser,
   };
 
   const pages = {
@@ -111,7 +112,7 @@ export default function App() {
         />
 
         <div className="page-content">
-          {getPage(activePage, effectiveSelectedSede)}
+          {getPage(activePage, effectiveSelectedSede, currentUser)}
         </div>
 
         <Footer />
