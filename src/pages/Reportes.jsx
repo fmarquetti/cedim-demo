@@ -58,11 +58,6 @@ const safeFileName = (text) =>
     .replace(/[^a-zA-Z0-9-_]/g, "_")
     .replace(/_+/g, "_");
 
-const filterBySede = (items, selectedSede) => {
-  if (!selectedSede || selectedSede === "Todas las sedes") return items;
-  return items.filter((item) => item.sede === selectedSede || item.sede === "Todas");
-};
-
 const filterByDate = (items, desde, hasta) => {
   const fechaDesde = toDate(desde);
   const fechaHasta = toDate(hasta);
@@ -121,7 +116,7 @@ const isPendiente = (estado) => {
   return !["cobrado", "pagado", "aplicado", "conciliado"].includes(value);
 };
 
-export default function Reportes({ selectedSede }) {
+export default function Reportes({ selectedSede, sedeId }) {
   const [ingresos, setIngresos] = useState([]);
   const [egresos, setEgresos] = useState([]);
   const [movimientosBancarios, setMovimientosBancarios] = useState([]);
@@ -133,16 +128,23 @@ export default function Reportes({ selectedSede }) {
 
   const [loading, setLoading] = useState(true);
 
-  async function loadData() {
+  const selectedSedeName =
+    typeof selectedSede === "object" && selectedSede !== null
+      ? selectedSede.nombre
+      : selectedSede || "Todas las sedes";
+
+  async function loadData(currentSedeId = sedeId) {
     setLoading(true);
 
     try {
+      const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
+
       const [ingresosData, egresosData, bancosData, cuentasData] =
         await Promise.all([
-          getIngresos(),
-          getEgresos(),
-          getMovimientosBancarios(),
-          getCuentasCorrientes(),
+          getIngresos(idParaFiltro),
+          getEgresos(idParaFiltro),
+          getMovimientosBancarios(idParaFiltro),
+          getCuentasCorrientes(idParaFiltro),
         ]);
 
       setIngresos(ingresosData || []);
@@ -158,24 +160,24 @@ export default function Reportes({ selectedSede }) {
   }
 
   useEffect(() => {
-    loadData();
-  }, []);
+    loadData(sedeId);
+  }, [sedeId]);
 
   const ingresosFiltrados = useMemo(() => {
-    return filterByDate(filterBySede(ingresos, selectedSede), desde, hasta);
-  }, [ingresos, selectedSede, desde, hasta]);
+    return filterByDate(ingresos, desde, hasta);
+  }, [ingresos, desde, hasta]);
 
   const egresosFiltrados = useMemo(() => {
-    return filterByDate(filterBySede(egresos, selectedSede), desde, hasta);
-  }, [egresos, selectedSede, desde, hasta]);
+    return filterByDate(egresos, desde, hasta);
+  }, [egresos, desde, hasta]);
 
   const bancosFiltrados = useMemo(() => {
-    return filterByDate(filterBySede(movimientosBancarios, selectedSede), desde, hasta);
-  }, [movimientosBancarios, selectedSede, desde, hasta]);
+    return filterByDate(movimientosBancarios, desde, hasta);
+  }, [movimientosBancarios, desde, hasta]);
 
   const cuentasFiltradas = useMemo(() => {
-    return filterByDate(filterBySede(cuentasCorrientes, selectedSede), desde, hasta);
-  }, [cuentasCorrientes, selectedSede, desde, hasta]);
+    return filterByDate(cuentasCorrientes, desde, hasta);
+  }, [cuentasCorrientes, desde, hasta]);
 
   const resumenSedes = useMemo(
     () => groupBySede(ingresosFiltrados, egresosFiltrados),
@@ -219,7 +221,7 @@ export default function Reportes({ selectedSede }) {
   );
 
   const nombreArchivo = useMemo(() => {
-    const sede = selectedSede || "Todas las sedes";
+    const sede = selectedSedeName;
     const periodo =
       desde || hasta
         ? `${desde || "inicio"}_${hasta || "actual"}`
@@ -228,7 +230,7 @@ export default function Reportes({ selectedSede }) {
     return `Reporte_${safeFileName(tipoReporte)}_${safeFileName(sede)}_${safeFileName(
       periodo
     )}`;
-  }, [tipoReporte, selectedSede, desde, hasta]);
+  }, [tipoReporte, selectedSedeName, desde, hasta]);
 
   const exportarExcel = async () => {
     const workbook = new ExcelJS.Workbook();
@@ -242,7 +244,7 @@ export default function Reportes({ selectedSede }) {
     ];
 
     resumen.addRows([
-      { indicador: "Sede", valor: selectedSede || "Todas las sedes" },
+      { indicador: "Sede", valor: selectedSedeName },
       { indicador: "Desde", valor: desde ? formatDate(desde) : "Inicio" },
       { indicador: "Hasta", valor: hasta ? formatDate(hasta) : "Actual" },
       { indicador: "Total ingresos", valor: totalIngresos },
@@ -419,7 +421,7 @@ export default function Reportes({ selectedSede }) {
     doc.line(14, 37, pageWidth - 14, 37);
 
     doc.setFontSize(9);
-    doc.text(`Sede: ${selectedSede || "Todas las sedes"}`, 14, 44);
+    doc.text(`Sede: ${selectedSedeName}`, 14, 44);
     doc.text(`Tipo de reporte: ${tipoReporte}`, 14, 49);
     doc.text(`Periodo: ${desde ? formatDate(desde) : "Inicio"} al ${hasta ? formatDate(hasta) : "Actual"}`, 14, 54);
     doc.text(`Generado: ${new Date().toLocaleString("es-AR")}`, 14, 59);
@@ -518,7 +520,7 @@ export default function Reportes({ selectedSede }) {
           <p>Informes financieros reales generados desde Supabase.</p>
         </div>
 
-        <button className="secondary-button" onClick={loadData} disabled={loading}>
+        <button className="secondary-button" onClick={() => loadData(sedeId)} disabled={loading}>
           <RefreshCw size={16} /> Actualizar
         </button>
       </div>

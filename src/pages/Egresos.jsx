@@ -112,7 +112,6 @@ export default function Egresos({ selectedSede, sedeId }) {
 
   async function loadData(currentSedeId = sedeId) {
     setLoading(true);
-
     try {
       const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
 
@@ -123,7 +122,6 @@ export default function Egresos({ selectedSede, sedeId }) {
 
       setEgresos(egresosData || []);
       setSedes(sedesData || []);
-
       setForm((prev) => ({
         ...prev,
         sedeId: prev.sedeId || sedesData?.[0]?.id || "",
@@ -152,7 +150,7 @@ export default function Egresos({ selectedSede, sedeId }) {
     const fechaDesde = toDate(desde);
     const fechaHasta = toDate(hasta);
 
-    const egresosPorSede = filterBySede(egresos, selectedSede);
+    const egresosPorSede = egresos;
 
     return egresosPorSede.filter((item) => {
       const fechaItem = toDate(getFechaReal(item));

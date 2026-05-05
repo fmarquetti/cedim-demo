@@ -40,11 +40,6 @@ const toNumber = (value) => Number(value || 0);
 const getSedeName = (item) => item?.sede || "Sin sede";
 const getFechaReal = (item) => item?.fechaDb || item?.fecha;
 
-const isSameSede = (item, selectedSede) => {
-  if (!selectedSede || selectedSede === "Todas las sedes") return true;
-  return getSedeName(item) === selectedSede || getSedeName(item) === "Todas";
-};
-
 const isPending = (estado) => {
   const value = String(estado || "").toLowerCase();
   return !["cobrado", "pagado", "aplicado", "conciliado"].includes(value);
@@ -183,23 +178,23 @@ export default function Dashboard({ selectedSede, sedeId }) {
   }, [sedeId]);
 
   const ingresosFiltrados = useMemo(
-    () => ingresos.filter((item) => isSameSede(item, selectedSede)),
-    [ingresos, selectedSede]
+    () => ingresos,
+    [ingresos]
   );
 
   const egresosFiltrados = useMemo(
-    () => egresos.filter((item) => isSameSede(item, selectedSede)),
-    [egresos, selectedSede]
+    () => egresos,
+    [egresos]
   );
 
   const movimientosFiltrados = useMemo(
-    () => movimientos.filter((item) => isSameSede(item, selectedSede)),
-    [movimientos, selectedSede]
+    () => movimientos,
+    [movimientos]
   );
 
   const cuentasFiltradas = useMemo(
-    () => cuentasCorrientes.filter((item) => isSameSede(item, selectedSede)),
-    [cuentasCorrientes, selectedSede]
+    () => cuentasCorrientes,
+    [cuentasCorrientes]
   );
 
   const totalIngresos = useMemo(
