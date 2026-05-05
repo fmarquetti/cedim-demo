@@ -104,7 +104,7 @@ const diferenciaDias = (fechaA, fechaB) => {
   return Math.abs(Math.round((a - b) / (1000 * 60 * 60 * 24)));
 };
 
-export default function Bancos({ selectedSede }) {
+export default function Bancos({ selectedSede, sedeId }) {
   const [movimientos, setMovimientos] = useState([]);
   const [sedes, setSedes] = useState([]);
   const [cuentas, setCuentas] = useState([]);
@@ -128,17 +128,19 @@ export default function Bancos({ selectedSede }) {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
-  async function loadData() {
+  async function loadData(currentSedeId = sedeId) {
     setLoading(true);
 
     try {
+      const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
+
       const [movimientosData, sedesData, cuentasData, ingresosData, egresosData] =
         await Promise.all([
-          getMovimientosBancarios(),
+          getMovimientosBancarios(idParaFiltro),
           getSedes(),
-          getCuentasBancarias(),
-          getIngresos(),
-          getEgresos(),
+          getCuentasBancarias(idParaFiltro),
+          getIngresos(idParaFiltro),
+          getEgresos(idParaFiltro),
         ]);
 
       setMovimientos(movimientosData || []);
@@ -161,8 +163,8 @@ export default function Bancos({ selectedSede }) {
   }
 
   useEffect(() => {
-    loadData();
-  }, []);
+    loadData(sedeId);
+  }, [sedeId]);
 
   const cuentasPorSede = useMemo(() => {
     return filterBySede(cuentas, selectedSede).filter((cuenta) => cuenta.activa);
@@ -560,7 +562,7 @@ export default function Bancos({ selectedSede }) {
         </div>
 
         <div className="header-actions">
-          <button className="secondary-button" onClick={loadData} disabled={loading}>
+          <button className="secondary-button" onClick={() => loadData(sedeId)} disabled={loading}>
             <RefreshCw size={16} /> Actualizar
           </button>
           <button className="secondary-button" onClick={handleImportarExtracto}>

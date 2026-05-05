@@ -83,6 +83,7 @@ function maskPatientName(nombre) {
 
 function getWaitMinutes(horaIngresoDb) {
     if (!horaIngresoDb) return 0;
+
     const start = new Date(horaIngresoDb).getTime();
     const now = Date.now();
 
@@ -156,8 +157,7 @@ function sortTurnosByField(a, b, field, direction) {
     return sortTurnos(a, b);
 }
 
-export default function Turnos({ selectedSede }) {
-
+export default function Turnos({ selectedSede, sedeId }) {
     const tvRef = useRef(null);
 
     const [turnos, setTurnos] = useState([]);
@@ -178,31 +178,38 @@ export default function Turnos({ selectedSede }) {
 
     const [form, setForm] = useState(initialForm);
 
-    const sedeSeleccionada = useMemo(() => {
-        if (!selectedSede || selectedSede === "Todas las sedes") return null;
-        return sedes.find((sede) => sede.nombre === selectedSede) || null;
-    }, [selectedSede, sedes]);
+    const selectedSedeName =
+        typeof selectedSede === "object" && selectedSede !== null
+            ? selectedSede.nombre
+            : selectedSede || "Todas las sedes";
 
-    async function cargarDatos() {
+    const activeSedeId = sedeId === "todas" ? null : sedeId;
+
+    const sedeBloqueada = Boolean(activeSedeId);
+
+    async function cargarDatos(currentSedeId = activeSedeId) {
         try {
             setLoading(true);
 
             const sedesData = await getSedesOptions();
             setSedes(sedesData);
 
-            const sedeIdConsulta =
-                selectedSede && selectedSede !== "Todas las sedes"
-                    ? sedesData.find((sede) => sede.nombre === selectedSede)?.id || null
-                    : null;
+            const sedeIdConsulta = currentSedeId || null;
 
             const turnosData = await getTurnosDelDia({ sedeId: sedeIdConsulta });
-            setTurnos(turnosData);
+            setTurnos(turnosData || []);
 
             if (sedeIdConsulta) {
                 setSedeFiltro(sedeIdConsulta);
                 setForm((prev) => ({
                     ...prev,
-                    sedeId: sedeIdConsulta,
+                    sedeId: prev.sedeId || sedeIdConsulta,
+                }));
+            } else {
+                setSedeFiltro("");
+                setForm((prev) => ({
+                    ...prev,
+                    sedeId: prev.sedeId || sedesData?.[0]?.id || "",
                 }));
             }
         } catch (error) {
@@ -214,15 +221,15 @@ export default function Turnos({ selectedSede }) {
     }
 
     useEffect(() => {
-        cargarDatos();
+        cargarDatos(activeSedeId);
 
         const unsubscribe = subscribeTurnos(() => {
-            cargarDatos();
+            cargarDatos(activeSedeId);
         });
 
         return unsubscribe;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedSede]);
+    }, [activeSedeId]);
 
     const turnosFiltrados = useMemo(() => {
         const normalizedSearch = normalizeText(search);
@@ -251,7 +258,15 @@ export default function Turnos({ selectedSede }) {
                 return matchSearch && matchEstado && matchTipo && matchSede;
             })
             .sort((a, b) => sortTurnosByField(a, b, sortField, sortDirection));
-    }, [turnos, search, estadoFiltro, tipoFiltro, sedeFiltro, sortField, sortDirection]);
+    }, [
+        turnos,
+        search,
+        estadoFiltro,
+        tipoFiltro,
+        sedeFiltro,
+        sortField,
+        sortDirection,
+    ]);
 
     const turnosTv = useMemo(() => {
         return turnosFiltrados.filter((turno) =>
@@ -283,7 +298,7 @@ export default function Turnos({ selectedSede }) {
     function openNuevoTurno() {
         setForm({
             ...initialForm,
-            sedeId: sedeSeleccionada?.id || sedeFiltro || "",
+            sedeId: activeSedeId || sedeFiltro || sedes[0]?.id || "",
         });
         setModal("nuevo");
     }
@@ -300,7 +315,7 @@ export default function Turnos({ selectedSede }) {
             setSaving(true);
             await createTurno(form);
             setModal(null);
-            await cargarDatos();
+            await cargarDatos(activeSedeId);
         } catch (error) {
             console.error("Error creando turno:", error);
             alert("No se pudo crear el turno.");
@@ -312,7 +327,7 @@ export default function Turnos({ selectedSede }) {
     async function handleEstado(action, turnoId) {
         try {
             await action(turnoId);
-            await cargarDatos();
+            await cargarDatos(activeSedeId);
         } catch (error) {
             console.error("Error actualizando turno:", error);
             alert("No se pudo actualizar el turno.");
@@ -328,7 +343,7 @@ export default function Turnos({ selectedSede }) {
 
         try {
             await deleteTurno(id);
-            await cargarDatos();
+            await cargarDatos(activeSedeId);
         } catch (error) {
             console.error("Error eliminando turno:", error);
             alert("No se pudo eliminar el turno.");
@@ -400,11 +415,7 @@ export default function Turnos({ selectedSede }) {
                 <div className="turnos-tv-header">
                     <div>
                         <span>Sala de espera</span>
-                        <h2>
-                            {selectedSede && selectedSede !== "Todas las sedes"
-                                ? selectedSede
-                                : "Todas las sedes"}
-                        </h2>
+                        <h2>{selectedSedeName}</h2>
                     </div>
 
                     <button className="secondary-button turnos-tv-exit" onClick={exitTvMode}>
@@ -480,7 +491,10 @@ export default function Turnos({ selectedSede }) {
                 </div>
 
                 <div className="header-actions">
-                    <button className="secondary-button" onClick={cargarDatos}>
+                    <button
+                        className="secondary-button"
+                        onClick={() => cargarDatos(activeSedeId)}
+                    >
                         <RefreshCw size={16} /> Actualizar
                     </button>
 
@@ -538,7 +552,7 @@ export default function Turnos({ selectedSede }) {
                 <select
                     value={sedeFiltro}
                     onChange={(e) => setSedeFiltro(e.target.value)}
-                    disabled={selectedSede && selectedSede !== "Todas las sedes"}
+                    disabled={sedeBloqueada}
                 >
                     <option value="">Todas las sedes</option>
                     {sedes.map((sede) => (
@@ -683,10 +697,7 @@ export default function Turnos({ selectedSede }) {
                                                 </button>
                                             )}
 
-                                            <button
-                                                title="Eliminar"
-                                                onClick={() => handleDelete(turno.id)}
-                                            >
+                                            <button title="Eliminar" onClick={() => handleDelete(turno.id)}>
                                                 <Trash2 size={16} />
                                             </button>
                                         </div>
@@ -722,7 +733,7 @@ export default function Turnos({ selectedSede }) {
                                 required
                                 value={form.sedeId}
                                 onChange={(e) => setForm({ ...form, sedeId: e.target.value })}
-                                disabled={selectedSede && selectedSede !== "Todas las sedes"}
+                                disabled={sedeBloqueada}
                             >
                                 <option value="">Seleccionar sede</option>
                                 {sedes.map((sede) => (

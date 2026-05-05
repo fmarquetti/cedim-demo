@@ -110,15 +110,20 @@ export default function Egresos({ selectedSede, sedeId }) {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
-  async function loadData() {
+  async function loadData(currentSedeId = sedeId) {
     setLoading(true);
+
     try {
+      const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
+
       const [egresosData, sedesData] = await Promise.all([
-        getEgresos(null),
+        getEgresos(idParaFiltro),
         getSedes(),
       ]);
+
       setEgresos(egresosData || []);
       setSedes(sedesData || []);
+
       setForm((prev) => ({
         ...prev,
         sedeId: prev.sedeId || sedesData?.[0]?.id || "",
@@ -131,7 +136,7 @@ export default function Egresos({ selectedSede, sedeId }) {
   }
 
   useEffect(() => {
-    loadData();
+    loadData(sedeId);
   }, [sedeId]);
 
   const categorias = useMemo(() => {
@@ -494,7 +499,9 @@ export default function Egresos({ selectedSede, sedeId }) {
         </div>
         <div className="header-actions">
           <input ref={facturaInputRef} type="file" accept="application/pdf" hidden onChange={importarFacturaFiscal} />
-          <button className="secondary-button" onClick={loadData} disabled={loading}><RefreshCw size={16} /> Actualizar</button>
+          <button className="secondary-button" onClick={() => loadData(sedeId)} disabled={loading}>
+            <RefreshCw size={16} /> Actualizar
+          </button>
           <button className="secondary-button" onClick={() => facturaInputRef.current?.click()} disabled={importandoFactura}>
             <Upload size={16} />{importandoFactura ? "Leyendo factura..." : "Importar factura PDF"}
           </button>

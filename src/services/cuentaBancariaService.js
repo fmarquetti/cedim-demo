@@ -11,8 +11,10 @@ function mapCuenta(row) {
   };
 }
 
-export async function getCuentasBancarias() {
-  const { data, error } = await supabase
+export async function getCuentasBancarias(sedeId = null) {
+  const idParaFiltro = sedeId === "todas" ? null : sedeId;
+
+  let query = supabase
     .from("cuentas_bancarias")
     .select(`
       *,
@@ -23,9 +25,15 @@ export async function getCuentasBancarias() {
     `)
     .order("nombre", { ascending: true });
 
+  if (idParaFiltro) {
+    query = query.eq("sede_id", idParaFiltro);
+  }
+
+  const { data, error } = await query;
+
   if (error) throw error;
 
-  return data.map(mapCuenta);
+  return data.map(mapCuentaBancaria);
 }
 
 export async function createCuentaBancaria(form) {

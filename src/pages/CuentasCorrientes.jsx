@@ -155,7 +155,7 @@ const getNivelRiesgo = (deudaVencida, cuentasACobrar) => {
   return { label: "Bajo", color: "#10b981", detail: "Situación controlada" };
 };
 
-export default function CuentasCorrientes({ selectedSede }) {
+export default function CuentasCorrientes({ selectedSede, sedeId }) {
   const [movimientos, setMovimientos] = useState([]);
   const [sedes, setSedes] = useState([]);
 
@@ -173,12 +173,14 @@ export default function CuentasCorrientes({ selectedSede }) {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
-  async function loadData() {
+  async function loadData(currentSedeId = sedeId) {
     setLoading(true);
 
     try {
+      const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
+
       const [movimientosData, sedesData] = await Promise.all([
-        getCuentasCorrientes(),
+        getCuentasCorrientes(idParaFiltro),
         getSedes(),
       ]);
 
@@ -198,8 +200,8 @@ export default function CuentasCorrientes({ selectedSede }) {
   }
 
   useEffect(() => {
-    loadData();
-  }, []);
+    loadData(sedeId);
+  }, [sedeId]);
 
   const movimientosPorSede = useMemo(
     () => filterBySede(movimientos, selectedSede),
