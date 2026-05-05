@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Upload,
   GitCompare,
@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   Link2,
   Unlink,
+  ExternalLink,
 } from "lucide-react";
 
 import ExcelJS from "exceljs";
@@ -20,6 +21,8 @@ import Modal from "../components/Modal";
 import { getSedes } from "../services/sedeService";
 import { getIngresos } from "../services/ingresoService";
 import { getEgresos } from "../services/egresoService";
+import { createDocumento, getDocumentos } from "../services/documentoService";
+import { uploadArchivo, getSignedArchivoUrl } from "../services/storageService";
 
 import {
   conciliarMovimientoConEgreso,
@@ -60,20 +63,28 @@ const formatMoney = (value = 0) =>
 
 const formatDate = (fecha) => {
   if (!fecha) return "-";
+
   const clean = String(fecha).includes("T") ? fecha.split("T")[0] : fecha;
+
   if (clean.includes("/")) return clean;
+
   const [year, month, day] = clean.split("-");
+
   if (!year || !month || !day) return clean;
+
   return `${day}/${month}/${year}`;
 };
 
 const toDate = (fecha) => {
   if (!fecha) return null;
+
   const clean = String(fecha).includes("T") ? fecha.split("T")[0] : fecha;
+
   if (clean.includes("/")) {
     const [day, month, year] = clean.split("/");
     return new Date(`${year}-${month}-${day}T00:00:00`);
   }
+
   return new Date(`${clean}T00:00:00`);
 };
 
@@ -87,7 +98,9 @@ const safeFileName = (text) =>
     .replace(/_+/g, "_");
 
 const getSignedAmount = (mov) =>
-  mov.tipo === "Egreso" ? -Number(mov.importe || 0) : Number(mov.importe || 0);
+  mov.tipo === "Egreso"
+    ? -Number(mov.importe || 0)
+    : Number(mov.importe || 0);
 
 const diferenciaImporte = (movimiento, comprobante) =>
   Math.abs(Number(movimiento?.importe || 0) - Number(comprobante?.importe || 0));
@@ -95,12 +108,32 @@ const diferenciaImporte = (movimiento, comprobante) =>
 const diferenciaDias = (fechaA, fechaB) => {
   const a = toDate(fechaA);
   const b = toDate(fechaB);
+
   if (!a || !b) return 9999;
+
   return Math.abs(Math.round((a - b) / (1000 * 60 * 60 * 24)));
 };
 
+function formatFileSize(bytes) {
+  if (!bytes) return "-";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getStatusClass(text) {
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replaceAll(" ", "-");
+}
+
 export default function Bancos({ selectedSede, sedeId }) {
+  const extractoInputRef = useRef(null);
+
   const [movimientos, setMovimientos] = useState([]);
+  const [extractos, setExtractos] = useState([]);
   const [sedes, setSedes] = useState([]);
   const [cuentas, setCuentas] = useState([]);
   const [ingresos, setIngresos] = useState([]);
@@ -118,15 +151,20 @@ export default function Bancos({ selectedSede, sedeId }) {
   const [cuentaForm, setCuentaForm] = useState(emptyCuentaForm);
   const [movimientoAConciliar, setMovimientoAConciliar] = useState(null);
   const [comprobanteSeleccionadoId, setComprobanteSeleccionadoId] = useState("");
+  const [extractoPendiente, setExtractoPendiente] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [importandoExtracto, setImportandoExtracto] = useState(false);
+  const [openingExtractoId, setOpeningExtractoId] = useState(null);
 
   const selectedSedeName =
     typeof selectedSede === "object" && selectedSede !== null
       ? selectedSede.nombre
       : selectedSede || "Todas las sedes";
+
+  const sedeBloqueada = sedeId && sedeId !== "todas";
 
   async function loadData(currentSedeId = sedeId) {
     setLoading(true);
@@ -134,25 +172,40 @@ export default function Bancos({ selectedSede, sedeId }) {
     try {
       const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
 
-      const [movimientosData, sedesData, cuentasData, ingresosData, egresosData] =
-        await Promise.all([
-          getMovimientosBancarios(idParaFiltro),
-          getSedes(),
-          getCuentasBancarias(idParaFiltro),
-          getIngresos(idParaFiltro),
-          getEgresos(idParaFiltro),
-        ]);
+      const [
+        movimientosData,
+        sedesData,
+        cuentasData,
+        ingresosData,
+        egresosData,
+        documentosData,
+      ] = await Promise.all([
+        getMovimientosBancarios(idParaFiltro),
+        getSedes(),
+        getCuentasBancarias(idParaFiltro),
+        getIngresos(idParaFiltro),
+        getEgresos(idParaFiltro),
+        getDocumentos(idParaFiltro),
+      ]);
 
       setMovimientos(movimientosData || []);
       setSedes(sedesData || []);
       setCuentas(cuentasData || []);
       setIngresos(ingresosData || []);
       setEgresos(egresosData || []);
+      setExtractos(
+        (documentosData || []).filter((doc) => doc.tipo === "Extracto bancario")
+      );
 
       setForm((prev) => ({
         ...prev,
-        sedeId: prev.sedeId || sedesData?.[0]?.id || "",
+        sedeId: prev.sedeId || idParaFiltro || sedesData?.[0]?.id || "",
         cuenta: prev.cuenta || cuentasData?.[0]?.nombre || "",
+      }));
+
+      setCuentaForm((prev) => ({
+        ...prev,
+        sedeId: prev.sedeId || idParaFiltro || sedesData?.[0]?.id || "",
       }));
     } catch (error) {
       console.error("Error cargando bancos:", error);
@@ -164,6 +217,7 @@ export default function Bancos({ selectedSede, sedeId }) {
 
   useEffect(() => {
     loadData(sedeId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sedeId]);
 
   const cuentasPorSede = useMemo(() => {
@@ -199,9 +253,24 @@ export default function Bancos({ selectedSede, sedeId }) {
       const matchDesde = !fechaDesde || (fechaMov && fechaMov >= fechaDesde);
       const matchHasta = !fechaHasta || (fechaMov && fechaMov <= fechaHasta);
 
-      return matchSearch && matchEstado && matchTipo && matchCuenta && matchDesde && matchHasta;
+      return (
+        matchSearch &&
+        matchEstado &&
+        matchTipo &&
+        matchCuenta &&
+        matchDesde &&
+        matchHasta
+      );
     });
-  }, [movimientosPorSede, search, estadoFiltro, tipoFiltro, cuentaFiltro, desde, hasta]);
+  }, [
+    movimientosPorSede,
+    search,
+    estadoFiltro,
+    tipoFiltro,
+    cuentaFiltro,
+    desde,
+    hasta,
+  ]);
 
   const totalIngresos = movimientosFiltrados
     .filter((m) => m.tipo === "Ingreso")
@@ -213,9 +282,17 @@ export default function Bancos({ selectedSede, sedeId }) {
 
   const saldoOperativo = totalIngresos - totalEgresos;
 
-  const movimientosPendientes = movimientosFiltrados.filter((m) => m.estado !== "Conciliado");
-  const movimientosVinculados = movimientosFiltrados.filter((m) => m.ingresoId || m.egresoId);
-  const movimientosSinIdentificar = movimientosFiltrados.filter((m) => m.estado === "Movimiento sin identificar");
+  const movimientosPendientes = movimientosFiltrados.filter(
+    (m) => m.estado !== "Conciliado"
+  );
+
+  const movimientosVinculados = movimientosFiltrados.filter(
+    (m) => m.ingresoId || m.egresoId
+  );
+
+  const movimientosSinIdentificar = movimientosFiltrados.filter(
+    (m) => m.estado === "Movimiento sin identificar"
+  );
 
   const resumenPorCuenta = useMemo(() => {
     const map = {};
@@ -233,8 +310,11 @@ export default function Bancos({ selectedSede, sedeId }) {
         };
       }
 
-      if (mov.tipo === "Ingreso") map[mov.cuenta].ingresos += Number(mov.importe || 0);
-      else map[mov.cuenta].egresos += Number(mov.importe || 0);
+      if (mov.tipo === "Ingreso") {
+        map[mov.cuenta].ingresos += Number(mov.importe || 0);
+      } else {
+        map[mov.cuenta].egresos += Number(mov.importe || 0);
+      }
 
       map[mov.cuenta].saldo += getSignedAmount(mov);
       map[mov.cuenta].movimientos += 1;
@@ -250,7 +330,8 @@ export default function Bancos({ selectedSede, sedeId }) {
     if (!movimientoAConciliar) return [];
 
     const base = movimientoAConciliar.tipo === "Ingreso" ? ingresos : egresos;
-    const estadoAplicado = movimientoAConciliar.tipo === "Ingreso" ? "Cobrado" : "Pagado";
+    const estadoAplicado =
+      movimientoAConciliar.tipo === "Ingreso" ? "Cobrado" : "Pagado";
 
     return base
       .filter((item) => {
@@ -260,7 +341,10 @@ export default function Bancos({ selectedSede, sedeId }) {
       })
       .map((item) => {
         const diffImporte = diferenciaImporte(movimientoAConciliar, item);
-        const diffDias = diferenciaDias(getFechaReal(movimientoAConciliar), getFechaReal(item));
+        const diffDias = diferenciaDias(
+          getFechaReal(movimientoAConciliar),
+          getFechaReal(item)
+        );
         const matchExacto = diffImporte === 0;
         const sugerido = matchExacto && diffDias <= 10;
 
@@ -278,14 +362,19 @@ export default function Bancos({ selectedSede, sedeId }) {
 
   useEffect(() => {
     const sugerido = candidatosConciliacion.find((item) => item.sugerido);
-    setComprobanteSeleccionadoId(sugerido?.id || candidatosConciliacion[0]?.id || "");
+    setComprobanteSeleccionadoId(
+      sugerido?.id || candidatosConciliacion[0]?.id || ""
+    );
   }, [candidatosConciliacion]);
 
   const nombreArchivo = useMemo(() => {
-    const sede = selectedSedeName;
-    const periodo = desde || hasta ? `${desde || "inicio"}_${hasta || "actual"}` : "todos_los_periodos";
-    return `Bancos_${safeFileName(sede)}_${safeFileName(periodo)}`;
-  }, [selectedSede, desde, hasta]);
+    const periodo =
+      desde || hasta
+        ? `${desde || "inicio"}_${hasta || "actual"}`
+        : "todos_los_periodos";
+
+    return `Bancos_${safeFileName(selectedSedeName)}_${safeFileName(periodo)}`;
+  }, [selectedSedeName, desde, hasta]);
 
   function aplicarFiltroRapido(tipo) {
     const hoy = new Date();
@@ -297,7 +386,9 @@ export default function Bancos({ selectedSede, sedeId }) {
     }
 
     if (tipo === "mes") {
-      const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split("T")[0];
+      const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+        .toISOString()
+        .split("T")[0];
       setDesde(inicioMes);
       setHasta(isoHoy);
     }
@@ -315,9 +406,119 @@ export default function Bancos({ selectedSede, sedeId }) {
     }
   }
 
+  function openNuevoMovimiento() {
+    setForm({
+      ...emptyForm,
+      sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+      cuenta: cuentasPorSede[0]?.nombre || cuentas[0]?.nombre || "",
+    });
+
+    setModal("nuevo");
+  }
+
+  function openNuevaCuenta() {
+    setCuentaForm({
+      ...emptyCuentaForm,
+      sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+    });
+
+    setModal("nuevaCuenta");
+  }
+
   function openConciliacion(mov) {
     setMovimientoAConciliar(mov);
     setModal("conciliar");
+  }
+
+  function seleccionarExtracto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setExtractoPendiente({
+      fecha: new Date().toISOString().split("T")[0],
+      tipo: "Extracto bancario",
+      descripcion: "",
+      asociadoA: cuentaFiltro !== "Todas" ? cuentaFiltro : "",
+      sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+      archivo: file.name,
+      archivoPath: "",
+      archivoTipo: file.type || "",
+      archivoSize: file.size || 0,
+      estado: "Pendiente revisión",
+      file,
+      datosFiscales: null,
+    });
+
+    setModal("revisarExtracto");
+    e.target.value = "";
+  }
+
+  async function confirmarExtractoImportado(e) {
+    e.preventDefault();
+
+    if (!extractoPendiente?.descripcion?.trim()) {
+      alert("Debés cargar una descripción para el extracto.");
+      return;
+    }
+
+    if (!extractoPendiente?.sedeId) {
+      alert("Seleccioná una sede para el extracto.");
+      return;
+    }
+
+    if (!extractoPendiente?.file) {
+      alert("No hay archivo seleccionado.");
+      return;
+    }
+
+    setSaving(true);
+    setImportandoExtracto(true);
+
+    try {
+      const uploaded = await uploadArchivo(
+        extractoPendiente.file,
+        "bancos/extractos"
+      );
+
+      await createDocumento({
+        ...extractoPendiente,
+        archivo: uploaded.nombre,
+        archivoPath: uploaded.path,
+        archivoTipo: uploaded.tipo,
+        archivoSize: uploaded.size,
+        file: undefined,
+      });
+
+      await loadData(sedeId);
+
+      setExtractoPendiente(null);
+      setModal(null);
+    } catch (error) {
+      console.error("Error guardando extracto:", error);
+      alert(error.message || "No se pudo guardar el extracto.");
+    } finally {
+      setSaving(false);
+      setImportandoExtracto(false);
+    }
+  }
+
+  async function abrirExtracto(extracto) {
+    if (!extracto.archivoPath) {
+      alert("Este extracto no tiene archivo almacenado.");
+      return;
+    }
+
+    setOpeningExtractoId(extracto.id);
+
+    try {
+      const url = await getSignedArchivoUrl(extracto.archivoPath);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      console.error("Error abriendo extracto:", error);
+      alert(error.message || "No se pudo abrir el extracto.");
+    } finally {
+      setOpeningExtractoId(null);
+    }
   }
 
   async function handleConfirmarConciliacion() {
@@ -327,12 +528,18 @@ export default function Bancos({ selectedSede, sedeId }) {
 
     try {
       if (movimientoAConciliar.tipo === "Ingreso") {
-        await conciliarMovimientoConIngreso(movimientoAConciliar.id, comprobanteSeleccionadoId);
+        await conciliarMovimientoConIngreso(
+          movimientoAConciliar.id,
+          comprobanteSeleccionadoId
+        );
       } else {
-        await conciliarMovimientoConEgreso(movimientoAConciliar.id, comprobanteSeleccionadoId);
+        await conciliarMovimientoConEgreso(
+          movimientoAConciliar.id,
+          comprobanteSeleccionadoId
+        );
       }
 
-      await loadData();
+      await loadData(sedeId);
       setModal(null);
       setMovimientoAConciliar(null);
       setComprobanteSeleccionadoId("");
@@ -350,7 +557,7 @@ export default function Bancos({ selectedSede, sedeId }) {
 
     try {
       await desconciliarMovimientoBancario(mov.id);
-      await loadData();
+      await loadData(sedeId);
     } catch (error) {
       alert(error.message || "No se pudo desconciliar el movimiento.");
     }
@@ -358,22 +565,25 @@ export default function Bancos({ selectedSede, sedeId }) {
 
   async function handleCreate(e) {
     e.preventDefault();
+
     setSaving(true);
 
     try {
       await createMovimientoBancario(form);
-      await loadData();
-      setForm({ ...emptyForm, sedeId: sedes[0]?.id || "", cuenta: cuentasPorSede[0]?.nombre || cuentas[0]?.nombre || "" });
+      await loadData(sedeId);
+
+      setForm({
+        ...emptyForm,
+        sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+        cuenta: cuentasPorSede[0]?.nombre || cuentas[0]?.nombre || "",
+      });
+
       setModal(null);
     } catch (error) {
       alert(error.message || "No se pudo crear el movimiento bancario.");
     } finally {
       setSaving(false);
     }
-  }
-
-  async function handleImportarExtracto() {
-    alert("Importación de extractos pendiente. Próxima mejora: carga CSV/Excel del banco y preconciliación automática.");
   }
 
   function handleConciliar() {
@@ -388,7 +598,7 @@ export default function Bancos({ selectedSede, sedeId }) {
 
     try {
       await deleteMovimientoBancario(id);
-      await loadData();
+      await loadData(sedeId);
     } catch (error) {
       alert(error.message || "No se pudo eliminar el movimiento.");
     } finally {
@@ -398,12 +608,18 @@ export default function Bancos({ selectedSede, sedeId }) {
 
   async function handleCreateCuenta(e) {
     e.preventDefault();
+
     setSaving(true);
 
     try {
       await createCuentaBancaria(cuentaForm);
-      await loadData();
-      setCuentaForm(emptyCuentaForm);
+      await loadData(sedeId);
+
+      setCuentaForm({
+        ...emptyCuentaForm,
+        sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+      });
+
       setModal(null);
     } catch (error) {
       alert(error.message || "No se pudo crear la cuenta bancaria.");
@@ -422,6 +638,7 @@ export default function Bancos({ selectedSede, sedeId }) {
       { header: "Indicador", key: "indicador", width: 35 },
       { header: "Valor", key: "valor", width: 22 },
     ];
+
     resumenSheet.addRows([
       { indicador: "Sede", valor: selectedSedeName },
       { indicador: "Ingresos bancarios", valor: totalIngresos },
@@ -430,6 +647,7 @@ export default function Bancos({ selectedSede, sedeId }) {
       { indicador: "Pendientes", valor: movimientosPendientes.length },
       { indicador: "Vinculados", valor: movimientosVinculados.length },
       { indicador: "Sin identificar", valor: movimientosSinIdentificar.length },
+      { indicador: "Extractos adjuntos", valor: extractos.length },
     ]);
 
     const cuentasSheet = workbook.addWorksheet("Resumen por cuenta");
@@ -442,6 +660,7 @@ export default function Bancos({ selectedSede, sedeId }) {
       { header: "Vinculados", key: "vinculados", width: 14 },
       { header: "Movimientos", key: "movimientos", width: 14 },
     ];
+
     cuentasSheet.addRows(resumenPorCuenta);
 
     const movimientosSheet = workbook.addWorksheet("Movimientos");
@@ -456,6 +675,7 @@ export default function Bancos({ selectedSede, sedeId }) {
       { header: "Estado", key: "estado", width: 20 },
       { header: "Vínculo", key: "vinculo", width: 22 },
     ];
+
     movimientosSheet.addRows(
       movimientosFiltrados.map((mov) => ({
         fecha: formatDate(getFechaReal(mov)),
@@ -466,29 +686,73 @@ export default function Bancos({ selectedSede, sedeId }) {
         importe: mov.tipo === "Egreso" ? -mov.importe : mov.importe,
         origen: mov.origen,
         estado: mov.estado,
-        vinculo: mov.ingresoId ? `Ingreso ${mov.ingresoId}` : mov.egresoId ? `Egreso ${mov.egresoId}` : "Sin vincular",
+        vinculo: mov.ingresoId
+          ? `Ingreso ${mov.ingresoId}`
+          : mov.egresoId
+            ? `Egreso ${mov.egresoId}`
+            : "Sin vincular",
+      }))
+    );
+
+    const extractosSheet = workbook.addWorksheet("Extractos");
+    extractosSheet.columns = [
+      { header: "Fecha", key: "fecha", width: 14 },
+      { header: "Sede", key: "sede", width: 24 },
+      { header: "Cuenta / asociado", key: "asociadoA", width: 28 },
+      { header: "Descripción", key: "descripcion", width: 44 },
+      { header: "Archivo", key: "archivo", width: 36 },
+      { header: "Tipo", key: "archivoTipo", width: 24 },
+      { header: "Estado", key: "estado", width: 20 },
+    ];
+
+    extractosSheet.addRows(
+      extractos.map((ext) => ({
+        fecha: ext.fecha,
+        sede: ext.sede,
+        asociadoA: ext.asociadoA,
+        descripcion: ext.descripcion,
+        archivo: ext.archivo,
+        archivoTipo: ext.archivoTipo,
+        estado: ext.estado,
       }))
     );
 
     workbook.worksheets.forEach((sheet) => {
       sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
-      sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A8A" } };
-      sheet.eachRow((row) => row.eachCell((cell) => {
-        cell.border = {
-          top: { style: "thin", color: { argb: "FFE5E7EB" } },
-          left: { style: "thin", color: { argb: "FFE5E7EB" } },
-          bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
-          right: { style: "thin", color: { argb: "FFE5E7EB" } },
-        };
-      }));
+      sheet.getRow(1).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF1E3A8A" },
+      };
+
+      sheet.eachRow((row) =>
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFE5E7EB" } },
+            left: { style: "thin", color: { argb: "FFE5E7EB" } },
+            bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+            right: { style: "thin", color: { argb: "FFE5E7EB" } },
+          };
+        })
+      );
     });
 
-    [resumenSheet.getColumn("valor"), cuentasSheet.getColumn("ingresos"), cuentasSheet.getColumn("egresos"), cuentasSheet.getColumn("saldo"), movimientosSheet.getColumn("importe")].forEach((column) => {
+    [
+      resumenSheet.getColumn("valor"),
+      cuentasSheet.getColumn("ingresos"),
+      cuentasSheet.getColumn("egresos"),
+      cuentasSheet.getColumn("saldo"),
+      movimientosSheet.getColumn("importe"),
+    ].forEach((column) => {
       column.numFmt = '"$"#,##0.00';
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
-    const data = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+
+    const data = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
     saveAs(data, `${nombreArchivo}.xlsx`);
   };
 
@@ -500,18 +764,27 @@ export default function Bancos({ selectedSede, sedeId }) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(22);
     doc.text("GENETICS", 14, 16);
+
     doc.setFontSize(15);
     doc.text("Reporte bancario y conciliación", 14, 26);
+
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.text("Reporte generado por plataforma creada por TECNEW", 14, 32);
+
     doc.setDrawColor(210);
     doc.line(14, 37, pageWidth - 14, 37);
 
     doc.text(`Sede: ${selectedSedeName}`, 14, 44);
     doc.text(`Cuenta: ${cuentaFiltro}`, 14, 49);
     doc.text(`Estado: ${estadoFiltro}`, 14, 54);
-    doc.text(`Periodo: ${desde ? formatDate(desde) : "Inicio"} al ${hasta ? formatDate(hasta) : "Actual"}`, 14, 59);
+    doc.text(
+      `Periodo: ${desde ? formatDate(desde) : "Inicio"} al ${
+        hasta ? formatDate(hasta) : "Actual"
+      }`,
+      14,
+      59
+    );
 
     doc.setFont("helvetica", "bold");
     doc.text(`Ingresos: ${formatMoney(totalIngresos)}`, 155, 44);
@@ -522,22 +795,64 @@ export default function Bancos({ selectedSede, sedeId }) {
     autoTable(doc, {
       startY: 68,
       head: [["Cuenta", "Ingresos", "Egresos", "Saldo", "Pend.", "Vinc.", "Mov."]],
-      body: resumenPorCuenta.map((item) => [item.cuenta, formatMoney(item.ingresos), formatMoney(item.egresos), formatMoney(item.saldo), item.pendientes, item.vinculados, item.movimientos]),
+      body: resumenPorCuenta.map((item) => [
+        item.cuenta,
+        formatMoney(item.ingresos),
+        formatMoney(item.egresos),
+        formatMoney(item.saldo),
+        item.pendientes,
+        item.vinculados,
+        item.movimientos,
+      ]),
       styles: { fontSize: 8 },
       headStyles: { fillColor: [30, 58, 138], textColor: 255 },
-      columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" }, 4: { halign: "center" }, 5: { halign: "center" }, 6: { halign: "center" } },
+      columnStyles: {
+        1: { halign: "right" },
+        2: { halign: "right" },
+        3: { halign: "right" },
+        4: { halign: "center" },
+        5: { halign: "center" },
+        6: { halign: "center" },
+      },
     });
 
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + 8,
       head: [["Fecha", "Sede", "Cuenta", "Tipo", "Descripción", "Importe", "Estado", "Vínculo"]],
-      body: movimientosFiltrados.map((mov) => [formatDate(getFechaReal(mov)), mov.sede, mov.cuenta, mov.tipo, mov.descripcion, formatMoney(mov.tipo === "Egreso" ? -mov.importe : mov.importe), mov.estado, mov.ingresoId ? "Ingreso" : mov.egresoId ? "Egreso" : "Sin vincular"]),
+      body: movimientosFiltrados.map((mov) => [
+        formatDate(getFechaReal(mov)),
+        mov.sede,
+        mov.cuenta,
+        mov.tipo,
+        mov.descripcion,
+        formatMoney(mov.tipo === "Egreso" ? -mov.importe : mov.importe),
+        mov.estado,
+        mov.ingresoId ? "Ingreso" : mov.egresoId ? "Egreso" : "Sin vincular",
+      ]),
       styles: { fontSize: 7 },
       headStyles: { fillColor: [30, 58, 138], textColor: 255 },
       columnStyles: { 5: { halign: "right" } },
     });
 
+    if (extractos.length > 0) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 8,
+        head: [["Fecha", "Sede", "Cuenta / asociado", "Descripción", "Archivo", "Estado"]],
+        body: extractos.map((ext) => [
+          ext.fecha,
+          ext.sede,
+          ext.asociadoA || "-",
+          ext.descripcion,
+          ext.archivo || "-",
+          ext.estado,
+        ]),
+        styles: { fontSize: 7 },
+        headStyles: { fillColor: [30, 58, 138], textColor: 255 },
+      });
+    }
+
     const pageCount = doc.getNumberOfPages();
+
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
       doc.setFont("helvetica", "normal");
@@ -555,133 +870,477 @@ export default function Bancos({ selectedSede, sedeId }) {
       <div className="page-header">
         <div>
           <h2>Bancos y conciliación</h2>
-          <p>Control de cuentas bancarias, caja, billeteras y conciliación real contra ingresos/egresos.</p>
+          <p>
+            Control de cuentas bancarias, caja, billeteras, extractos y conciliación real contra ingresos/egresos.
+          </p>
         </div>
 
         <div className="header-actions">
-          <button className="secondary-button" onClick={() => loadData(sedeId)} disabled={loading}>
+          <input
+            ref={extractoInputRef}
+            type="file"
+            accept="application/pdf,image/*"
+            capture="environment"
+            hidden
+            onChange={seleccionarExtracto}
+          />
+
+          <button
+            className="secondary-button"
+            onClick={() => loadData(sedeId)}
+            disabled={loading}
+          >
             <RefreshCw size={16} /> Actualizar
           </button>
-          <button className="secondary-button" onClick={handleImportarExtracto}>
-            <Upload size={16} /> Importar extracto
+
+          <button
+            className="secondary-button"
+            onClick={() => extractoInputRef.current?.click()}
+            disabled={importandoExtracto}
+          >
+            <Upload size={16} />
+            {importandoExtracto ? "Subiendo extracto..." : "Adjuntar extracto"}
           </button>
+
           <button className="secondary-button" onClick={handleConciliar}>
             <GitCompare size={16} /> Ver sin vincular
           </button>
-          <button className="secondary-button" onClick={() => setModal("nuevaCuenta")}>
+
+          <button className="secondary-button" onClick={openNuevaCuenta}>
             <Plus size={16} /> Nueva cuenta
           </button>
-          <button className="primary-button" onClick={() => setModal("nuevo")}>
+
+          <button className="primary-button" onClick={openNuevoMovimiento}>
             <Plus size={16} /> Nuevo movimiento
           </button>
         </div>
       </div>
 
       <div className="stats-grid small">
-        <div className="stat-card"><div><span>Ingresos bancarios</span><strong>{formatMoney(totalIngresos)}</strong><small>{movimientosFiltrados.filter((m) => m.tipo === "Ingreso").length} movimientos</small></div></div>
-        <div className="stat-card"><div><span>Egresos bancarios</span><strong>{formatMoney(totalEgresos)}</strong><small>{movimientosFiltrados.filter((m) => m.tipo === "Egreso").length} movimientos</small></div></div>
-        <div className="stat-card"><div><span>Saldo operativo</span><strong>{formatMoney(saldoOperativo)}</strong><small>Ingresos menos egresos</small></div></div>
-        <div className="stat-card"><div><span>Conciliación real</span><strong>{movimientosVinculados.length}</strong><small>{movimientosPendientes.length} pendientes · {movimientosSinIdentificar.length} sin identificar</small></div></div>
+        <div className="stat-card">
+          <div>
+            <span>Ingresos bancarios</span>
+            <strong>{formatMoney(totalIngresos)}</strong>
+            <small>
+              {movimientosFiltrados.filter((m) => m.tipo === "Ingreso").length} movimientos
+            </small>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div>
+            <span>Egresos bancarios</span>
+            <strong>{formatMoney(totalEgresos)}</strong>
+            <small>
+              {movimientosFiltrados.filter((m) => m.tipo === "Egreso").length} movimientos
+            </small>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div>
+            <span>Saldo operativo</span>
+            <strong>{formatMoney(saldoOperativo)}</strong>
+            <small>Ingresos menos egresos</small>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div>
+            <span>Extractos adjuntos</span>
+            <strong>{extractos.length}</strong>
+            <small>Documentos bancarios cargados</small>
+          </div>
+        </div>
       </div>
 
       <div className="filters-bar">
-        <input placeholder="Buscar por cuenta, descripción, sede u origen..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input
+          placeholder="Buscar por cuenta, descripción, sede u origen..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
 
-        <label className="filter-field"><span>Cuenta</span><select value={cuentaFiltro} onChange={(e) => setCuentaFiltro(e.target.value)}><option>Todas</option>{cuentasPorSede.map((cuenta) => <option key={cuenta.id} value={cuenta.nombre}>{cuenta.nombre}</option>)}</select></label>
-        <label className="filter-field"><span>Tipo</span><select value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)}><option>Todos</option><option>Ingreso</option><option>Egreso</option></select></label>
-        <label className="filter-field"><span>Estado</span><select value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)}><option>Todos</option><option>Conciliado</option><option>Pendiente</option><option>Movimiento sin identificar</option><option>Vinculado</option><option>Sin vincular</option></select></label>
+        <label className="filter-field">
+          <span>Cuenta</span>
+          <select value={cuentaFiltro} onChange={(e) => setCuentaFiltro(e.target.value)}>
+            <option>Todas</option>
+            {cuentasPorSede.map((cuenta) => (
+              <option key={cuenta.id} value={cuenta.nombre}>
+                {cuenta.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="filter-field">
+          <span>Tipo</span>
+          <select value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)}>
+            <option>Todos</option>
+            <option>Ingreso</option>
+            <option>Egreso</option>
+          </select>
+        </label>
+
+        <label className="filter-field">
+          <span>Estado</span>
+          <select value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)}>
+            <option>Todos</option>
+            <option>Conciliado</option>
+            <option>Pendiente</option>
+            <option>Movimiento sin identificar</option>
+            <option>Vinculado</option>
+            <option>Sin vincular</option>
+          </select>
+        </label>
 
         <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
         <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-        <button className="secondary-button" onClick={() => aplicarFiltroRapido("hoy")}>Hoy</button>
-        <button className="secondary-button" onClick={() => aplicarFiltroRapido("mes")}>Este mes</button>
-        <button className="secondary-button" onClick={() => aplicarFiltroRapido("pendientes")}>Pendientes</button>
-        <button className="secondary-button" onClick={() => aplicarFiltroRapido("sin-vincular")}>Sin vincular</button>
-        <button className="secondary-button" onClick={() => aplicarFiltroRapido("limpiar")}>Limpiar</button>
-        <button className="secondary-button" onClick={exportarExcel} disabled={loading}><FileSpreadsheet size={15} /> Excel</button>
-        <button className="primary-button" onClick={exportarPDF} disabled={loading}><FileText size={15} /> PDF</button>
+
+        <button className="secondary-button" onClick={() => aplicarFiltroRapido("hoy")}>
+          Hoy
+        </button>
+
+        <button className="secondary-button" onClick={() => aplicarFiltroRapido("mes")}>
+          Este mes
+        </button>
+
+        <button className="secondary-button" onClick={() => aplicarFiltroRapido("pendientes")}>
+          Pendientes
+        </button>
+
+        <button className="secondary-button" onClick={() => aplicarFiltroRapido("sin-vincular")}>
+          Sin vincular
+        </button>
+
+        <button className="secondary-button" onClick={() => aplicarFiltroRapido("limpiar")}>
+          Limpiar
+        </button>
+
+        <button className="secondary-button" onClick={exportarExcel} disabled={loading}>
+          <FileSpreadsheet size={15} /> Excel
+        </button>
+
+        <button className="primary-button" onClick={exportarPDF} disabled={loading}>
+          <FileText size={15} /> PDF
+        </button>
       </div>
 
       <div className="panel">
         <h3>Resumen por cuenta</h3>
-        <div className="table-card"><table><thead><tr><th>Cuenta</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Pendientes</th><th>Vinculados</th><th>Movimientos</th></tr></thead><tbody>{resumenPorCuenta.map((item) => <tr key={item.cuenta}><td><strong>{item.cuenta}</strong></td><td>{formatMoney(item.ingresos)}</td><td>{formatMoney(item.egresos)}</td><td><strong>{formatMoney(item.saldo)}</strong></td><td>{item.pendientes}</td><td>{item.vinculados}</td><td>{item.movimientos}</td></tr>)}{!loading && resumenPorCuenta.length === 0 && <tr><td colSpan="7">No hay cuentas con movimientos para los filtros seleccionados.</td></tr>}</tbody></table></div>
-      </div>
 
-      <div className="panel" style={{ marginTop: 18 }}>
-        <h3>Movimientos bancarios</h3>
         <div className="table-card">
           <table>
-            <thead><tr><th>Fecha</th><th>Sede</th><th>Cuenta</th><th>Tipo</th><th>Descripción</th><th>Importe</th><th>Origen</th><th>Estado</th><th>Vínculo</th><th>Acciones</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Cuenta</th>
+                <th>Ingresos</th>
+                <th>Egresos</th>
+                <th>Saldo</th>
+                <th>Pendientes</th>
+                <th>Vinculados</th>
+                <th>Movimientos</th>
+              </tr>
+            </thead>
+
             <tbody>
-              {loading && <tr><td colSpan="10">Cargando movimientos bancarios...</td></tr>}
-              {!loading && movimientosFiltrados.map((mov) => {
-                const vinculado = mov.ingresoId || mov.egresoId;
-                return (
-                  <tr key={mov.id}>
-                    <td>{formatDate(getFechaReal(mov))}</td><td>{mov.sede}</td><td>{mov.cuenta}</td><td>{mov.tipo}</td><td>{mov.descripcion}</td><td><strong>{formatMoney(mov.tipo === "Egreso" ? -mov.importe : mov.importe)}</strong></td><td>{mov.origen}</td>
-                    <td><span className={`status-badge ${mov.estado.toLowerCase().replaceAll(" ", "-")}`}>{mov.estado}</span></td>
-                    <td>{vinculado ? <span className="status-badge aplicado">{mov.ingresoId ? "Ingreso vinculado" : "Egreso vinculado"}</span> : <span className="status-badge pendiente">Sin vincular</span>}</td>
-                    <td><div className="table-actions">
-                      {!vinculado && <button title="Conciliar" onClick={() => openConciliacion(mov)}><Link2 size={16} /></button>}
-                      {vinculado && <button title="Desconciliar" onClick={() => handleDesconciliar(mov)}><Unlink size={16} /></button>}
-                      <button onClick={() => handleDelete(mov.id)} disabled={deletingId === mov.id}><Trash2 size={16} /></button>
-                    </div></td>
-                  </tr>
-                );
-              })}
-              {!loading && movimientosFiltrados.length === 0 && <tr><td colSpan="10">No se encontraron movimientos.</td></tr>}
+              {resumenPorCuenta.map((item) => (
+                <tr key={item.cuenta}>
+                  <td>
+                    <strong>{item.cuenta}</strong>
+                  </td>
+                  <td>{formatMoney(item.ingresos)}</td>
+                  <td>{formatMoney(item.egresos)}</td>
+                  <td>
+                    <strong>{formatMoney(item.saldo)}</strong>
+                  </td>
+                  <td>{item.pendientes}</td>
+                  <td>{item.vinculados}</td>
+                  <td>{item.movimientos}</td>
+                </tr>
+              ))}
+
+              {!loading && resumenPorCuenta.length === 0 && (
+                <tr>
+                  <td colSpan="7">
+                    No hay cuentas con movimientos para los filtros seleccionados.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {modal === "conciliar" && movimientoAConciliar && (
-        <Modal title="Conciliar movimiento bancario" onClose={() => setModal(null)}>
-          <div className="detail-grid" style={{ marginBottom: 14 }}>
-            <div><span>Movimiento</span><strong>{movimientoAConciliar.descripcion}</strong></div>
-            <div><span>Importe</span><strong>{formatMoney(movimientoAConciliar.importe)}</strong></div>
-            <div><span>Tipo</span><strong>{movimientoAConciliar.tipo}</strong></div>
-            <div><span>Sede</span><strong>{movimientoAConciliar.sede}</strong></div>
-          </div>
+      <div className="panel" style={{ marginTop: 18 }}>
+        <h3>Movimientos bancarios</h3>
 
-          <div className="table-card" style={{ maxHeight: 360, overflowY: "auto" }}>
-            <table>
-              <thead><tr><th>Seleccionar</th><th>Fecha</th><th>{movimientoAConciliar.tipo === "Ingreso" ? "Concepto" : "Proveedor"}</th><th>Detalle</th><th>Importe</th><th>Estado</th><th>Match</th></tr></thead>
-              <tbody>
-                {candidatosConciliacion.map((item) => (
-                  <tr key={item.id}>
-                    <td><input type="radio" name="comprobante" checked={comprobanteSeleccionadoId === item.id} onChange={() => setComprobanteSeleccionadoId(item.id)} /></td>
-                    <td>{formatDate(getFechaReal(item))}</td>
-                    <td>{movimientoAConciliar.tipo === "Ingreso" ? item.concepto : item.proveedor}</td>
-                    <td>{movimientoAConciliar.tipo === "Ingreso" ? item.origen : item.concepto}</td>
-                    <td>{formatMoney(item.importe)}</td>
-                    <td><span className={`status-badge ${item.estado.toLowerCase()}`}>{item.estado}</span></td>
-                    <td>{item.sugerido ? <span className="status-badge aplicado">Sugerido</span> : `Dif: ${formatMoney(item.diffImporte)}`}</td>
+        <div className="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Sede</th>
+                <th>Cuenta</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+                <th>Importe</th>
+                <th>Origen</th>
+                <th>Estado</th>
+                <th>Vínculo</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading && (
+                <tr>
+                  <td colSpan="10">Cargando movimientos bancarios...</td>
+                </tr>
+              )}
+
+              {!loading &&
+                movimientosFiltrados.map((mov) => {
+                  const vinculado = mov.ingresoId || mov.egresoId;
+
+                  return (
+                    <tr key={mov.id}>
+                      <td>{formatDate(getFechaReal(mov))}</td>
+                      <td>{mov.sede}</td>
+                      <td>{mov.cuenta}</td>
+                      <td>{mov.tipo}</td>
+                      <td>{mov.descripcion}</td>
+                      <td>
+                        <strong>
+                          {formatMoney(mov.tipo === "Egreso" ? -mov.importe : mov.importe)}
+                        </strong>
+                      </td>
+                      <td>{mov.origen}</td>
+                      <td>
+                        <span className={`status-badge ${getStatusClass(mov.estado)}`}>
+                          {mov.estado}
+                        </span>
+                      </td>
+                      <td>
+                        {vinculado ? (
+                          <span className="status-badge aplicado">
+                            {mov.ingresoId ? "Ingreso vinculado" : "Egreso vinculado"}
+                          </span>
+                        ) : (
+                          <span className="status-badge pendiente">Sin vincular</span>
+                        )}
+                      </td>
+                      <td>
+                        <div className="table-actions">
+                          {!vinculado && (
+                            <button title="Conciliar" onClick={() => openConciliacion(mov)}>
+                              <Link2 size={16} />
+                            </button>
+                          )}
+
+                          {vinculado && (
+                            <button title="Desconciliar" onClick={() => handleDesconciliar(mov)}>
+                              <Unlink size={16} />
+                            </button>
+                          )}
+
+                          <button
+                            title="Eliminar movimiento"
+                            onClick={() => handleDelete(mov.id)}
+                            disabled={deletingId === mov.id}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+              {!loading && movimientosFiltrados.length === 0 && (
+                <tr>
+                  <td colSpan="10">No se encontraron movimientos bancarios.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="panel" style={{ marginTop: 18 }}>
+        <h3>Extractos bancarios adjuntos</h3>
+
+        <div className="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Sede</th>
+                <th>Cuenta / asociado a</th>
+                <th>Descripción</th>
+                <th>Archivo</th>
+                <th>Tamaño</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading && (
+                <tr>
+                  <td colSpan="8">Cargando extractos...</td>
+                </tr>
+              )}
+
+              {!loading &&
+                extractos.map((extracto) => (
+                  <tr key={extracto.id}>
+                    <td>{extracto.fecha}</td>
+                    <td>{extracto.sede}</td>
+                    <td>{extracto.asociadoA || "-"}</td>
+                    <td>{extracto.descripcion}</td>
+                    <td>{extracto.archivo || "-"}</td>
+                    <td>{formatFileSize(extracto.archivoSize)}</td>
+                    <td>
+                      <span className={`status-badge ${getStatusClass(extracto.estado)}`}>
+                        {extracto.estado}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="table-actions">
+                        <button
+                          title="Abrir extracto"
+                          onClick={() => abrirExtracto(extracto)}
+                          disabled={openingExtractoId === extracto.id}
+                        >
+                          <ExternalLink size={16} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
-                {candidatosConciliacion.length === 0 && <tr><td colSpan="7">No hay comprobantes pendientes compatibles para esta sede.</td></tr>}
-              </tbody>
-            </table>
-          </div>
 
-          <div className="modal-actions">
-            <button type="button" className="secondary-button" onClick={() => setModal(null)}>Cancelar</button>
-            <button type="button" className="primary-button" disabled={saving || !comprobanteSeleccionadoId} onClick={handleConfirmarConciliacion}>{saving ? "Conciliando..." : "Confirmar conciliación"}</button>
-          </div>
-        </Modal>
-      )}
+              {!loading && extractos.length === 0 && (
+                <tr>
+                  <td colSpan="8">No hay extractos adjuntos para esta sede.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {modal === "nuevo" && (
         <Modal title="Nuevo movimiento bancario" onClose={() => setModal(null)}>
           <form className="form-grid" onSubmit={handleCreate}>
-            <label>Fecha<input type="date" required value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} /></label>
-            <label>Sede<select value={form.sedeId} onChange={(e) => setForm({ ...form, sedeId: e.target.value })} required>{sedes.map((sede) => <option key={sede.id} value={sede.id}>{sede.nombre}</option>)}</select></label>
-            <label>Cuenta<select required value={form.cuenta} onChange={(e) => setForm({ ...form, cuenta: e.target.value })}><option value="">Seleccionar cuenta</option>{cuentasPorSede.map((cuenta) => <option key={cuenta.id} value={cuenta.nombre}>{cuenta.nombre}</option>)}</select></label>
-            <label>Tipo<select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}><option>Ingreso</option><option>Egreso</option></select></label>
-            <label>Estado<select value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value })}><option>Pendiente</option><option>Conciliado</option><option>Movimiento sin identificar</option></select></label>
-            <label>Importe<input type="number" step="0.01" min="0" required value={form.importe} onChange={(e) => setForm({ ...form, importe: e.target.value })} /></label>
-            <label className="full">Descripción<input required value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} /></label>
-            <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>Cancelar</button><button type="submit" className="primary-button" disabled={saving}>{saving ? "Guardando..." : "Guardar movimiento"}</button></div>
+            <label>
+              Fecha
+              <input
+                type="date"
+                required
+                value={form.fecha}
+                onChange={(e) => setForm({ ...form, fecha: e.target.value })}
+              />
+            </label>
+
+            <label>
+              Sede
+              <select
+                value={form.sedeId}
+                onChange={(e) => setForm({ ...form, sedeId: e.target.value })}
+                disabled={sedeBloqueada}
+                required
+              >
+                <option value="">Seleccionar sede</option>
+                {sedes.map((sede) => (
+                  <option key={sede.id} value={sede.id}>
+                    {sede.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Cuenta
+              <select
+                required
+                value={form.cuenta}
+                onChange={(e) => setForm({ ...form, cuenta: e.target.value })}
+              >
+                <option value="">Seleccionar cuenta</option>
+                {cuentasPorSede.map((cuenta) => (
+                  <option key={cuenta.id} value={cuenta.nombre}>
+                    {cuenta.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Tipo
+              <select
+                value={form.tipo}
+                onChange={(e) => setForm({ ...form, tipo: e.target.value })}
+              >
+                <option>Ingreso</option>
+                <option>Egreso</option>
+              </select>
+            </label>
+
+            <label>
+              Importe
+              <input
+                type="number"
+                required
+                min="0"
+                step="0.01"
+                value={form.importe}
+                onChange={(e) => setForm({ ...form, importe: e.target.value })}
+              />
+            </label>
+
+            <label>
+              Estado
+              <select
+                value={form.estado}
+                onChange={(e) => setForm({ ...form, estado: e.target.value })}
+              >
+                <option>Pendiente</option>
+                <option>Conciliado</option>
+                <option>Movimiento sin identificar</option>
+              </select>
+            </label>
+
+            <label>
+              Origen
+              <input
+                value={form.origen}
+                onChange={(e) => setForm({ ...form, origen: e.target.value })}
+              />
+            </label>
+
+            <label className="full">
+              Descripción
+              <input
+                required
+                value={form.descripcion}
+                onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
+              />
+            </label>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setModal(null)}
+              >
+                Cancelar
+              </button>
+
+              <button type="submit" className="primary-button" disabled={saving}>
+                {saving ? "Guardando..." : "Guardar movimiento"}
+              </button>
+            </div>
           </form>
         </Modal>
       )}
@@ -689,10 +1348,254 @@ export default function Bancos({ selectedSede, sedeId }) {
       {modal === "nuevaCuenta" && (
         <Modal title="Nueva cuenta bancaria" onClose={() => setModal(null)}>
           <form className="form-grid" onSubmit={handleCreateCuenta}>
-            <label>Nombre de cuenta<input required placeholder="Ej: Banco Galicia - CC $" value={cuentaForm.nombre} onChange={(e) => setCuentaForm({ ...cuentaForm, nombre: e.target.value })} /></label>
-            <label>Tipo<select value={cuentaForm.tipo} onChange={(e) => setCuentaForm({ ...cuentaForm, tipo: e.target.value })}><option>Banco</option><option>Billetera virtual</option><option>Caja</option><option>Otro</option></select></label>
-            <label>Sede<select value={cuentaForm.sedeId} onChange={(e) => setCuentaForm({ ...cuentaForm, sedeId: e.target.value })}><option value="">Todas las sedes</option>{sedes.map((sede) => <option key={sede.id} value={sede.id}>{sede.nombre}</option>)}</select></label>
-            <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>Cancelar</button><button type="submit" className="primary-button" disabled={saving}>{saving ? "Guardando..." : "Crear cuenta"}</button></div>
+            <label>
+              Nombre
+              <input
+                required
+                value={cuentaForm.nombre}
+                onChange={(e) =>
+                  setCuentaForm({ ...cuentaForm, nombre: e.target.value })
+                }
+              />
+            </label>
+
+            <label>
+              Tipo
+              <select
+                value={cuentaForm.tipo}
+                onChange={(e) =>
+                  setCuentaForm({ ...cuentaForm, tipo: e.target.value })
+                }
+              >
+                <option>Banco</option>
+                <option>Billetera virtual</option>
+                <option>Caja</option>
+              </select>
+            </label>
+
+            <label>
+              Sede
+              <select
+                value={cuentaForm.sedeId}
+                onChange={(e) =>
+                  setCuentaForm({ ...cuentaForm, sedeId: e.target.value })
+                }
+                disabled={sedeBloqueada}
+              >
+                <option value="">Todas</option>
+                {sedes.map((sede) => (
+                  <option key={sede.id} value={sede.id}>
+                    {sede.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setModal(null)}
+              >
+                Cancelar
+              </button>
+
+              <button type="submit" className="primary-button" disabled={saving}>
+                {saving ? "Guardando..." : "Crear cuenta"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {modal === "revisarExtracto" && extractoPendiente && (
+        <Modal title="Revisar extracto bancario" onClose={() => setModal(null)}>
+          <form className="form-grid" onSubmit={confirmarExtractoImportado}>
+            <label>
+              Fecha
+              <input
+                type="date"
+                required
+                value={extractoPendiente.fecha}
+                onChange={(e) =>
+                  setExtractoPendiente({
+                    ...extractoPendiente,
+                    fecha: e.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              Cuenta / asociado a
+              <input
+                required
+                value={extractoPendiente.asociadoA}
+                onChange={(e) =>
+                  setExtractoPendiente({
+                    ...extractoPendiente,
+                    asociadoA: e.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              Sede
+              <select
+                required
+                value={extractoPendiente.sedeId}
+                onChange={(e) =>
+                  setExtractoPendiente({
+                    ...extractoPendiente,
+                    sedeId: e.target.value,
+                  })
+                }
+                disabled={sedeBloqueada}
+              >
+                <option value="">Seleccionar sede</option>
+                {sedes.map((sede) => (
+                  <option key={sede.id} value={sede.id}>
+                    {sede.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Estado
+              <select
+                value={extractoPendiente.estado}
+                onChange={(e) =>
+                  setExtractoPendiente({
+                    ...extractoPendiente,
+                    estado: e.target.value,
+                  })
+                }
+              >
+                <option>Pendiente revisión</option>
+                <option>Validado</option>
+                <option>Conciliado</option>
+              </select>
+            </label>
+
+            <label className="full">
+              Descripción
+              <input
+                required
+                placeholder="Ej: Extracto Galicia mayo 2026"
+                value={extractoPendiente.descripcion}
+                onChange={(e) =>
+                  setExtractoPendiente({
+                    ...extractoPendiente,
+                    descripcion: e.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <div className="full document-preview">
+              <strong>Archivo seleccionado:</strong>
+              <br />
+              {extractoPendiente.archivo}
+              <br />
+              Tipo: {extractoPendiente.archivoTipo || "-"}
+              <br />
+              Tamaño: {formatFileSize(extractoPendiente.archivoSize)}
+              <br />
+              El archivo se guardará en Supabase Storage y quedará registrado como documento de tipo{" "}
+              <strong>Extracto bancario</strong>.
+            </div>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setExtractoPendiente(null);
+                  setModal(null);
+                }}
+              >
+                Cancelar
+              </button>
+
+              <button type="submit" className="primary-button" disabled={saving}>
+                {saving ? "Guardando..." : "Guardar extracto"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {modal === "conciliar" && movimientoAConciliar && (
+        <Modal title="Conciliar movimiento" onClose={() => setModal(null)}>
+          <div className="detail-grid">
+            <div>
+              <span>Movimiento</span>
+              <strong>{movimientoAConciliar.descripcion}</strong>
+            </div>
+
+            <div>
+              <span>Importe</span>
+              <strong>{formatMoney(movimientoAConciliar.importe)}</strong>
+            </div>
+
+            <div>
+              <span>Cuenta</span>
+              <strong>{movimientoAConciliar.cuenta}</strong>
+            </div>
+
+            <div>
+              <span>Tipo</span>
+              <strong>{movimientoAConciliar.tipo}</strong>
+            </div>
+          </div>
+
+          <form className="form-grid" onSubmit={(e) => e.preventDefault()}>
+            <label className="full">
+              Comprobante a vincular
+              <select
+                value={comprobanteSeleccionadoId}
+                onChange={(e) => setComprobanteSeleccionadoId(e.target.value)}
+              >
+                {candidatosConciliacion.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {formatDate(getFechaReal(item))} ·{" "}
+                    {item.concepto ||
+                      item.proveedor ||
+                      item.sociedad ||
+                      item.descripcion}{" "}
+                    · {formatMoney(item.importe)}
+                    {item.sugerido ? " · sugerido" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {candidatosConciliacion.length === 0 && (
+              <div className="full document-preview">
+                No hay comprobantes disponibles para conciliar con este movimiento.
+              </div>
+            )}
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setModal(null)}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                className="primary-button"
+                disabled={saving || !comprobanteSeleccionadoId}
+                onClick={handleConfirmarConciliacion}
+              >
+                {saving ? "Conciliando..." : "Confirmar conciliación"}
+              </button>
+            </div>
           </form>
         </Modal>
       )}

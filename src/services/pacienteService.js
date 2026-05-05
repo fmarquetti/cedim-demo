@@ -20,6 +20,12 @@ function mapPacienteEstudio(row) {
     prioridad: row.prioridad,
     estado: row.estado,
     observaciones: row.observaciones || "",
+    archivo: row.archivo || "",
+    archivoPath: row.archivo_path || "",
+    archivoUrl: row.archivo_url || "",
+    archivoTipo: row.archivo_tipo || "",
+    archivoSize: row.archivo_size || 0,
+    linkEstudio: row.link_estudio || "",
   };
 }
 
@@ -62,6 +68,12 @@ export async function createPacienteEstudio(form) {
       prioridad: form.prioridad || "Normal",
       estado: form.estado || "Muestra pendiente",
       observaciones: form.observaciones || null,
+      archivo: form.archivo || null,
+      archivo_path: form.archivoPath || null,
+      archivo_url: form.archivoUrl || null,
+      archivo_tipo: form.archivoTipo || null,
+      archivo_size: form.archivoSize || null,
+      link_estudio: form.linkEstudio || null,
     })
     .select(`
       *,

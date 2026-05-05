@@ -1,8 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, Eye, CheckCircle, Upload, RefreshCw } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Eye,
+  CheckCircle,
+  Upload,
+  RefreshCw,
+  ExternalLink,
+} from "lucide-react";
+
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import jsQR from "jsqr";
+
 import Modal from "../components/Modal";
 import { getSedes } from "../services/sedeService";
 import {
@@ -11,6 +21,11 @@ import {
   getDocumentos,
   updateEstadoDocumento,
 } from "../services/documentoService";
+import {
+  uploadArchivo,
+  getSignedArchivoUrl,
+  deleteArchivo,
+} from "../services/storageService";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -21,6 +36,9 @@ const emptyForm = {
   asociadoA: "",
   sedeId: "",
   archivo: "",
+  archivoPath: "",
+  archivoTipo: "",
+  archivoSize: 0,
   estado: "Pendiente revisión",
 };
 
@@ -37,7 +55,10 @@ function getStatusClass(text) {
 
 function decodeBase64Url(base64Url) {
   const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+  const padded = base64.padEnd(
+    base64.length + ((4 - (base64.length % 4)) % 4),
+    "="
+  );
   const jsonString = decodeURIComponent(escape(atob(padded)));
 
   return JSON.parse(jsonString);
@@ -71,15 +92,12 @@ function tipoComprobanteLabel(codigo) {
   return tipos[codigo] || `Comprobante ${codigo}`;
 }
 
-function formatFecha(fecha) {
+function formatFechaInput(fecha) {
   if (!fecha) return "";
+  if (fecha.includes("-")) return fecha;
 
-  if (fecha.includes("-")) {
-    const [yyyy, mm, dd] = fecha.split("-");
-    return `${dd}/${mm}/${yyyy}`;
-  }
-
-  return fecha;
+  const [dd, mm, yyyy] = fecha.split("/");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function formatImporte(value) {
@@ -91,8 +109,16 @@ function formatImporte(value) {
   });
 }
 
+function formatFileSize(bytes) {
+  if (!bytes) return "-";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function Documentos({ selectedSede, sedeId }) {
   const facturaInputRef = useRef(null);
+  const documentoInputRef = useRef(null);
 
   const [documentos, setDocumentos] = useState([]);
   const [sedes, setSedes] = useState([]);
@@ -102,14 +128,17 @@ export default function Documentos({ selectedSede, sedeId }) {
 
   const [modal, setModal] = useState(null);
   const [selectedDocumento, setSelectedDocumento] = useState(null);
-  const [importandoFactura, setImportandoFactura] = useState(false);
+  const [documentoPendiente, setDocumentoPendiente] = useState(null);
 
   const [form, setForm] = useState(emptyForm);
+  const [formFile, setFormFile] = useState(null);
 
+  const [importandoFactura, setImportandoFactura] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
+  const [openingId, setOpeningId] = useState(null);
 
   const selectedSedeName =
     typeof selectedSede === "object" && selectedSede !== null
@@ -169,7 +198,9 @@ export default function Documentos({ selectedSede, sedeId }) {
   }, [documentosPorSede, search, tipoFiltro]);
 
   const total = documentosPorSede.length;
-  const pendientes = documentosPorSede.filter((d) => d.estado === "Pendiente revisión").length;
+  const pendientes = documentosPorSede.filter(
+    (d) => d.estado === "Pendiente revisión"
+  ).length;
   const validados = documentosPorSede.filter((d) => d.estado === "Validado").length;
   const conciliados = documentosPorSede.filter((d) => d.estado === "Conciliado").length;
 
@@ -179,8 +210,23 @@ export default function Documentos({ selectedSede, sedeId }) {
       fecha: new Date().toISOString().split("T")[0],
       sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
     });
-
+    setFormFile(null);
     setModal("nuevo");
+  }
+
+  function handleDocumentoFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFormFile(file);
+    setForm((prev) => ({
+      ...prev,
+      archivo: file.name,
+      archivoTipo: file.type || "",
+      archivoSize: file.size || 0,
+    }));
+
+    e.target.value = "";
   }
 
   async function handleCreate(e) {
@@ -189,9 +235,18 @@ export default function Documentos({ selectedSede, sedeId }) {
     setSaving(true);
 
     try {
+      let uploaded = null;
+
+      if (formFile) {
+        uploaded = await uploadArchivo(formFile, "documentos");
+      }
+
       await createDocumento({
         ...form,
-        archivo: form.archivo || "archivo_simulado.pdf",
+        archivo: uploaded?.nombre || form.archivo || "Sin archivo adjunto",
+        archivoPath: uploaded?.path || form.archivoPath || "",
+        archivoTipo: uploaded?.tipo || form.archivoTipo || "",
+        archivoSize: uploaded?.size || form.archivoSize || 0,
       });
 
       await loadData(sedeId);
@@ -201,7 +256,7 @@ export default function Documentos({ selectedSede, sedeId }) {
         fecha: new Date().toISOString().split("T")[0],
         sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
       });
-
+      setFormFile(null);
       setModal(null);
     } catch (error) {
       console.error("Error guardando documento:", error);
@@ -211,14 +266,57 @@ export default function Documentos({ selectedSede, sedeId }) {
     }
   }
 
-  async function handleDelete(id) {
+  async function confirmarDocumentoImportado(e) {
+    e.preventDefault();
+
+    if (!documentoPendiente?.descripcion?.trim()) {
+      alert("Debés cargar una descripción antes de guardar el documento.");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      let uploaded = null;
+
+      if (documentoPendiente.file) {
+        uploaded = await uploadArchivo(documentoPendiente.file, "documentos");
+      }
+
+      await createDocumento({
+        ...documentoPendiente,
+        archivo: uploaded?.nombre || documentoPendiente.archivo || "",
+        archivoPath: uploaded?.path || "",
+        archivoTipo: uploaded?.tipo || "",
+        archivoSize: uploaded?.size || 0,
+        file: undefined,
+      });
+
+      await loadData(sedeId);
+
+      setDocumentoPendiente(null);
+      setModal(null);
+    } catch (error) {
+      console.error("Error guardando documento importado:", error);
+      alert(error.message || "No se pudo guardar el documento importado.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(documento) {
     const confirmed = window.confirm("¿Eliminar este documento?");
     if (!confirmed) return;
 
-    setDeletingId(id);
+    setDeletingId(documento.id);
 
     try {
-      await deleteDocumento(id);
+      await deleteDocumento(documento.id);
+
+      if (documento.archivoPath) {
+        await deleteArchivo(documento.archivoPath);
+      }
+
       await loadData(sedeId);
     } catch (error) {
       console.error("Error eliminando documento:", error);
@@ -239,6 +337,25 @@ export default function Documentos({ selectedSede, sedeId }) {
       alert(error.message || "No se pudo validar el documento.");
     } finally {
       setUpdatingId(null);
+    }
+  }
+
+  async function abrirArchivo(documento) {
+    if (!documento.archivoPath) {
+      alert("Este documento no tiene archivo almacenado.");
+      return;
+    }
+
+    setOpeningId(documento.id);
+
+    try {
+      const url = await getSignedArchivoUrl(documento.archivoPath);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      console.error("Error abriendo archivo:", error);
+      alert(error.message || "No se pudo abrir el archivo.");
+    } finally {
+      setOpeningId(null);
     }
   }
 
@@ -291,14 +408,18 @@ export default function Documentos({ selectedSede, sedeId }) {
       const puntoVenta = String(datos.ptoVta || "").padStart(4, "0");
       const numeroComprobante = String(datos.nroCmp || "").padStart(8, "0");
 
-      await createDocumento({
-        fecha: datos.fecha,
+      setDocumentoPendiente({
+        fecha: formatFechaInput(datos.fecha),
         tipo: "Factura",
         descripcion: `${tipoComprobante} ${puntoVenta}-${numeroComprobante} - ${formatImporte(datos.importe)}`,
         asociadoA: `CUIT ${datos.cuit}`,
-        sedeId: sedeBloqueada ? sedeId : form.sedeId || sedes[0]?.id || null,
+        sedeId: sedeBloqueada ? sedeId : form.sedeId || sedes[0]?.id || "",
         archivo: file.name,
+        archivoPath: "",
+        archivoTipo: file.type || "application/pdf",
+        archivoSize: file.size || 0,
         estado: "Pendiente revisión",
+        file,
         datosFiscales: {
           ...datos,
           qrUrl: qrText,
@@ -308,7 +429,7 @@ export default function Documentos({ selectedSede, sedeId }) {
         },
       });
 
-      await loadData(sedeId);
+      setModal("revisarDocumento");
     } catch (error) {
       console.error("Error importando factura:", error);
       alert(error.message || "No se pudo importar la factura.");
@@ -442,7 +563,7 @@ export default function Documentos({ selectedSede, sedeId }) {
                   <td>{item.descripcion}</td>
                   <td>{item.asociadoA}</td>
                   <td>{item.sede}</td>
-                  <td>{item.archivo}</td>
+                  <td>{item.archivo || "-"}</td>
                   <td>
                     <span className={`status-badge ${getStatusClass(item.estado)}`}>
                       {item.estado}
@@ -453,6 +574,16 @@ export default function Documentos({ selectedSede, sedeId }) {
                       <button onClick={() => abrirDetalle(item)} title="Ver detalle">
                         <Eye size={16} />
                       </button>
+
+                      {item.archivoPath && (
+                        <button
+                          onClick={() => abrirArchivo(item)}
+                          disabled={openingId === item.id}
+                          title="Abrir archivo"
+                        >
+                          <ExternalLink size={16} />
+                        </button>
+                      )}
 
                       {item.estado === "Pendiente revisión" && (
                         <button
@@ -465,7 +596,7 @@ export default function Documentos({ selectedSede, sedeId }) {
                       )}
 
                       <button
-                        onClick={() => handleDelete(item.id)}
+                        onClick={() => handleDelete(item)}
                         disabled={deletingId === item.id}
                         title="Eliminar"
                       >
@@ -546,19 +677,173 @@ export default function Documentos({ selectedSede, sedeId }) {
               />
             </label>
 
-            <label className="full">
-              Archivo simulado
+            <div className="full">
               <input
-                value={form.archivo}
-                onChange={(e) => setForm({ ...form, archivo: e.target.value })}
+                ref={documentoInputRef}
+                type="file"
+                accept="application/pdf,image/*"
+                capture="environment"
+                hidden
+                onChange={handleDocumentoFile}
               />
-            </label>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => documentoInputRef.current?.click()}
+              >
+                <Upload size={16} /> Adjuntar archivo
+              </button>
+
+              {form.archivo && (
+                <small style={{ display: "block", marginTop: 8 }}>
+                  Archivo seleccionado: {form.archivo} · {formatFileSize(form.archivoSize)}
+                </small>
+              )}
+            </div>
 
             <div className="modal-actions">
               <button
                 type="button"
                 className="secondary-button"
                 onClick={() => setModal(null)}
+              >
+                Cancelar
+              </button>
+
+              <button type="submit" className="primary-button" disabled={saving}>
+                {saving ? "Guardando..." : "Guardar documento"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {modal === "revisarDocumento" && documentoPendiente && (
+        <Modal title="Revisar documento importado" onClose={() => setModal(null)}>
+          <form className="form-grid" onSubmit={confirmarDocumentoImportado}>
+            <label>
+              Fecha
+              <input
+                type="date"
+                required
+                value={documentoPendiente.fecha}
+                onChange={(e) =>
+                  setDocumentoPendiente({
+                    ...documentoPendiente,
+                    fecha: e.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              Tipo
+              <select
+                value={documentoPendiente.tipo}
+                onChange={(e) =>
+                  setDocumentoPendiente({
+                    ...documentoPendiente,
+                    tipo: e.target.value,
+                  })
+                }
+              >
+                <option>Factura</option>
+                <option>Comprobante</option>
+                <option>Extracto bancario</option>
+                <option>Resultado clínico</option>
+                <option>Contrato</option>
+              </select>
+            </label>
+
+            <label>
+              Asociado a
+              <input
+                value={documentoPendiente.asociadoA}
+                onChange={(e) =>
+                  setDocumentoPendiente({
+                    ...documentoPendiente,
+                    asociadoA: e.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              Sede
+              <select
+                value={documentoPendiente.sedeId}
+                onChange={(e) =>
+                  setDocumentoPendiente({
+                    ...documentoPendiente,
+                    sedeId: e.target.value,
+                  })
+                }
+                disabled={sedeBloqueada}
+              >
+                <option value="">Todas</option>
+                {sedes.map((sede) => (
+                  <option key={sede.id} value={sede.id}>
+                    {sede.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Estado
+              <select
+                value={documentoPendiente.estado}
+                onChange={(e) =>
+                  setDocumentoPendiente({
+                    ...documentoPendiente,
+                    estado: e.target.value,
+                  })
+                }
+              >
+                <option>Pendiente revisión</option>
+                <option>Validado</option>
+                <option>Conciliado</option>
+              </select>
+            </label>
+
+            <label className="full">
+              Descripción
+              <input
+                required
+                value={documentoPendiente.descripcion}
+                onChange={(e) =>
+                  setDocumentoPendiente({
+                    ...documentoPendiente,
+                    descripcion: e.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <div className="full document-preview">
+              <strong>Datos detectados:</strong>
+              <br />
+              CUIT: {documentoPendiente.datosFiscales?.cuit || "-"}
+              <br />
+              Comprobante: {documentoPendiente.datosFiscales?.tipoComprobante || "-"}{" "}
+              {documentoPendiente.datosFiscales?.puntoVenta || ""}-
+              {documentoPendiente.datosFiscales?.numeroComprobante || ""}
+              <br />
+              Importe: {formatImporte(documentoPendiente.datosFiscales?.importe)}
+              <br />
+              Archivo: {documentoPendiente.archivo} ·{" "}
+              {formatFileSize(documentoPendiente.archivoSize)}
+            </div>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setDocumentoPendiente(null);
+                  setModal(null);
+                }}
               >
                 Cancelar
               </button>
@@ -596,13 +881,35 @@ export default function Documentos({ selectedSede, sedeId }) {
 
             <div className="full">
               <span>Archivo</span>
-              <strong>{selectedDocumento.archivo}</strong>
+              <strong>{selectedDocumento.archivo || "-"}</strong>
+            </div>
+
+            <div>
+              <span>Tipo de archivo</span>
+              <strong>{selectedDocumento.archivoTipo || "-"}</strong>
+            </div>
+
+            <div>
+              <span>Tamaño</span>
+              <strong>{formatFileSize(selectedDocumento.archivoSize)}</strong>
             </div>
 
             <div className="full">
               <span>Descripción</span>
               <strong>{selectedDocumento.descripcion}</strong>
             </div>
+
+            {selectedDocumento.archivoPath && (
+              <div className="full">
+                <button
+                  className="secondary-button"
+                  onClick={() => abrirArchivo(selectedDocumento)}
+                  disabled={openingId === selectedDocumento.id}
+                >
+                  <ExternalLink size={16} /> Abrir archivo
+                </button>
+              </div>
+            )}
 
             {selectedDocumento.datosFiscales && (
               <>
@@ -657,8 +964,6 @@ export default function Documentos({ selectedSede, sedeId }) {
                 </div>
               </>
             )}
-
-            <div className="full document-preview">Vista previa simulada del documento</div>
           </div>
         </Modal>
       )}

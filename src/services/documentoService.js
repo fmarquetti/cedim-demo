@@ -17,6 +17,10 @@ function mapDocumento(row) {
     sedeId: row.sede_id,
     sede: row.sedes?.nombre || "Todas",
     archivo: row.archivo || "",
+    archivoPath: row.archivo_path || "",
+    archivoUrl: row.archivo_url || "",
+    archivoTipo: row.archivo_tipo || "",
+    archivoSize: row.archivo_size || 0,
     estado: row.estado,
     datosFiscales: row.datos_fiscales || null,
   };
@@ -58,6 +62,10 @@ export async function createDocumento(form) {
       asociado_a: form.asociadoA || null,
       sede_id: form.sedeId || null,
       archivo: form.archivo || null,
+      archivo_path: form.archivoPath || null,
+      archivo_url: form.archivoUrl || null,
+      archivo_tipo: form.archivoTipo || null,
+      archivo_size: form.archivoSize || null,
       estado: form.estado || "Pendiente revisión",
       datos_fiscales: form.datosFiscales || null,
     })
