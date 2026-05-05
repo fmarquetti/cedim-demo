@@ -17,8 +17,10 @@ function mapMovimiento(row) {
   };
 }
 
-export async function getCuentasCorrientes() {
-  const { data, error } = await supabase
+export async function getCuentasCorrientes(sedeId = null) {
+  const idParaFiltro = sedeId === "todas" ? null : sedeId;
+
+  let query = supabase
     .from("cuentas_corrientes")
     .select(`
       *,
@@ -28,6 +30,12 @@ export async function getCuentasCorrientes() {
       )
     `)
     .order("fecha", { ascending: false });
+
+  if (idParaFiltro) {
+    query = query.eq("sede_id", idParaFiltro);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 

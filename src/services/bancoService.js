@@ -26,8 +26,10 @@ function mapMovimiento(row) {
   };
 }
 
-export async function getMovimientosBancarios() {
-  const { data, error } = await supabase
+export async function getMovimientosBancarios(sedeId = null) {
+  const idParaFiltro = sedeId === "todas" ? null : sedeId;
+
+  let query = supabase
     .from("movimientos_bancarios")
     .select(`
       *,
@@ -37,6 +39,12 @@ export async function getMovimientosBancarios() {
       )
     `)
     .order("fecha", { ascending: false });
+
+  if (idParaFiltro) {
+    query = query.eq("sede_id", idParaFiltro);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 

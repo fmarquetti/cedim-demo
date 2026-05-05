@@ -138,7 +138,7 @@ const getCuentaCorrienteImpacto = (item) => {
   return sumaDeuda ? toNumber(item.importe) : -toNumber(item.importe);
 };
 
-export default function Dashboard({ selectedSede }) {
+export default function Dashboard({ selectedSede, sedeId }) {
   const [ingresos, setIngresos] = useState([]);
   const [egresos, setEgresos] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
@@ -147,10 +147,12 @@ export default function Dashboard({ selectedSede }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function loadDashboard() {
+  async function loadDashboard(currentSedeId = sedeId) {
     try {
       setLoading(true);
       setError("");
+
+      const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
 
       const [
         ingresosData,
@@ -158,10 +160,10 @@ export default function Dashboard({ selectedSede }) {
         movimientosData,
         cuentasCorrientesData,
       ] = await Promise.all([
-        getIngresos(),
-        getEgresos(),
-        getMovimientosBancarios(),
-        getCuentasCorrientes(),
+        getIngresos(idParaFiltro),
+        getEgresos(idParaFiltro),
+        getMovimientosBancarios(idParaFiltro),
+        getCuentasCorrientes(idParaFiltro),
       ]);
 
       setIngresos(ingresosData || []);
@@ -177,8 +179,8 @@ export default function Dashboard({ selectedSede }) {
   }
 
   useEffect(() => {
-    loadDashboard();
-  }, []);
+    loadDashboard(sedeId);
+  }, [sedeId]);
 
   const ingresosFiltrados = useMemo(
     () => ingresos.filter((item) => isSameSede(item, selectedSede)),
@@ -366,7 +368,7 @@ export default function Dashboard({ selectedSede }) {
             <p>{error}</p>
           </div>
 
-          <button className="secondary-button" onClick={loadDashboard}>
+          <button className="secondary-button" onClick={() => loadDashboard(sedeId)}>
             <RefreshCw size={16} /> Reintentar
           </button>
         </div>
@@ -382,7 +384,7 @@ export default function Dashboard({ selectedSede }) {
           <p>Resumen financiero y operativo del laboratorio.</p>
         </div>
 
-        <button className="secondary-button" onClick={loadDashboard}>
+        <button className="secondary-button" onClick={() => loadDashboard(sedeId)}>
           <RefreshCw size={16} /> Actualizar
         </button>
       </div>
