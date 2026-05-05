@@ -52,11 +52,6 @@ const emptyCuentaForm = {
   sedeId: "",
 };
 
-function filterBySede(items, selectedSede) {
-  if (!selectedSede || selectedSede === "Todas las sedes") return items;
-  return items.filter((item) => item.sede === selectedSede || item.sede === "Todas");
-}
-
 const formatMoney = (value = 0) =>
   `$ ${Number(value || 0).toLocaleString("es-AR", {
     minimumFractionDigits: 2,
@@ -167,13 +162,10 @@ export default function Bancos({ selectedSede, sedeId }) {
   }, [sedeId]);
 
   const cuentasPorSede = useMemo(() => {
-    return filterBySede(cuentas, selectedSede).filter((cuenta) => cuenta.activa);
-  }, [cuentas, selectedSede]);
+    return cuentas.filter((cuenta) => cuenta.activa);
+  }, [cuentas]);
 
-  const movimientosPorSede = useMemo(
-    () => filterBySede(movimientos, selectedSede),
-    [movimientos, selectedSede]
-  );
+  const movimientosPorSede = movimientos;
 
   const movimientosFiltrados = useMemo(() => {
     const searchValue = search.toLowerCase().trim();
@@ -285,7 +277,7 @@ export default function Bancos({ selectedSede, sedeId }) {
   }, [candidatosConciliacion]);
 
   const nombreArchivo = useMemo(() => {
-    const sede = selectedSede || "Todas las sedes";
+    const sede = selectedSedeName;
     const periodo = desde || hasta ? `${desde || "inicio"}_${hasta || "actual"}` : "todos_los_periodos";
     return `Bancos_${safeFileName(sede)}_${safeFileName(periodo)}`;
   }, [selectedSede, desde, hasta]);
@@ -426,7 +418,7 @@ export default function Bancos({ selectedSede, sedeId }) {
       { header: "Valor", key: "valor", width: 22 },
     ];
     resumenSheet.addRows([
-      { indicador: "Sede", valor: selectedSede || "Todas las sedes" },
+      { indicador: "Sede", valor: selectedSedeName },
       { indicador: "Ingresos bancarios", valor: totalIngresos },
       { indicador: "Egresos bancarios", valor: totalEgresos },
       { indicador: "Saldo operativo", valor: saldoOperativo },
@@ -511,7 +503,7 @@ export default function Bancos({ selectedSede, sedeId }) {
     doc.setDrawColor(210);
     doc.line(14, 37, pageWidth - 14, 37);
 
-    doc.text(`Sede: ${selectedSede || "Todas las sedes"}`, 14, 44);
+    doc.text(`Sede: ${selectedSedeName}`, 14, 44);
     doc.text(`Cuenta: ${cuentaFiltro}`, 14, 49);
     doc.text(`Estado: ${estadoFiltro}`, 14, 54);
     doc.text(`Periodo: ${desde ? formatDate(desde) : "Inicio"} al ${hasta ? formatDate(hasta) : "Actual"}`, 14, 59);

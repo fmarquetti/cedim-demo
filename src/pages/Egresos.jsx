@@ -28,7 +28,7 @@ import {
   marcarEgresoPagado,
 } from "../services/egresoService";
 import { getSedes } from "../services/sedeService";
-import { formatMoney, formatDate, toDate, filterBySede } from "../utils/format";
+import { formatMoney, formatDate, toDate } from "../utils/format";
 import { toast } from "../components/ToastProvider";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -171,7 +171,7 @@ export default function Egresos({ selectedSede, sedeId }) {
 
       return matchSearch && matchEstado && matchCategoria && matchSociedad && matchDesde && matchHasta;
     });
-  }, [egresos, selectedSede, search, estadoFiltro, categoriaFiltro, sociedadFiltro, desde, hasta]);
+  }, [egresos, search, estadoFiltro, categoriaFiltro, sociedadFiltro, desde, hasta]);
 
   const totalFiltrado = egresosFiltrados.reduce((acc, item) => acc + Number(item.importe || 0), 0);
   const totalPagado = egresosFiltrados.filter((e) => e.estado === "Pagado").reduce((acc, e) => acc + Number(e.importe || 0), 0);

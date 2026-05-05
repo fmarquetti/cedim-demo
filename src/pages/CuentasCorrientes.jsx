@@ -56,11 +56,6 @@ const emptyForm = {
   estado: "Pendiente",
 };
 
-function filterBySede(items, selectedSede) {
-  if (!selectedSede || selectedSede === "Todas las sedes") return items;
-  return items.filter((item) => item.sede === selectedSede || item.sede === "Todas");
-}
-
 const formatMoney = (value) =>
   `$ ${Number(value || 0).toLocaleString("es-AR", {
     minimumFractionDigits: 2,
@@ -203,10 +198,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
     loadData(sedeId);
   }, [sedeId]);
 
-  const movimientosPorSede = useMemo(
-    () => filterBySede(movimientos, selectedSede),
-    [movimientos, selectedSede]
-  );
+  const movimientosPorSede = movimientos;
 
   const entidadesUnicas = useMemo(() => {
     return [...new Set(movimientosPorSede.map((m) => m.entidad))].sort();
@@ -377,7 +369,10 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
   }, [movimientosPorSede, selectedMayor]);
 
   const reporteNombre = useMemo(() => {
-    const sede = selectedSede || "Todas las sedes";
+
+    const sede = selectedSedeName;
+
+
     const periodo =
       desde || hasta
         ? `${desde || "inicio"}_${hasta || "actual"}`
@@ -534,7 +529,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
 
     // ===== FILTROS =====
     doc.setFontSize(9);
-    doc.text(`Sede: ${selectedSede || "Todas las sedes"}`, 14, 38);
+    doc.text(`Sede: ${selectedSedeName}`, 14, 38);
     doc.text(`Tipo: ${tipoFiltro}`, 14, 43);
     doc.text(`Estado: ${estadoFiltro}`, 14, 48);
     doc.text(
