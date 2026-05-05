@@ -458,14 +458,18 @@ td {
   place-items: center;
   z-index: 100;
   padding: 20px;
+  overflow-y: auto;
 }
 
 .modal {
   background: white;
   border-radius: 20px;
-  width: min(620px, 100%);
+  width: min(760px, 100%);
+  max-height: calc(100vh - 40px);
   box-shadow: 0 24px 80px rgba(7, 20, 38, 0.25);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-header {
@@ -474,6 +478,7 @@ td {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex: 0 0 auto;
 }
 
 .modal-header h3 {
@@ -492,6 +497,8 @@ td {
 
 .modal-body {
   padding: 22px;
+  overflow-y: auto;
+  flex: 1 1 auto;
 }
 
 .form-grid {
@@ -603,9 +610,10 @@ td {
   margin-bottom: 4px;
 }
 
-.detail-grid strong {
-  display: block;
-  color: var(--text);
+.detail-grid strong,
+.detail-grid a {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .detail-grid .full {
@@ -2001,6 +2009,29 @@ td {
 
   .table-card table {
     min-width: 900px;
+  }
+
+  .modal-backdrop {
+    align-items: start;
+    padding: 12px;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    border-radius: 16px;
+  }
+
+  .modal-header {
+    padding: 14px 16px;
+  }
+
+  .modal-body {
+    padding: 16px;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
   }
 }
 
