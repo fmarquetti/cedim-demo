@@ -2490,3 +2490,129 @@ td {
     gap: 4px;
   }
 }
+
+.split-box {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.split-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.split-header strong {
+  display: block;
+  color: #0f172a;
+}
+
+.split-header small {
+  display: block;
+  margin-top: 3px;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.split-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.split-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 100px 140px auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.split-row select,
+.split-row input {
+  width: 100%;
+  min-width: 0;
+}
+
+.split-row span {
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.split-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 10px;
+  color: #334155;
+}
+
+.split-total span {
+  color: #64748b;
+}
+
+@media (max-width: 820px) {
+  .split-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .split-header .secondary-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .split-row {
+    grid-template-columns: 1fr 90px;
+    grid-template-areas:
+      "sede sede"
+      "porcentaje importe"
+      "quitar quitar";
+  }
+
+  .split-row select {
+    grid-area: sede;
+  }
+
+  .split-row input {
+    grid-area: porcentaje;
+  }
+
+  .split-row span {
+    grid-area: importe;
+    text-align: right;
+  }
+
+  .split-row button {
+    grid-area: quitar;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .split-total {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+@media (max-width: 420px) {
+  .split-row {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "sede"
+      "porcentaje"
+      "importe"
+      "quitar";
+  }
+
+  .split-row span {
+    text-align: left;
+  }
+}

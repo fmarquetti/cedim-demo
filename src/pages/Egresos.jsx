@@ -301,26 +301,171 @@ export default function Egresos({ selectedSede, sedeId }) {
     setModal("nuevo");
   }
 
+  function redondearPorcentaje(value) {
+    return Math.round(Number(value || 0) * 100) / 100;
+  }
+
   function totalDistribucion(distribuciones = form.distribuciones) {
-    return distribuciones.reduce(
-      (acc, item) => acc + Number(item.porcentaje || 0),
-      0
+    return redondearPorcentaje(
+      distribuciones.reduce((acc, item) => acc + Number(item.porcentaje || 0), 0)
     );
   }
 
+  function getSedesSeleccionadas(distribuciones = form.distribuciones) {
+    return (distribuciones || [])
+      .map((item) => item.sedeId)
+      .filter(Boolean);
+  }
+
+  function getSedesDisponibles(indexActual, distribuciones = form.distribuciones) {
+    const sedeActual = distribuciones?.[indexActual]?.sedeId;
+
+    const sedesUsadas = new Set(
+      (distribuciones || [])
+        .map((item, index) => (index === indexActual ? null : item.sedeId))
+        .filter(Boolean)
+    );
+
+    return sedes.filter((sede) => !sedesUsadas.has(sede.id) || sede.id === sedeActual);
+  }
+
   function agregarDistribucion() {
-    setForm((prev) => ({
-      ...prev,
-      distribuciones: [
-        ...(prev.distribuciones || []),
-        { sedeId: "", porcentaje: "" },
-      ],
-    }));
+    setForm((prev) => {
+      const distribucionesActuales = prev.distribuciones || [];
+      const sedesSeleccionadas = getSedesSeleccionadas(distribucionesActuales);
+
+      const primeraSedeLibre = sedes.find((sede) => !sedesSeleccionadas.includes(sede.id));
+
+      if (!primeraSedeLibre) {
+        toast.error("Ya seleccionaste todas las sedes disponibles.");
+        return prev;
+      }
+
+      const nuevasDistribuciones = [
+        ...distribucionesActuales,
+        {
+          sedeId: primeraSedeLibre.id,
+          porcentaje: 0,
+        },
+      ];
+
+      const porcentajeBase = redondearPorcentaje(100 / nuevasDistribuciones.length);
+      let acumulado = 0;
+
+      const distribucionesNormalizadas = nuevasDistribuciones.map((item, index) => {
+        const esUltimo = index === nuevasDistribuciones.length - 1;
+
+        const porcentaje = esUltimo
+          ? redondearPorcentaje(100 - acumulado)
+          : porcentajeBase;
+
+        acumulado = redondearPorcentaje(acumulado + porcentaje);
+
+        return {
+          ...item,
+          porcentaje,
+        };
+      });
+
+      return {
+        ...prev,
+        distribuciones: distribucionesNormalizadas,
+      };
+    });
   }
 
   function actualizarDistribucion(index, field, value) {
     setForm((prev) => {
       const distribuciones = [...(prev.distribuciones || [])];
+
+      if (field === "sedeId") {
+        const sedeYaUsada = distribuciones.some(
+          (item, itemIndex) => itemIndex !== index && item.sedeId === value
+        );
+
+        if (sedeYaUsada) {
+          toast.error("Esa sede ya fue seleccionada en la distribución.");
+          return prev;
+        }
+
+        distribuciones[index] = {
+          ...distribuciones[index],
+          sedeId: value,
+        };
+
+        return {
+          ...prev,
+          distribuciones,
+        };
+      }
+
+      if (field === "porcentaje") {
+        let nuevoPorcentaje = redondearPorcentaje(value);
+
+        if (nuevoPorcentaje < 0) nuevoPorcentaje = 0;
+        if (nuevoPorcentaje > 100) nuevoPorcentaje = 100;
+
+        const otrasLineas = distribuciones.filter((_, itemIndex) => itemIndex !== index);
+        const cantidadOtras = otrasLineas.length;
+
+        if (cantidadOtras === 0) {
+          distribuciones[index] = {
+            ...distribuciones[index],
+            porcentaje: Math.min(nuevoPorcentaje, 100),
+          };
+
+          return {
+            ...prev,
+            distribuciones,
+          };
+        }
+
+        const restante = redondearPorcentaje(100 - nuevoPorcentaje);
+
+        distribuciones[index] = {
+          ...distribuciones[index],
+          porcentaje: nuevoPorcentaje,
+        };
+
+        if (cantidadOtras === 1) {
+          const otroIndex = distribuciones.findIndex((_, itemIndex) => itemIndex !== index);
+
+          distribuciones[otroIndex] = {
+            ...distribuciones[otroIndex],
+            porcentaje: restante,
+          };
+        } else {
+          const porcentajePorLinea = redondearPorcentaje(restante / cantidadOtras);
+          let acumulado = 0;
+
+          distribuciones.forEach((item, itemIndex) => {
+            if (itemIndex === index) return;
+
+            const esUltimaOtra =
+              distribuciones
+                .map((_, mapIndex) => mapIndex)
+                .filter((mapIndex) => mapIndex !== index)
+                .at(-1) === itemIndex;
+
+            const porcentajeFinal = esUltimaOtra
+              ? redondearPorcentaje(restante - acumulado)
+              : porcentajePorLinea;
+
+            acumulado = redondearPorcentaje(acumulado + porcentajeFinal);
+
+            distribuciones[itemIndex] = {
+              ...item,
+              porcentaje: porcentajeFinal,
+            };
+          });
+        }
+
+        return {
+          ...prev,
+          distribuciones,
+        };
+      }
+
       distribuciones[index] = {
         ...distribuciones[index],
         [field]: value,
@@ -334,10 +479,21 @@ export default function Egresos({ selectedSede, sedeId }) {
   }
 
   function eliminarDistribucion(index) {
-    setForm((prev) => ({
-      ...prev,
-      distribuciones: (prev.distribuciones || []).filter((_, i) => i !== index),
-    }));
+    setForm((prev) => {
+      const distribuciones = (prev.distribuciones || []).filter((_, i) => i !== index);
+
+      if (distribuciones.length === 1) {
+        distribuciones[0] = {
+          ...distribuciones[0],
+          porcentaje: 100,
+        };
+      }
+
+      return {
+        ...prev,
+        distribuciones,
+      };
+    });
   }
 
   function calcularImporteDistribuido(porcentaje) {
@@ -1071,7 +1227,7 @@ export default function Egresos({ selectedSede, sedeId }) {
                 required
               >
                 <option value="">Seleccionar sede</option>
-                {sedes.map((sede) => (
+                {getSedesDisponibles(index).map((sede) => (
                   <option key={sede.id} value={sede.id}>
                     {sede.nombre}
                   </option>
