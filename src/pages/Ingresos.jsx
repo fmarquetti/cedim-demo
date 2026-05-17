@@ -122,8 +122,11 @@ export default function Ingresos({ selectedSede, sedeId }) {
         getSedes(),
         getConceptoItems("ingreso"),
       ]);
+
       setIngresos(ingresosData || []);
       setSedes(sedesData || []);
+      setConceptoItems(conceptoItemsData || []);
+
       setForm((prev) => ({
         ...prev,
         sedeId: prev.sedeId || sedesData?.[0]?.id || "",
