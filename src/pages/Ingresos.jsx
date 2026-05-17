@@ -128,8 +128,6 @@ export default function Ingresos({ selectedSede, sedeId }) {
     }
   }
   useEffect(() => {
-    console.log("sedeId recibido:", sedeId);
-    console.log("selectedSede recibido:", selectedSede);
     loadData(sedeId);
   }, [sedeId]);
 

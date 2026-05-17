@@ -6,6 +6,79 @@ function formatFecha(fecha) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+function normalizarTexto(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ");
+}
+
+function normalizarNumero(value, largo = 0) {
+  const limpio = String(value || "")
+    .replace(/\D/g, "");
+
+  if (!limpio) return "";
+
+  return largo ? limpio.padStart(largo, "0") : limpio;
+}
+
+function extraerFactura(form) {
+  const datos = form.datosFiscales || {};
+
+  const cuit = normalizarNumero(datos.cuit || form.facturaCuit);
+  const tipo = normalizarTexto(
+    datos.tipoCmp || datos.tipoComprobante || form.facturaTipo
+  );
+  const puntoVenta = normalizarNumero(
+    datos.ptoVta || datos.puntoVenta || form.facturaPuntoVenta,
+    4
+  );
+  const numero = normalizarNumero(
+    datos.nroCmp || datos.numeroComprobante || form.facturaNumero,
+    8
+  );
+
+  if (!cuit || !tipo || !puntoVenta || !numero) {
+    return {
+      factura_cuit: null,
+      factura_tipo: null,
+      factura_punto_venta: null,
+      factura_numero: null,
+      factura_clave: null,
+    };
+  }
+
+  return {
+    factura_cuit: cuit,
+    factura_tipo: tipo,
+    factura_punto_venta: puntoVenta,
+    factura_numero: numero,
+    factura_clave: `${cuit}-${tipo}-${puntoVenta}-${numero}`,
+  };
+}
+
+async function validarFacturaDuplicada(form) {
+  const factura = extraerFactura(form);
+
+  if (!factura.factura_clave) return factura;
+
+  const { data, error } = await supabase
+    .from("egresos")
+    .select("id, fecha, proveedor, sociedad, importe, comprobante")
+    .eq("factura_clave", factura.factura_clave)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  if (data) {
+    throw new Error(
+      `Esta factura ya fue cargada en egresos: ${data.comprobante || data.proveedor || "sin comprobante"} por $${Number(data.importe || 0).toLocaleString("es-AR")}.`
+    );
+  }
+
+  return factura;
+}
+
 function mapDistribuciones(distribuciones = []) {
   return distribuciones.map((item) => ({
     id: item.id,
@@ -147,6 +220,7 @@ export async function getEgresos(sedeId = null) {
 
 export async function createEgreso(form) {
   validarDistribuciones(form);
+  const factura = await validarFacturaDuplicada(form);
 
   const { data, error } = await supabase
     .from("egresos")
@@ -162,6 +236,11 @@ export async function createEgreso(form) {
       archivo: form.archivo || null,
       comprobante: form.comprobante || null,
       datos_fiscales: form.datosFiscales || null,
+      factura_cuit: factura.factura_cuit,
+      factura_tipo: factura.factura_tipo,
+      factura_punto_venta: factura.factura_punto_venta,
+      factura_numero: factura.factura_numero,
+      factura_clave: factura.factura_clave,
     })
     .select(`
       *,
