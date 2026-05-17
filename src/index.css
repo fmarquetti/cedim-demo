@@ -2420,3 +2420,73 @@ td {
     border-radius: 12px;
   }
 }
+
+.split-box {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.split-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.split-header strong {
+  display: block;
+  color: #0f172a;
+}
+
+.split-header small {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+}
+
+.split-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.split-row {
+  display: grid;
+  grid-template-columns: 1fr 110px 140px auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.split-row span {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.split-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 10px;
+  color: #334155;
+}
+
+@media (max-width: 720px) {
+  .split-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .split-row {
+    grid-template-columns: 1fr;
+  }
+
+  .split-total {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}

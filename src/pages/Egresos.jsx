@@ -51,6 +51,7 @@ const emptyForm = {
   importe: "",
   categoria: "Insumos",
   estado: "Pendiente",
+  distribuciones: [],
 };
 
 const getFechaReal = (item) => item?.fechaDb || item?.fecha;
@@ -300,12 +301,78 @@ export default function Egresos({ selectedSede, sedeId }) {
     setModal("nuevo");
   }
 
+  function totalDistribucion(distribuciones = form.distribuciones) {
+    return distribuciones.reduce(
+      (acc, item) => acc + Number(item.porcentaje || 0),
+      0
+    );
+  }
+
+  function agregarDistribucion() {
+    setForm((prev) => ({
+      ...prev,
+      distribuciones: [
+        ...(prev.distribuciones || []),
+        { sedeId: "", porcentaje: "" },
+      ],
+    }));
+  }
+
+  function actualizarDistribucion(index, field, value) {
+    setForm((prev) => {
+      const distribuciones = [...(prev.distribuciones || [])];
+      distribuciones[index] = {
+        ...distribuciones[index],
+        [field]: value,
+      };
+
+      return {
+        ...prev,
+        distribuciones,
+      };
+    });
+  }
+
+  function eliminarDistribucion(index) {
+    setForm((prev) => ({
+      ...prev,
+      distribuciones: (prev.distribuciones || []).filter((_, i) => i !== index),
+    }));
+  }
+
+  function calcularImporteDistribuido(porcentaje) {
+    const importe = Number(form.importe || 0);
+    return (importe * Number(porcentaje || 0)) / 100;
+  }
+
   async function handleCreate(e) {
     e.preventDefault();
 
     if (!form.sedeId) {
       toast.error("Seleccioná una sede.");
       return;
+    }
+
+    if (form.distribuciones?.length) {
+      const total = totalDistribucion();
+
+      if (Math.abs(total - 100) > 0.01) {
+        toast.error("La distribución entre sedes debe sumar exactamente 100%.");
+        return;
+      }
+
+      const sedesSeleccionadas = form.distribuciones.map((item) => item.sedeId);
+      const sedesUnicas = new Set(sedesSeleccionadas);
+
+      if (sedesSeleccionadas.some((id) => !id)) {
+        toast.error("Todas las líneas de distribución deben tener una sede.");
+        return;
+      }
+
+      if (sedesUnicas.size !== sedesSeleccionadas.length) {
+        toast.error("No podés repetir la misma sede en la distribución.");
+        return;
+      }
     }
 
     setSaving(true);
@@ -600,8 +667,7 @@ export default function Egresos({ selectedSede, sedeId }) {
       doc.text(`Estado: ${estadoFiltro}`, 14, 49);
       doc.text(`Categoría: ${categoriaFiltro}`, 14, 54);
       doc.text(
-        `Periodo: ${desde ? formatDate(desde) : "Inicio"} al ${
-          hasta ? formatDate(hasta) : "Actual"
+        `Periodo: ${desde ? formatDate(desde) : "Inicio"} al ${hasta ? formatDate(hasta) : "Actual"
         }`,
         14,
         59
@@ -905,7 +971,14 @@ export default function Egresos({ selectedSede, sedeId }) {
                     <td>{formatDate(getFechaReal(item))}</td>
                     <td>{item.proveedor}</td>
                     <td>{item.sociedad}</td>
-                    <td>{item.sede}</td>
+                    <td>
+                      {item.sede}
+                      {item.porcentajeAplicado && (
+                        <small style={{ display: "block", color: "#64748b" }}>
+                          {item.porcentajeAplicado}% de {formatMoney(item.importeOriginal)}
+                        </small>
+                      )}
+                    </td>
                     <td>{item.concepto}</td>
                     <td>{item.categoria}</td>
                     <td>
@@ -1040,6 +1113,74 @@ export default function Egresos({ selectedSede, sedeId }) {
                 onChange={(e) => setForm({ ...form, importe: e.target.value })}
               />
             </label>
+
+            <div className="full split-box">
+              <div className="split-header">
+                <div>
+                  <strong>Distribución por sedes</strong>
+                  <small>
+                    Opcional. Si no agregás distribución, se aplica el 100% a la sede seleccionada.
+                  </small>
+                </div>
+
+                <button type="button" className="secondary-button" onClick={agregarDistribucion}>
+                  Agregar sede
+                </button>
+              </div>
+
+              {form.distribuciones?.length > 0 && (
+                <div className="split-table">
+                  {form.distribuciones.map((item, index) => (
+                    <div className="split-row" key={index}>
+                      <select
+                        value={item.sedeId}
+                        onChange={(e) => actualizarDistribucion(index, "sedeId", e.target.value)}
+                        required
+                      >
+                        <option value="">Seleccionar sede</option>
+                        {sedes.map((sede) => (
+                          <option key={sede.id} value={sede.id}>
+                            {sede.nombre}
+                          </option>
+                        ))}
+                      </select>
+
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        placeholder="%"
+                        value={item.porcentaje}
+                        onChange={(e) =>
+                          actualizarDistribucion(index, "porcentaje", e.target.value)
+                        }
+                        required
+                      />
+
+                      <span>{formatMoney(calcularImporteDistribuido(item.porcentaje))}</span>
+
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => eliminarDistribucion(index)}
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ))}
+
+                  <div className="split-total">
+                    <strong>Total distribuido: {totalDistribucion()}%</strong>
+                    <span>
+                      {Math.abs(totalDistribucion() - 100) <= 0.01
+                        ? "Correcto"
+                        : "Debe sumar 100%"}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <label className="full">
               Concepto

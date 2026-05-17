@@ -6,7 +6,19 @@ function formatFecha(fecha) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+function mapDistribuciones(distribuciones = []) {
+  return distribuciones.map((item) => ({
+    id: item.id,
+    sedeId: item.sede_id,
+    sede: item.sedes?.nombre || "Sin sede",
+    porcentaje: Number(item.porcentaje || 0),
+    importe: Number(item.importe || 0),
+  }));
+}
+
 function mapEgreso(row) {
+  const distribuciones = mapDistribuciones(row.egreso_distribuciones || []);
+
   return {
     id: row.id,
     fecha: formatFecha(row.fecha),
@@ -22,7 +34,61 @@ function mapEgreso(row) {
     archivo: row.archivo,
     comprobante: row.comprobante,
     datosFiscales: row.datos_fiscales,
+    distribuciones,
+    tieneDistribucion: distribuciones.length > 0,
   };
+}
+
+function buildDistribuciones(form, egresoId) {
+  const importeTotal = Number(form.importe || 0);
+  const distribuciones = Array.isArray(form.distribuciones)
+    ? form.distribuciones
+    : [];
+
+  if (!distribuciones.length) {
+    return [
+      {
+        egreso_id: egresoId,
+        sede_id: form.sedeId,
+        porcentaje: 100,
+        importe: importeTotal,
+      },
+    ];
+  }
+
+  return distribuciones
+    .filter((item) => item.sedeId && Number(item.porcentaje || 0) > 0)
+    .map((item) => {
+      const porcentaje = Number(item.porcentaje || 0);
+      return {
+        egreso_id: egresoId,
+        sede_id: item.sedeId,
+        porcentaje,
+        importe: Number(((importeTotal * porcentaje) / 100).toFixed(2)),
+      };
+    });
+}
+
+function validarDistribuciones(form) {
+  const distribuciones = Array.isArray(form.distribuciones)
+    ? form.distribuciones.filter((item) => item.sedeId && Number(item.porcentaje || 0) > 0)
+    : [];
+
+  if (!distribuciones.length) return;
+
+  const total = distribuciones.reduce(
+    (acc, item) => acc + Number(item.porcentaje || 0),
+    0
+  );
+
+  if (Math.abs(total - 100) > 0.01) {
+    throw new Error("La distribución entre sedes debe sumar exactamente 100%.");
+  }
+
+  const sedesUnicas = new Set(distribuciones.map((item) => item.sedeId));
+  if (sedesUnicas.size !== distribuciones.length) {
+    throw new Error("No podés repetir la misma sede en la distribución.");
+  }
 }
 
 export async function getEgresos(sedeId = null) {
@@ -35,22 +101,53 @@ export async function getEgresos(sedeId = null) {
       sedes (
         id,
         nombre
+      ),
+      egreso_distribuciones (
+        id,
+        sede_id,
+        porcentaje,
+        importe,
+        sedes (
+          id,
+          nombre
+        )
       )
     `)
     .order("fecha", { ascending: false });
 
   if (idParaFiltro) {
-    query = query.eq("sede_id", idParaFiltro);
+    query = query.or(
+      `sede_id.eq.${idParaFiltro},egreso_distribuciones.sede_id.eq.${idParaFiltro}`
+    );
   }
 
   const { data, error } = await query;
 
   if (error) throw error;
 
-  return data.map(mapEgreso);
+  return data.map(mapEgreso).map((item) => {
+    if (!idParaFiltro) return item;
+
+    const distribucionSede = item.distribuciones.find(
+      (dist) => dist.sedeId === idParaFiltro
+    );
+
+    if (!distribucionSede) return item;
+
+    return {
+      ...item,
+      importeOriginal: item.importe,
+      importe: distribucionSede.importe,
+      porcentajeAplicado: distribucionSede.porcentaje,
+      sede: distribucionSede.sede,
+      sedeId: distribucionSede.sedeId,
+    };
+  });
 }
 
 export async function createEgreso(form) {
+  validarDistribuciones(form);
+
   const { data, error } = await supabase
     .from("egresos")
     .insert({
@@ -77,7 +174,18 @@ export async function createEgreso(form) {
 
   if (error) throw error;
 
-  return mapEgreso(data);
+  const distribuciones = buildDistribuciones(form, data.id);
+
+  const { error: distribucionError } = await supabase
+    .from("egreso_distribuciones")
+    .insert(distribuciones);
+
+  if (distribucionError) {
+    await supabase.from("egresos").delete().eq("id", data.id);
+    throw distribucionError;
+  }
+
+  return mapEgreso({ ...data, egreso_distribuciones: [] });
 }
 
 export async function deleteEgreso(id) {
