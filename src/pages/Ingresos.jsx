@@ -31,11 +31,15 @@ import { getSedes } from "../services/sedeService";
 import { formatMoney, formatDate, toDate } from "../utils/format";
 import { toast } from "../components/ToastProvider";
 
+import ConceptoSelector from "../components/ConceptoSelector";
+import { getConceptoItems } from "../services/conceptoItemService";
+
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const emptyForm = {
   fecha: new Date().toISOString().split("T")[0],
   concepto: "",
+  conceptosItems: [],
   sociedad: "",
   sedeId: "",
   origen: "Obra Social",
@@ -107,13 +111,16 @@ export default function Ingresos({ selectedSede, sedeId }) {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
+  const [conceptoItems, setConceptoItems] = useState([]);
+
   async function loadData(currentSedeId = sedeId) {
     setLoading(true);
     try {
       const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
-      const [ingresosData, sedesData] = await Promise.all([
+      const [ingresosData, sedesData, conceptoItemsData] = await Promise.all([
         getIngresos(idParaFiltro),
         getSedes(),
+        getConceptoItems("ingreso"),
       ]);
       setIngresos(ingresosData || []);
       setSedes(sedesData || []);
@@ -432,6 +439,11 @@ export default function Ingresos({ selectedSede, sedeId }) {
       }
     }
 
+    if (!form.conceptosItems?.length && !form.concepto?.trim()) {
+      toast.error("Seleccioná al menos un concepto o cargá uno manual.");
+      return;
+    }
+
     setSaving(true);
     try {
       await createIngreso(form);
@@ -508,6 +520,7 @@ export default function Ingresos({ selectedSede, sedeId }) {
       setIngresoPendiente({
         fecha: formatFechaInput(datos.fecha),
         concepto: "",
+        conceptosItems: [],
         sociedad: `CUIT ${datos.cuit}`,
         sedeId: sedeDefault?.id || "",
         origen: "Factura fiscal",
@@ -529,8 +542,8 @@ export default function Ingresos({ selectedSede, sedeId }) {
 
   async function confirmarIngresoImportado(e) {
     e.preventDefault();
-    if (!ingresoPendiente.concepto.trim()) {
-      toast.error("Debés cargar el concepto antes de guardar el ingreso.");
+    if (!ingresoPendiente.conceptosItems?.length && !ingresoPendiente.concepto?.trim()) {
+      toast.error("Seleccioná al menos un concepto o cargá uno manual.");
       return;
     }
     setSaving(true);
@@ -813,7 +826,17 @@ export default function Ingresos({ selectedSede, sedeId }) {
               {!loading && ingresosFiltrados.map((item) => (
                 <tr key={item.id}>
                   <td>{formatDate(getFechaReal(item))}</td>
-                  <td>{item.concepto}</td>
+                  <td>
+                    {item.conceptosItems?.length ? (
+                      <div className="concept-tags">
+                        {item.conceptosItems.map((concepto, index) => (
+                          <span key={`${concepto.nombre}-${index}`}>{concepto.nombre}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      item.concepto
+                    )}
+                  </td>
                   <td>{item.sociedad}</td>
                   <td>
                     {item.sede}
@@ -990,9 +1013,19 @@ export default function Ingresos({ selectedSede, sedeId }) {
                 <option>Factura fiscal</option><option>Obra Social</option><option>Prepaga</option><option>Particular</option>
               </select>
             </label>
-            <label className="full">Concepto real del ingreso
-              <input required placeholder="Ej: Pago de práctica médica, acreditación de obra social..." value={ingresoPendiente.concepto} onChange={(e) => setIngresoPendiente({ ...ingresoPendiente, concepto: e.target.value })} />
-            </label>
+            <ConceptoSelector
+              tipo="ingreso"
+              items={conceptoItems}
+              value={ingresoPendiente.conceptosItems || []}
+              onChange={(items) =>
+                setIngresoPendiente({
+                  ...ingresoPendiente,
+                  conceptosItems: items,
+                  concepto: items.map((item) => item.nombre).join(", "),
+                })
+              }
+              onItemsChange={setConceptoItems}
+            />
             <div className="full detail-grid">
               <div><span>Archivo</span><strong>{ingresoPendiente.archivo}</strong></div>
               <div><span>CAE / CAEA</span><strong>{ingresoPendiente.datosFiscales.codAut || "-"}</strong></div>

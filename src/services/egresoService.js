@@ -101,6 +101,7 @@ function mapEgreso(row) {
     sedeId: row.sede_id,
     sede: row.sedes?.nombre || "Sin sede",
     concepto: row.concepto,
+    conceptosItems: row.conceptos_items || [],
     importe: Number(row.importe || 0),
     categoria: row.categoria,
     estado: row.estado,
@@ -218,9 +219,20 @@ export async function getEgresos(sedeId = null) {
   });
 }
 
+function buildConceptoResumen(form) {
+  const items = Array.isArray(form.conceptosItems) ? form.conceptosItems : [];
+
+  if (items.length) {
+    return items.map((item) => item.nombre).join(", ");
+  }
+
+  return form.concepto || "";
+}
+
 export async function createEgreso(form) {
   validarDistribuciones(form);
   const factura = await validarFacturaDuplicada(form);
+  const conceptoResumen = buildConceptoResumen(form);  
 
   const { data, error } = await supabase
     .from("egresos")
@@ -229,7 +241,8 @@ export async function createEgreso(form) {
       proveedor: form.proveedor,
       sociedad: form.sociedad,
       sede_id: form.sedeId,
-      concepto: form.concepto,
+      concepto: conceptoResumen,
+      conceptos_items: form.conceptosItems || [],
       importe: Number(form.importe || 0),
       categoria: form.categoria,
       estado: form.estado || "Pendiente",

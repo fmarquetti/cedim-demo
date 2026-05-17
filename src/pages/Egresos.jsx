@@ -31,6 +31,9 @@ import { getSedes } from "../services/sedeService";
 import { formatMoney, formatDate, toDate } from "../utils/format";
 import { toast } from "../components/ToastProvider";
 
+import ConceptoSelector from "../components/ConceptoSelector";
+import { getConceptoItems } from "../services/conceptoItemService";
+
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const CATEGORIAS = [
@@ -48,6 +51,7 @@ const emptyForm = {
   sociedad: "",
   sedeId: "",
   concepto: "",
+  conceptosItems: [],
   importe: "",
   categoria: "Insumos",
   estado: "Pendiente",
@@ -127,6 +131,8 @@ export default function Egresos({ selectedSede, sedeId }) {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
+  const [conceptoItems, setConceptoItems] = useState([]);
+
   const selectedSedeName =
     typeof selectedSede === "object" && selectedSede !== null
       ? selectedSede.nombre
@@ -140,13 +146,15 @@ export default function Egresos({ selectedSede, sedeId }) {
     try {
       const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
 
-      const [egresosData, sedesData] = await Promise.all([
+      const [egresosData, sedesData, conceptoItemsData] = await Promise.all([
         getEgresos(idParaFiltro),
         getSedes(),
+        getConceptoItems("egreso"),
       ]);
 
       setEgresos(egresosData || []);
       setSedes(sedesData || []);
+      setConceptoItems(conceptoItemsData || []);
 
       setForm((prev) => ({
         ...prev,
@@ -509,6 +517,11 @@ export default function Egresos({ selectedSede, sedeId }) {
       return;
     }
 
+    if (!form.conceptosItems?.length && !form.concepto?.trim()) {
+      toast.error("Seleccioná al menos un concepto o cargá uno manual.");
+      return;
+    }
+
     if (form.distribuciones?.length) {
       const total = totalDistribucion();
 
@@ -628,6 +641,7 @@ export default function Egresos({ selectedSede, sedeId }) {
         sociedad: "",
         sedeId: sedeDefault?.id || "",
         concepto: "",
+        conceptosItems: [],
         importe: Number(datos.importe || 0),
         categoria: "Insumos",
         estado: "Pendiente",
@@ -641,7 +655,6 @@ export default function Egresos({ selectedSede, sedeId }) {
           numeroComprobante,
         },
       });
-
       setModal("revisarFactura");
     } catch (error) {
       toast.error(error.message || "No se pudo importar la factura.");
@@ -659,8 +672,8 @@ export default function Egresos({ selectedSede, sedeId }) {
       return;
     }
 
-    if (!egresoPendiente?.concepto?.trim()) {
-      toast.error("Debés cargar el concepto antes de guardar el egreso.");
+    if (!egresoPendiente?.conceptosItems?.length && !egresoPendiente?.concepto?.trim()) {
+      toast.error("Seleccioná al menos un concepto o cargá uno manual.");
       return;
     }
 
@@ -1135,7 +1148,17 @@ export default function Egresos({ selectedSede, sedeId }) {
                         </small>
                       )}
                     </td>
-                    <td>{item.concepto}</td>
+                    <td>
+                      {item.conceptosItems?.length ? (
+                        <div className="concept-tags">
+                          {item.conceptosItems.map((concepto, index) => (
+                            <span key={`${concepto.nombre}-${index}`}>{concepto.nombre}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        item.concepto
+                      )}
+                    </td>
                     <td>{item.categoria}</td>
                     <td>
                       <strong>{formatMoney(item.importe)}</strong>
@@ -1338,14 +1361,19 @@ export default function Egresos({ selectedSede, sedeId }) {
               )}
             </div>
 
-            <label className="full">
-              Concepto
-              <input
-                required
-                value={form.concepto}
-                onChange={(e) => setForm({ ...form, concepto: e.target.value })}
-              />
-            </label>
+            <ConceptoSelector
+              tipo="egreso"
+              items={conceptoItems}
+              value={form.conceptosItems}
+              onChange={(items) =>
+                setForm({
+                  ...form,
+                  conceptosItems: items,
+                  concepto: items.map((item) => item.nombre).join(", "),
+                })
+              }
+              onItemsChange={setConceptoItems}
+            />
 
             <div className="modal-actions">
               <button type="button" className="secondary-button" onClick={() => setModal(null)}>
@@ -1472,17 +1500,19 @@ export default function Egresos({ selectedSede, sedeId }) {
               />
             </label>
 
-            <label className="full">
-              Concepto
-              <input
-                required
-                placeholder="Ej: compra de reactivos, insumos de laboratorio..."
-                value={egresoPendiente.concepto}
-                onChange={(e) =>
-                  setEgresoPendiente({ ...egresoPendiente, concepto: e.target.value })
-                }
-              />
-            </label>
+            <ConceptoSelector
+              tipo="egreso"
+              items={conceptoItems}
+              value={egresoPendiente.conceptosItems || []}
+              onChange={(items) =>
+                setEgresoPendiente({
+                  ...egresoPendiente,
+                  conceptosItems: items,
+                  concepto: items.map((item) => item.nombre).join(", "),
+                })
+              }
+              onItemsChange={setConceptoItems}
+            />
 
             <label className="full">
               Archivo

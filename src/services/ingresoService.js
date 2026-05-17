@@ -97,6 +97,7 @@ function mapIngreso(row) {
     fecha: formatFecha(row.fecha),
     fechaDb: row.fecha,
     concepto: row.concepto,
+    conceptosItems: row.conceptos_items || [],
     sociedad: row.sociedad,
     sedeId: row.sede_id,
     sede: row.sedes?.nombre || "Sin sede",
@@ -218,15 +219,27 @@ export async function getIngresos(sedeId = null) {
   });
 }
 
+function buildConceptoResumen(form) {
+  const items = Array.isArray(form.conceptosItems) ? form.conceptosItems : [];
+
+  if (items.length) {
+    return items.map((item) => item.nombre).join(", ");
+  }
+
+  return form.concepto || "";
+}
+
 export async function createIngreso(form) {
   validarDistribuciones(form);
   const factura = await validarFacturaDuplicada(form);
+  const conceptoResumen = buildConceptoResumen(form);
 
   const { data, error } = await supabase
     .from("ingresos")
     .insert({
       fecha: form.fecha,
-      concepto: form.concepto,
+      concepto: conceptoResumen,
+      conceptos_items: form.conceptosItems || [],
       sociedad: form.sociedad,
       sede_id: form.sedeId,
       origen: form.origen,
