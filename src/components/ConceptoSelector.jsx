@@ -93,14 +93,19 @@ export default function ConceptoSelector({
     setOtro("");
   }
 
-  async function handleCreateItem(e) {
-    e.preventDefault();
+  async function handleCreateItem() {
+    const cleanNombre = nuevoNombre.trim();
+
+    if (!cleanNombre) {
+      toast.error("Ingresá un nombre para el concepto.");
+      return;
+    }
 
     setSaving(true);
 
     try {
       const created = await createConceptoItem({
-        nombre: nuevoNombre,
+        nombre: cleanNombre,
         tipo: nuevoTipo,
       });
 
@@ -254,11 +259,17 @@ export default function ConceptoSelector({
         <div className="concept-manager">
           <h4>Opciones disponibles</h4>
 
-          <form className="concept-manager-form" onSubmit={handleCreateItem}>
+          <div className="concept-manager-form">
             <input
               placeholder="Nuevo concepto..."
               value={nuevoNombre}
               onChange={(e) => setNuevoNombre(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleCreateItem();
+                }
+              }}
             />
 
             <select
@@ -270,10 +281,15 @@ export default function ConceptoSelector({
               <option value="ambos">Ambos</option>
             </select>
 
-            <button type="submit" className="primary-button" disabled={saving}>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={saving}
+              onClick={handleCreateItem}
+            >
               Agregar
             </button>
-          </form>
+          </div>
 
           <div className="concept-manager-list">
             {(items || []).map((item) => (

@@ -1250,7 +1250,7 @@ export default function Egresos({ selectedSede, sedeId }) {
                 required
               >
                 <option value="">Seleccionar sede</option>
-                {getSedesDisponibles(index).map((sede) => (
+                {sedes.map((sede) => (
                   <option key={sede.id} value={sede.id}>
                     {sede.nombre}
                   </option>
