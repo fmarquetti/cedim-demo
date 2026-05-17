@@ -475,15 +475,20 @@ export default function HelpAssistant({ activePage, setActivePage }) {
                         className="tecnew-bot-svg"
                     >
                         <defs>
-                            <linearGradient id="botBodyGradient" x1="20" y1="10" x2="100" y2="110">
-                                <stop offset="0%" stopColor="#3eb9b1" />
-                                <stop offset="55%" stopColor="#028baf" />
-                                <stop offset="100%" stopColor="#3a73b9" />
+                            <linearGradient id="doctorBotBody" x1="22" y1="8" x2="98" y2="112">
+                                <stop offset="0%" stopColor="#4dd6d0" />
+                                <stop offset="55%" stopColor="#0ea5c6" />
+                                <stop offset="100%" stopColor="#2563eb" />
                             </linearGradient>
 
-                            <linearGradient id="botFaceGradient" x1="30" y1="20" x2="90" y2="90">
+                            <linearGradient id="doctorBotFace" x1="34" y1="30" x2="86" y2="76">
                                 <stop offset="0%" stopColor="#ffffff" />
-                                <stop offset="100%" stopColor="#eef7fb" />
+                                <stop offset="100%" stopColor="#eefaff" />
+                            </linearGradient>
+
+                            <linearGradient id="doctorCoat" x1="34" y1="78" x2="86" y2="116">
+                                <stop offset="0%" stopColor="#ffffff" />
+                                <stop offset="100%" stopColor="#e6f6fb" />
                             </linearGradient>
                         </defs>
 
@@ -492,85 +497,135 @@ export default function HelpAssistant({ activePage, setActivePage }) {
                             x1="60"
                             y1="20"
                             x2="60"
-                            y2="10"
-                            stroke="#071426"
+                            y2="11"
+                            stroke="#0f172a"
                             strokeWidth="5"
                             strokeLinecap="round"
                         />
-                        <circle cx="60" cy="7" r="5" fill="#3eb9b1" />
+                        <circle cx="60" cy="8" r="5" fill="#4dd6d0" />
 
-                        {/* Orejas */}
-                        <rect x="16" y="44" width="16" height="28" rx="8" fill="#071426" />
-                        <rect x="88" y="44" width="16" height="28" rx="8" fill="#071426" />
+                        {/* Orejas laterales */}
+                        <rect x="15" y="44" width="15" height="28" rx="8" fill="#0f172a" />
+                        <rect x="90" y="44" width="15" height="28" rx="8" fill="#0f172a" />
 
-                        {/* Cabeza */}
+                        {/* Cabeza robot */}
                         <rect
-                            x="26"
-                            y="24"
-                            width="68"
-                            height="62"
+                            x="25"
+                            y="23"
+                            width="70"
+                            height="63"
                             rx="24"
-                            fill="url(#botBodyGradient)"
+                            fill="url(#doctorBotBody)"
+                        />
+
+                        {/* Vincha/cofia médica */}
+                        <path
+                            d="M37 28 C45 17, 75 17, 83 28 L83 40 L37 40 Z"
+                            fill="#ffffff"
+                        />
+                        <path
+                            d="M56 26 H64 V34 H72 V42 H64 V50 H56 V42 H48 V34 H56 Z"
+                            fill="#ef4444"
+                            opacity="0.95"
+                            transform="scale(0.72) translate(23 7)"
                         />
 
                         {/* Cara */}
                         <rect
                             x="36"
-                            y="36"
+                            y="39"
                             width="48"
-                            height="36"
+                            height="34"
                             rx="17"
-                            fill="url(#botFaceGradient)"
+                            fill="url(#doctorBotFace)"
                         />
 
                         {/* Ojos */}
-                        <circle cx="51" cy="54" r="5" fill="#071426" />
-                        <circle cx="69" cy="54" r="5" fill="#071426" />
+                        <circle cx="51" cy="56" r="5" fill="#0f172a" />
+                        <circle cx="69" cy="56" r="5" fill="#0f172a" />
 
-                        {/* Brillo de ojos */}
-                        <circle cx="49" cy="52" r="1.5" fill="#ffffff" />
-                        <circle cx="67" cy="52" r="1.5" fill="#ffffff" />
+                        {/* Brillos */}
+                        <circle cx="49" cy="54" r="1.5" fill="#ffffff" />
+                        <circle cx="67" cy="54" r="1.5" fill="#ffffff" />
 
                         {/* Sonrisa */}
                         <path
-                            d="M52 63 C56 68, 64 68, 68 63"
+                            d="M52 64 C56 69, 64 69, 68 64"
                             fill="none"
-                            stroke="#028baf"
+                            stroke="#0ea5c6"
                             strokeWidth="4"
                             strokeLinecap="round"
                         />
 
-                        {/* Cuerpo */}
-                        <rect
-                            x="34"
-                            y="82"
-                            width="52"
-                            height="28"
-                            rx="14"
-                            fill="#071426"
+                        {/* Cuerpo / guardapolvo */}
+                        <path
+                            d="M35 83 H85 C91 83, 95 88, 95 95 V110 H25 V95 C25 88, 29 83, 35 83 Z"
+                            fill="url(#doctorCoat)"
                         />
 
-                        {/* Detalle pecho */}
-                        <circle cx="60" cy="96" r="6" fill="#3eb9b1" />
+                        {/* Cuello */}
                         <path
-                            d="M55 96 H65"
-                            stroke="#ffffff"
-                            strokeWidth="2.5"
+                            d="M50 84 L60 96 L70 84"
+                            fill="none"
+                            stroke="#0f172a"
+                            strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        />
+
+                        {/* Solapas */}
+                        <path
+                            d="M43 86 L56 108"
+                            stroke="#cbd5e1"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                        />
+                        <path
+                            d="M77 86 L64 108"
+                            stroke="#cbd5e1"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                        />
+
+                        {/* Estetoscopio */}
+                        <path
+                            d="M45 88 C45 100, 53 104, 60 104 C67 104, 75 100, 75 88"
+                            fill="none"
+                            stroke="#0f172a"
+                            strokeWidth="4"
+                            strokeLinecap="round"
+                        />
+                        <circle cx="45" cy="88" r="3.5" fill="#0f172a" />
+                        <circle cx="75" cy="88" r="3.5" fill="#0f172a" />
+                        <path
+                            d="M60 104 V111"
+                            stroke="#0f172a"
+                            strokeWidth="4"
+                            strokeLinecap="round"
+                        />
+                        <circle cx="60" cy="113" r="5" fill="#0ea5c6" stroke="#0f172a" strokeWidth="3" />
+
+                        {/* Bolsillo */}
+                        <rect x="70" y="96" width="13" height="10" rx="3" fill="#dff5fb" />
+                        <path
+                            d="M73 101 H80"
+                            stroke="#0ea5c6"
+                            strokeWidth="2"
                             strokeLinecap="round"
                         />
 
                         {/* Brazos */}
                         <path
-                            d="M34 91 C24 91, 21 84, 21 78"
+                            d="M29 94 C20 94, 18 86, 20 80"
                             fill="none"
-                            stroke="#071426"
+                            stroke="#0f172a"
                             strokeWidth="8"
                             strokeLinecap="round"
                         />
                         <path
-                            d="M86 91 C96 91, 99 84, 99 78"
+                            d="M91 94 C100 94, 102 86, 100 80"
                             fill="none"
-                            stroke="#071426"
+                            stroke="#0f172a"
                             strokeWidth="8"
                             strokeLinecap="round"
                         />
