@@ -1,61 +1,62 @@
 import { supabase } from "../lib/supabaseClient";
 
-const BUCKET = "genetics-config";
+const CONFIG_BUCKET = "config-assets";
 
-function limpiarNombreArchivo(nombre) {
-  const extension = nombre.includes(".") ? nombre.split(".").pop() : "";
-  const base = nombre.replace(/\.[^/.]+$/, "");
-
-  const limpio = base
+function sanitizeFileName(name) {
+  return name
+    .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9-_]/g, "_")
-    .replace(/_+/g, "_")
-    .slice(0, 80);
-
-  return extension ? `${limpio}.${extension}` : limpio;
+    .replace(/[^a-z0-9._-]/g, "-")
+    .replace(/-+/g, "-");
 }
 
-function validarImagen(file) {
+export async function uploadConfigIcon(file, folder = "general") {
   if (!file) {
     throw new Error("No se seleccionó ningún archivo.");
   }
 
-  const tiposPermitidos = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/svg+xml"];
+  const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/svg+xml"];
 
-  if (!tiposPermitidos.includes(file.type)) {
-    throw new Error("El archivo debe ser una imagen PNG, JPG, WEBP o SVG.");
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error("Formato no permitido. Usá PNG, JPG, WEBP o SVG.");
   }
 
-  const maxSize = 1024 * 1024 * 2;
+  const maxSizeMb = 2;
+  const maxSizeBytes = maxSizeMb * 1024 * 1024;
 
-  if (file.size > maxSize) {
-    throw new Error("El icono no puede superar los 2 MB.");
+  if (file.size > maxSizeBytes) {
+    throw new Error(`El archivo no puede superar los ${maxSizeMb}MB.`);
   }
-}
 
-export async function uploadConfigIcon(file, carpeta = "icons") {
-  validarImagen(file);
-
+  const extension = file.name.split(".").pop() || "png";
+  const cleanName = sanitizeFileName(file.name.replace(`.${extension}`, ""));
   const timestamp = Date.now();
-  const safeName = limpiarNombreArchivo(file.name);
-  const path = `${carpeta}/${timestamp}_${safeName}`;
 
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-    cacheControl: "3600",
-    upsert: true,
-    contentType: file.type || undefined,
-  });
+  const filePath = `${folder}/${cleanName}-${timestamp}.${extension}`;
 
-  if (error) {
-    console.error("Error subiendo icono:", error);
+  const { error: uploadError } = await supabase.storage
+    .from(CONFIG_BUCKET)
+    .upload(filePath, file, {
+      cacheControl: "3600",
+      upsert: true,
+    });
+
+  if (uploadError) {
+    console.error("Error subiendo icono:", uploadError);
     throw new Error("No se pudo subir el icono.");
   }
 
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  const { data } = supabase.storage
+    .from(CONFIG_BUCKET)
+    .getPublicUrl(filePath);
+
+  if (!data?.publicUrl) {
+    throw new Error("No se pudo obtener la URL pública del icono.");
+  }
 
   return {
-    path,
+    path: filePath,
     publicUrl: data.publicUrl,
   };
 }
