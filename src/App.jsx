@@ -87,6 +87,8 @@ function AppContent() {
 
   const pathname = window.location.pathname;
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   if (pathname.includes("/set-password")) {
     return <SetPassword />;
   }
@@ -98,11 +100,13 @@ function AppContent() {
   const effectiveSelectedSede = getEffectiveSelectedSede(currentUser, selectedSede);
 
   return (
-    <div className="app-layout">
+    <div className={`app-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <Sidebar
         activePage={activePage}
         setActivePage={setActivePage}
         currentUser={currentUser}
+        sidebarCollapsed={sidebarCollapsed}
+        setSidebarCollapsed={setSidebarCollapsed}
       />
 
       <main className="main-content">

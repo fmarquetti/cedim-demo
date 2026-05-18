@@ -969,6 +969,21 @@ td {
   select {
     width: 100%;
   }
+
+  .app-layout.sidebar-collapsed .sidebar {
+    width: 100%;
+    height: var(--mobile-nav-height);
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .app-layout.sidebar-collapsed .main-content {
+    margin-left: 0;
+  }
+
+  .sidebar-toggle {
+    display: none;
+  }
+
 }
 
 /* =========================================================
@@ -3141,6 +3156,7 @@ td {
 }
 
 @media (max-width: 800px) {
+
   .config-form-grid,
   .menu-visibility-grid {
     grid-template-columns: 1fr;
@@ -3413,6 +3429,81 @@ td {
   justify-content: flex-end;
   gap: 10px;
   box-shadow: 0 -10px 35px rgba(20, 35, 60, 0.08);
+}
+
+.sidebar,
+.main-content {
+  transition: width 0.25s ease, margin-left 0.25s ease, padding 0.25s ease;
+}
+
+.sidebar-toggle {
+  margin-left: auto;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.sidebar-toggle:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.app-layout.sidebar-collapsed .sidebar {
+  width: 82px;
+  padding: 22px 12px;
+}
+
+.app-layout.sidebar-collapsed .main-content {
+  margin-left: 82px;
+}
+
+.app-layout.sidebar-collapsed .brand {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.app-layout.sidebar-collapsed .brand img {
+  width: 42px;
+  height: 42px;
+}
+
+.app-layout.sidebar-collapsed .brand>div {
+  display: none;
+}
+
+.app-layout.sidebar-collapsed .sidebar-toggle {
+  position: absolute;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.app-layout.sidebar-collapsed .sidebar-nav {
+  margin-top: 46px;
+}
+
+.app-layout.sidebar-collapsed .nav-item {
+  justify-content: center;
+  padding: 12px;
+  gap: 0;
+}
+
+.app-layout.sidebar-collapsed .nav-item span {
+  display: none;
+}
+
+.app-layout.sidebar-collapsed .sidebar-user {
+  justify-content: center;
+  padding: 12px;
+}
+
+.app-layout.sidebar-collapsed .sidebar-user>div:not(.avatar) {
+  display: none;
 }
 
 @media (max-width: 900px) {
