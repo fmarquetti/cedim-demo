@@ -166,7 +166,12 @@ function validarDistribuciones(form) {
 }
 
 export async function getIngresos(sedeId = null) {
-  const idParaFiltro = sedeId === "todas" ? null : sedeId;
+  const idParaFiltro =
+    sedeId === "todas"
+      ? null
+      : typeof sedeId === "object"
+        ? sedeId?.id
+        : sedeId;
 
   let query = supabase
     .from("ingresos")
@@ -291,7 +296,6 @@ export async function marcarIngresoCobrado(id) {
     .from("ingresos")
     .update({
       estado: "Cobrado",
-      updated_at: new Date().toISOString(),
     })
     .eq("id", id);
 
