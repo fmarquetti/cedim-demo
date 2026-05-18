@@ -124,6 +124,71 @@ const diferenciaDias = (fechaA, fechaB) => {
   return Math.abs(Math.round((a - b) / (1000 * 60 * 60 * 24)));
 };
 
+const normalizarTexto = (text) =>
+  String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+function sedesCompatibles(mov, comprobante) {
+  if (!mov?.sedeId) return true;
+  if (!comprobante?.sedeId) return true;
+  return mov.sedeId === comprobante.sedeId;
+}
+
+function getComprobanteTexto(item) {
+  return normalizarTexto(
+    [
+      item?.concepto,
+      item?.descripcion,
+      item?.proveedor,
+      item?.sociedad,
+      item?.paciente,
+      item?.observaciones,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+}
+
+function getMovimientoTexto(mov) {
+  return normalizarTexto([mov?.descripcion, mov?.origen].filter(Boolean).join(" "));
+}
+
+function calcularPuntajeConciliacion(mov, comprobante) {
+  const diffImporte = diferenciaImporte(mov, comprobante);
+  const diffDias = diferenciaDias(getFechaReal(mov), getFechaReal(comprobante));
+
+  if (diffImporte > 0.01) return null;
+  if (diffDias > 10) return null;
+  if (!sedesCompatibles(mov, comprobante)) return null;
+
+  const movText = getMovimientoTexto(mov);
+  const compText = getComprobanteTexto(comprobante);
+
+  let textoScore = 0;
+
+  if (movText && compText) {
+    const palabras = compText
+      .split(" ")
+      .filter((word) => word.length >= 4)
+      .slice(0, 12);
+
+    const coincidencias = palabras.filter((word) => movText.includes(word)).length;
+    textoScore = coincidencias;
+  }
+
+  return {
+    diffImporte,
+    diffDias,
+    textoScore,
+    puntaje: diffDias * 10 - textoScore,
+  };
+}
+
 function formatFileSize(bytes) {
   if (!bytes) return "-";
   if (bytes < 1024) return `${bytes} B`;
@@ -214,6 +279,8 @@ export default function Bancos({ selectedSede, sedeId }) {
   const [deletingId, setDeletingId] = useState(null);
   const [importandoExtracto, setImportandoExtracto] = useState(false);
   const [openingExtractoId, setOpeningExtractoId] = useState(null);
+
+  const [autoConciliando, setAutoConciliando] = useState(false);
 
   const selectedSedeName =
     typeof selectedSede === "object" && selectedSede !== null
@@ -415,6 +482,69 @@ export default function Bancos({ selectedSede, sedeId }) {
       .sort((a, b) => a.puntaje - b.puntaje)
       .slice(0, 30);
   }, [movimientoAConciliar, ingresos, egresos]);
+
+  const sugerenciasConciliacionAuto = useMemo(() => {
+    const usadosIngresos = new Set();
+    const usadosEgresos = new Set();
+
+    return movimientosFiltrados
+      .filter((mov) => {
+        if (mov.estado === "Conciliado") return false;
+        if (mov.ingresoId || mov.egresoId) return false;
+        return mov.tipo === "Ingreso" || mov.tipo === "Egreso";
+      })
+      .map((mov) => {
+        const base = mov.tipo === "Ingreso" ? ingresos : egresos;
+        const usados = mov.tipo === "Ingreso" ? usadosIngresos : usadosEgresos;
+        const estadoAplicado = mov.tipo === "Ingreso" ? "Cobrado" : "Pagado";
+
+        const candidatos = base
+          .filter((item) => {
+            if (!item?.id) return false;
+            if (usados.has(item.id)) return false;
+            if (item.estado === estadoAplicado) return false;
+
+            const score = calcularPuntajeConciliacion(mov, item);
+            return Boolean(score);
+          })
+          .map((item) => ({
+            item,
+            score: calcularPuntajeConciliacion(mov, item),
+          }))
+          .filter((row) => row.score)
+          .sort((a, b) => a.score.puntaje - b.score.puntaje);
+
+        if (candidatos.length === 0) return null;
+
+        const mejor = candidatos[0];
+        const segundo = candidatos[1];
+
+        const ambiguo =
+          segundo &&
+          mejor.score.diffImporte === segundo.score.diffImporte &&
+          mejor.score.diffDias === segundo.score.diffDias &&
+          mejor.score.textoScore === segundo.score.textoScore;
+
+        if (ambiguo) {
+          return {
+            movimiento: mov,
+            candidato: mejor.item,
+            score: mejor.score,
+            ambiguo: true,
+          };
+        }
+
+        usados.add(mejor.item.id);
+
+        return {
+          movimiento: mov,
+          candidato: mejor.item,
+          score: mejor.score,
+          ambiguo: false,
+        };
+      })
+      .filter(Boolean);
+  }, [movimientosFiltrados, ingresos, egresos]);
 
   useEffect(() => {
     const sugerido = candidatosConciliacion.find((item) => item.sugerido);
@@ -818,6 +948,41 @@ export default function Bancos({ selectedSede, sedeId }) {
     }
   }
 
+  async function handleConciliacionAutomatica() {
+    const aplicables = sugerenciasConciliacionAuto.filter((item) => !item.ambiguo);
+
+    if (aplicables.length === 0) {
+      alert("No hay conciliaciones automáticas confiables para aplicar.");
+      return;
+    }
+
+    const ok = window.confirm(
+      `Se van a conciliar automáticamente ${aplicables.length} movimientos con coincidencia exacta de importe y fecha cercana. ¿Continuar?`
+    );
+
+    if (!ok) return;
+
+    setAutoConciliando(true);
+
+    try {
+      for (const sug of aplicables) {
+        if (sug.movimiento.tipo === "Ingreso") {
+          await conciliarMovimientoConIngreso(sug.movimiento.id, sug.candidato.id);
+        } else {
+          await conciliarMovimientoConEgreso(sug.movimiento.id, sug.candidato.id);
+        }
+      }
+
+      await loadData(sedeId);
+      alert(`Conciliación automática finalizada: ${aplicables.length} movimientos conciliados.`);
+    } catch (error) {
+      console.error("Error conciliando automáticamente:", error);
+      alert(error.message || "No se pudo completar la conciliación automática.");
+    } finally {
+      setAutoConciliando(false);
+    }
+  }
+
   async function handleDesconciliar(mov) {
     const ok = window.confirm("¿Quitar el vínculo de conciliación de este movimiento?");
     if (!ok) return;
@@ -1175,6 +1340,17 @@ export default function Bancos({ selectedSede, sedeId }) {
             <GitCompare size={16} /> Ver sin vincular
           </button>
 
+          <button
+            className="secondary-button"
+            onClick={handleConciliacionAutomatica}
+            disabled={autoConciliando || sugerenciasConciliacionAuto.filter((s) => !s.ambiguo).length === 0}
+          >
+            <GitCompare size={16} />
+            {autoConciliando
+              ? "Conciliando..."
+              : `Conciliar auto (${sugerenciasConciliacionAuto.filter((s) => !s.ambiguo).length})`}
+          </button>
+
           <button className="secondary-button" onClick={openNuevaCuenta}>
             <Plus size={16} /> Nueva cuenta
           </button>
@@ -1371,6 +1547,9 @@ export default function Bancos({ selectedSede, sedeId }) {
               {!loading &&
                 movimientosFiltrados.map((mov) => {
                   const vinculado = mov.ingresoId || mov.egresoId;
+                  const sugerenciaAuto = sugerenciasConciliacionAuto.find(
+                    (sug) => sug.movimiento.id === mov.id
+                  );
 
                   return (
                     <tr key={mov.id}>
@@ -1378,7 +1557,23 @@ export default function Bancos({ selectedSede, sedeId }) {
                       <td>{mov.sede}</td>
                       <td>{mov.cuenta}</td>
                       <td>{mov.tipo}</td>
-                      <td>{mov.descripcion}</td>
+                      <td>
+                        <div>
+                          {mov.descripcion}
+                          {sugerenciaAuto && (
+                            <small style={{ display: "block", color: "var(--muted)", marginTop: 4 }}>
+                              Sugerido:{" "}
+                              {sugerenciaAuto.candidato.concepto ||
+                                sugerenciaAuto.candidato.proveedor ||
+                                sugerenciaAuto.candidato.sociedad ||
+                                sugerenciaAuto.candidato.descripcion ||
+                                "Comprobante"}{" "}
+                              · {formatMoney(sugerenciaAuto.candidato.importe)}
+                              {sugerenciaAuto.ambiguo ? " · revisar manualmente" : ""}
+                            </small>
+                          )}
+                        </div>
+                      </td>
                       <td>
                         <strong>
                           {formatMoney(mov.tipo === "Egreso" ? -mov.importe : mov.importe)}
@@ -1394,6 +1589,10 @@ export default function Bancos({ selectedSede, sedeId }) {
                         {vinculado ? (
                           <span className="status-badge aplicado">
                             {mov.ingresoId ? "Ingreso vinculado" : "Egreso vinculado"}
+                          </span>
+                        ) : sugerenciaAuto ? (
+                          <span className={`status-badge ${sugerenciaAuto.ambiguo ? "pendiente" : "normal"}`}>
+                            {sugerenciaAuto.ambiguo ? "Sugerencia ambigua" : "Sugerido auto"}
                           </span>
                         ) : (
                           <span className="status-badge pendiente">Sin vincular</span>
