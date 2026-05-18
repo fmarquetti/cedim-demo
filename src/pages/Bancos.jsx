@@ -10,6 +10,8 @@ import {
   Link2,
   Unlink,
   ExternalLink,
+  Eye,
+  CheckCircle2,
 } from "lucide-react";
 
 import ExcelJS from "exceljs";
@@ -31,12 +33,19 @@ import {
   createMovimientoBancario,
   deleteMovimientoBancario,
   getMovimientosBancarios,
+  getMovimientosBancariosByHashes,
 } from "../services/bancoService";
 
 import {
   createCuentaBancaria,
   getCuentasBancarias,
 } from "../services/cuentaBancariaService";
+
+import {
+  extractTextFromPdf,
+  parseBankStatement,
+  buildBankMovementHash,
+} from "../utils/bankStatementParser";
 
 const emptyForm = {
   fecha: new Date().toISOString().split("T")[0],
@@ -129,6 +138,48 @@ function getStatusClass(text) {
     .replaceAll(" ", "-");
 }
 
+const normalizeText = (text) =>
+  String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+function getCuentaNombreSugerida(parsed) {
+  const banco = parsed?.banco || parsed?.detected?.banco || "";
+
+  if (normalizeText(banco).includes("bbva")) return "BBVA";
+  if (normalizeText(banco).includes("galicia")) return "Banco Galicia";
+  if (normalizeText(banco).includes("macro")) return "Banco Macro";
+
+  return banco || "Cuenta bancaria";
+}
+
+function findCuentaCompatible(cuentas, parsed, cuentaFiltro) {
+  if (cuentaFiltro && cuentaFiltro !== "Todas") {
+    return cuentaFiltro;
+  }
+
+  const nombreSugerido = getCuentaNombreSugerida(parsed);
+  const bancoNormalizado = normalizeText(nombreSugerido);
+  const cuentaDetectada = normalizeText(parsed?.cuentaDetectada);
+  const cbuDetectado = normalizeText(parsed?.cbuDetectado);
+
+  const cuentaEncontrada = cuentas.find((cuenta) => {
+    const nombre = normalizeText(cuenta.nombre);
+
+    return (
+      nombre === bancoNormalizado ||
+      nombre.includes(bancoNormalizado) ||
+      bancoNormalizado.includes(nombre) ||
+      (cuentaDetectada && nombre.includes(cuentaDetectada)) ||
+      (cbuDetectado && nombre.includes(cbuDetectado))
+    );
+  });
+
+  return cuentaEncontrada?.nombre || nombreSugerido;
+}
+
 export default function Bancos({ selectedSede, sedeId }) {
   const extractoInputRef = useRef(null);
 
@@ -152,6 +203,10 @@ export default function Bancos({ selectedSede, sedeId }) {
   const [movimientoAConciliar, setMovimientoAConciliar] = useState(null);
   const [comprobanteSeleccionadoId, setComprobanteSeleccionadoId] = useState("");
   const [extractoPendiente, setExtractoPendiente] = useState(null);
+
+  const [extractoParseado, setExtractoParseado] = useState(null);
+  const [movimientosPreview, setMovimientosPreview] = useState([]);
+  const [parseandoExtracto, setParseandoExtracto] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -430,27 +485,179 @@ export default function Bancos({ selectedSede, sedeId }) {
     setModal("conciliar");
   }
 
-  function seleccionarExtracto(e) {
+  async function seleccionarExtracto(e) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setExtractoPendiente({
-      fecha: new Date().toISOString().split("T")[0],
-      tipo: "Extracto bancario",
-      descripcion: "",
-      asociadoA: cuentaFiltro !== "Todas" ? cuentaFiltro : "",
-      sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
-      archivo: file.name,
-      archivoPath: "",
-      archivoTipo: file.type || "",
-      archivoSize: file.size || 0,
-      estado: "Pendiente revisión",
-      file,
-      datosFiscales: null,
-    });
+    if (file.type && file.type !== "application/pdf") {
+      alert("Por ahora la lectura automática solo admite extractos PDF digitales.");
+      e.target.value = "";
+      return;
+    }
 
-    setModal("revisarExtracto");
-    e.target.value = "";
+    setParseandoExtracto(true);
+    setImportandoExtracto(true);
+
+    try {
+      const text = await extractTextFromPdf(file);
+      const parsed = parseBankStatement(text);
+
+      const cuentasDisponibles = cuentasPorSede.length ? cuentasPorSede : cuentas;
+
+      const cuentaSugerida = findCuentaCompatible(
+        cuentasDisponibles,
+        parsed,
+        cuentaFiltro
+      );
+
+      let cuentaFinal = cuentaSugerida;
+
+      const existeCuenta = cuentasDisponibles.some(
+        (cuenta) => normalizeText(cuenta.nombre) === normalizeText(cuentaSugerida)
+      );
+
+      if (!existeCuenta && cuentaSugerida) {
+        const nuevaCuenta = await createCuentaBancaria({
+          nombre: cuentaSugerida,
+          tipo: "Banco",
+          sedeId: "",
+        });
+
+        cuentaFinal = nuevaCuenta.nombre;
+
+        setCuentas((prev) => {
+          const yaExiste = prev.some(
+            (cuenta) => normalizeText(cuenta.nombre) === normalizeText(nuevaCuenta.nombre)
+          );
+
+          return yaExiste ? prev : [...prev, nuevaCuenta];
+        });
+      }
+
+      const sedeSugerida = sedeBloqueada ? sedeId : "";
+
+      const previewBase = (parsed.movimientos || []).map((mov, index) => ({
+        ...mov,
+        previewId: `${Date.now()}-${index}`,
+        seleccionado: true,
+        sedeId: sedeSugerida,
+        cuenta: cuentaFinal,
+        estado: "Pendiente",
+        origen: mov.origen || `Extracto ${parsed.banco}`,
+      }));
+
+      const preview = await prepararPreviewConDuplicados(previewBase);
+
+      setExtractoPendiente({
+        fecha: new Date().toISOString().split("T")[0],
+        tipo: "Extracto bancario",
+        descripcion: parsed.banco
+          ? `Extracto ${parsed.banco} - ${file.name}`
+          : `Extracto bancario - ${file.name}`,
+        asociadoA: cuentaFinal,
+        sedeId: sedeSugerida,
+        archivo: file.name,
+        archivoPath: "",
+        archivoTipo: file.type || "",
+        archivoSize: file.size || 0,
+        estado: "Pendiente revisión",
+        file,
+        datosFiscales: {
+          banco: parsed.banco,
+          tipoDocumento: parsed.detected?.tipoDocumento,
+          cuentaDetectada: parsed.cuentaDetectada,
+          cbuDetectado: parsed.cbuDetectado,
+          movimientosDetectados: preview.length,
+        },
+      });
+
+      setExtractoParseado(parsed);
+      setMovimientosPreview(preview);
+      setModal("revisarExtracto");
+    } catch (error) {
+      console.error("Error leyendo extracto:", error);
+      alert(
+        error.message ||
+        "No se pudo leer el PDF. Verificá que sea un PDF digital y no una imagen escaneada."
+      );
+    } finally {
+      setParseandoExtracto(false);
+      setImportandoExtracto(false);
+      e.target.value = "";
+    }
+  }
+
+  function updateMovimientoPreview(previewId, field, value) {
+    setMovimientosPreview((prev) =>
+      prev.map((mov) =>
+        mov.previewId === previewId
+          ? {
+            ...mov,
+            [field]: value,
+            estadoImportacion:
+              mov.duplicadoSistema || mov.duplicadoArchivo
+                ? "Editado - revisar"
+                : mov.estadoImportacion,
+          }
+          : mov
+      )
+    );
+  }
+
+  function toggleMovimientoPreview(previewId) {
+    setMovimientosPreview((prev) =>
+      prev.map((mov) =>
+        mov.previewId === previewId
+          ? { ...mov, seleccionado: !mov.seleccionado }
+          : mov
+      )
+    );
+  }
+
+  function seleccionarTodosPreview(value) {
+    setMovimientosPreview((prev) =>
+      prev.map((mov) => ({
+        ...mov,
+        seleccionado:
+          value && !mov.duplicadoSistema && !mov.duplicadoArchivo,
+      }))
+    );
+  }
+
+  async function prepararPreviewConDuplicados(movimientosBase) {
+    const conHash = await Promise.all(
+      movimientosBase.map(async (mov) => ({
+        ...mov,
+        externalHash: await buildBankMovementHash(mov),
+      }))
+    );
+
+    const hashes = conHash.map((mov) => mov.externalHash);
+    const existentes = await getMovimientosBancariosByHashes(hashes);
+    const hashesExistentes = new Set(
+      existentes.map((mov) => mov.externalHash).filter(Boolean)
+    );
+
+    const contadorLocal = {};
+
+    return conHash.map((mov) => {
+      contadorLocal[mov.externalHash] = (contadorLocal[mov.externalHash] || 0) + 1;
+
+      const duplicadoSistema = hashesExistentes.has(mov.externalHash);
+      const duplicadoArchivo = contadorLocal[mov.externalHash] > 1;
+
+      return {
+        ...mov,
+        seleccionado: !duplicadoSistema && !duplicadoArchivo,
+        duplicadoSistema,
+        duplicadoArchivo,
+        estadoImportacion: duplicadoSistema
+          ? "Ya importado"
+          : duplicadoArchivo
+            ? "Duplicado en PDF"
+            : "Nuevo",
+      };
+    });
   }
 
   async function confirmarExtractoImportado(e) {
@@ -461,13 +668,31 @@ export default function Bancos({ selectedSede, sedeId }) {
       return;
     }
 
-    if (!extractoPendiente?.sedeId) {
-      alert("Seleccioná una sede para el extracto.");
+    if (!extractoPendiente?.file) {
+      alert("No hay archivo seleccionado.");
       return;
     }
 
-    if (!extractoPendiente?.file) {
-      alert("No hay archivo seleccionado.");
+    const movimientosSeleccionados = movimientosPreview.filter(
+      (mov) =>
+        mov.seleccionado &&
+        !mov.duplicadoSistema &&
+        !mov.duplicadoArchivo
+    );
+
+    if (movimientosPreview.length > 0 && movimientosSeleccionados.length === 0) {
+      alert("No hay movimientos seleccionados para importar.");
+      return;
+    }
+
+    const movimientosInvalidos = movimientosSeleccionados.filter(
+      (mov) => !mov.fecha || !mov.cuenta || !mov.descripcion || !mov.importe
+    );
+
+    if (movimientosInvalidos.length > 0) {
+      alert(
+        "Hay movimientos con datos incompletos. Revisá fecha, sede, cuenta, descripción e importe."
+      );
       return;
     }
 
@@ -486,12 +711,42 @@ export default function Bancos({ selectedSede, sedeId }) {
         archivoPath: uploaded.path,
         archivoTipo: uploaded.tipo,
         archivoSize: uploaded.size,
+        estado:
+          movimientosSeleccionados.length > 0
+            ? "Validado"
+            : extractoPendiente.estado,
         file: undefined,
       });
+
+      for (const mov of movimientosSeleccionados) {
+        await createMovimientoBancario({
+          fecha: mov.fecha,
+          sedeId: mov.sedeId,
+          cuenta: mov.cuenta,
+          tipo: mov.tipo,
+          descripcion: mov.descripcion,
+          importe: mov.importe,
+          origen: mov.origen || `Extracto ${extractoParseado?.banco || "bancario"}`,
+          estado: mov.estado || "Pendiente",
+          externalHash: mov.externalHash,
+          metadata: {
+            fuente: "extracto_pdf",
+            banco: extractoParseado?.banco || null,
+            cuentaDetectada: extractoParseado?.cuentaDetectada || null,
+            cbuDetectado: extractoParseado?.cbuDetectado || null,
+            archivo: extractoPendiente?.archivo || null,
+            saldoPdf: mov.saldo ?? null,
+            debitoPdf: mov.debito ?? null,
+            creditoPdf: mov.credito ?? null,
+          },
+        });
+      }
 
       await loadData(sedeId);
 
       setExtractoPendiente(null);
+      setExtractoParseado(null);
+      setMovimientosPreview([]);
       setModal(null);
     } catch (error) {
       console.error("Error guardando extracto:", error);
@@ -779,8 +1034,7 @@ export default function Bancos({ selectedSede, sedeId }) {
     doc.text(`Cuenta: ${cuentaFiltro}`, 14, 49);
     doc.text(`Estado: ${estadoFiltro}`, 14, 54);
     doc.text(
-      `Periodo: ${desde ? formatDate(desde) : "Inicio"} al ${
-        hasta ? formatDate(hasta) : "Actual"
+      `Periodo: ${desde ? formatDate(desde) : "Inicio"} al ${hasta ? formatDate(hasta) : "Actual"
       }`,
       14,
       59
@@ -879,8 +1133,7 @@ export default function Bancos({ selectedSede, sedeId }) {
           <input
             ref={extractoInputRef}
             type="file"
-            accept="application/pdf,image/*"
-            capture="environment"
+            accept="application/pdf"
             hidden
             onChange={seleccionarExtracto}
           />
@@ -896,10 +1149,14 @@ export default function Bancos({ selectedSede, sedeId }) {
           <button
             className="secondary-button"
             onClick={() => extractoInputRef.current?.click()}
-            disabled={importandoExtracto}
+            disabled={importandoExtracto || parseandoExtracto}
           >
             <Upload size={16} />
-            {importandoExtracto ? "Subiendo extracto..." : "Adjuntar extracto"}
+            {parseandoExtracto
+              ? "Leyendo PDF..."
+              : importandoExtracto
+                ? "Importando..."
+                : "Importar extracto PDF"}
           </button>
 
           <button className="secondary-button" onClick={handleConciliar}>
@@ -1409,10 +1666,14 @@ export default function Bancos({ selectedSede, sedeId }) {
       )}
 
       {modal === "revisarExtracto" && extractoPendiente && (
-        <Modal title="Revisar extracto bancario" onClose={() => setModal(null)}>
+        <Modal
+          title="Revisar e importar extracto bancario"
+          size="wide"
+          onClose={() => setModal(null)}
+        >
           <form className="form-grid" onSubmit={confirmarExtractoImportado}>
             <label>
-              Fecha
+              Fecha de carga
               <input
                 type="date"
                 required
@@ -1428,32 +1689,56 @@ export default function Bancos({ selectedSede, sedeId }) {
 
             <label>
               Cuenta / asociado a
-              <input
+              <select
                 required
                 value={extractoPendiente.asociadoA}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const cuentaSeleccionada = e.target.value;
+
                   setExtractoPendiente({
                     ...extractoPendiente,
-                    asociadoA: e.target.value,
-                  })
-                }
-              />
+                    asociadoA: cuentaSeleccionada,
+                  });
+
+                  setMovimientosPreview((prev) =>
+                    prev.map((mov) => ({
+                      ...mov,
+                      cuenta: cuentaSeleccionada,
+                    }))
+                  );
+                }}
+              >
+                <option value="">Seleccionar cuenta</option>
+                {cuentasPorSede.map((cuenta) => (
+                  <option key={cuenta.id} value={cuenta.nombre}>
+                    {cuenta.nombre}
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label>
-              Sede
+              Sede por defecto
               <select
-                required
                 value={extractoPendiente.sedeId}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const nuevaSedeId = e.target.value;
+
                   setExtractoPendiente({
                     ...extractoPendiente,
-                    sedeId: e.target.value,
-                  })
-                }
+                    sedeId: nuevaSedeId,
+                  });
+
+                  setMovimientosPreview((prev) =>
+                    prev.map((mov) => ({
+                      ...mov,
+                      sedeId: nuevaSedeId,
+                    }))
+                  );
+                }}
                 disabled={sedeBloqueada}
               >
-                <option value="">Seleccionar sede</option>
+                <option value="">Todas las sedes</option>
                 {sedes.map((sede) => (
                   <option key={sede.id} value={sede.id}>
                     {sede.nombre}
@@ -1463,7 +1748,7 @@ export default function Bancos({ selectedSede, sedeId }) {
             </label>
 
             <label>
-              Estado
+              Estado documento
               <select
                 value={extractoPendiente.estado}
                 onChange={(e) =>
@@ -1480,7 +1765,7 @@ export default function Bancos({ selectedSede, sedeId }) {
             </label>
 
             <label className="full">
-              Descripción
+              Descripción del documento
               <input
                 required
                 placeholder="Ej: Extracto Galicia mayo 2026"
@@ -1494,25 +1779,257 @@ export default function Bancos({ selectedSede, sedeId }) {
               />
             </label>
 
-            <div className="full document-preview">
-              <strong>Archivo seleccionado:</strong>
-              <br />
-              {extractoPendiente.archivo}
-              <br />
-              Tipo: {extractoPendiente.archivoTipo || "-"}
-              <br />
-              Tamaño: {formatFileSize(extractoPendiente.archivoSize)}
-              <br />
-              El archivo se guardará en Supabase Storage y quedará registrado como documento de tipo{" "}
-              <strong>Extracto bancario</strong>.
+            <div className="full import-summary">
+              <div className="import-summary-header">
+                <div>
+                  <strong>Archivo analizado</strong>
+                  <span>{extractoPendiente.archivo}</span>
+                </div>
+
+                <div className="import-summary-status">
+                  <span className="status-badge aplicado">
+                    {extractoParseado?.banco || "Banco no detectado"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="import-summary-grid">
+                <div className="import-summary-card">
+                  <span>Tipo de documento</span>
+                  <strong>{extractoParseado?.detected?.tipoDocumento || "-"}</strong>
+                </div>
+
+                <div className="import-summary-card">
+                  <span>Cuenta detectada</span>
+                  <strong>{extractoParseado?.cuentaDetectada || "-"}</strong>
+                </div>
+
+                <div className="import-summary-card">
+                  <span>CBU detectado</span>
+                  <strong>{extractoParseado?.cbuDetectado || "-"}</strong>
+                </div>
+
+                <div className="import-summary-card">
+                  <span>Tamaño</span>
+                  <strong>{formatFileSize(extractoPendiente.archivoSize)}</strong>
+                </div>
+
+                <div className="import-summary-card">
+                  <span>Movimientos</span>
+                  <strong>{movimientosPreview.length}</strong>
+                </div>
+
+                <div className="import-summary-card">
+                  <span>Nuevos</span>
+                  <strong>
+                    {
+                      movimientosPreview.filter(
+                        (mov) => !mov.duplicadoSistema && !mov.duplicadoArchivo
+                      ).length
+                    }
+                  </strong>
+                </div>
+
+                <div className="import-summary-card warning">
+                  <span>Duplicados</span>
+                  <strong>
+                    {
+                      movimientosPreview.filter(
+                        (mov) => mov.duplicadoSistema || mov.duplicadoArchivo
+                      ).length
+                    }
+                  </strong>
+                </div>
+              </div>
+
+              {extractoParseado?.error && (
+                <div className="import-warning">
+                  <strong>Observación:</strong> {extractoParseado.error}
+                </div>
+              )}
             </div>
 
-            <div className="modal-actions">
+            {movimientosPreview.length > 0 && (
+              <div className="full">
+                <div className="import-table-toolbar">
+                  <div>
+                    <strong>Movimientos detectados</strong>
+                    <span>
+                      Revisá, corregí y confirmá solo los movimientos nuevos. Los duplicados quedan bloqueados.
+                    </span>
+                  </div>
+
+                  <div className="import-table-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => seleccionarTodosPreview(true)}
+                    >
+                      <CheckCircle2 size={15} /> Seleccionar nuevos
+                    </button>
+
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => seleccionarTodosPreview(false)}
+                    >
+                      Limpiar
+                    </button>
+                  </div>
+                </div>
+
+                <div className="table-card import-preview-table-wrap">
+                  <table className="import-preview-table">
+                    <thead>
+                      <tr>
+                        <th>Importar</th>
+                        <th>Estado</th>
+                        <th>Fecha</th>
+                        <th>Sede</th>
+                        <th>Cuenta</th>
+                        <th>Tipo</th>
+                        <th>Descripción</th>
+                        <th>Importe</th>
+                        <th>Saldo PDF</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {movimientosPreview.map((mov) => (
+                        <tr
+                          key={mov.previewId}
+                          className={
+                            mov.duplicadoSistema || mov.duplicadoArchivo
+                              ? "import-row-duplicate"
+                              : ""
+                          }
+                        >
+                          <td className="import-check-cell">
+                            <input
+                              type="checkbox"
+                              checked={mov.seleccionado}
+                              disabled={mov.duplicadoSistema || mov.duplicadoArchivo}
+                              onChange={() => toggleMovimientoPreview(mov.previewId)}
+                            />
+                          </td>
+
+                          <td>
+                            <span
+                              className={`status-badge ${mov.duplicadoSistema || mov.duplicadoArchivo
+                                ? "pendiente"
+                                : "aplicado"
+                                }`}
+                            >
+                              {mov.estadoImportacion || "Nuevo"}
+                            </span>
+                          </td>
+
+                          <td>
+                            <input
+                              className="import-input-date"
+                              type="date"
+                              value={mov.fecha}
+                              onChange={(e) =>
+                                updateMovimientoPreview(mov.previewId, "fecha", e.target.value)
+                              }
+                            />
+                          </td>
+
+                          <td>
+                            <select
+                              className="import-select-sede"
+                              value={mov.sedeId}
+                              onChange={(e) =>
+                                updateMovimientoPreview(mov.previewId, "sedeId", e.target.value)
+                              }
+                              disabled={sedeBloqueada}
+                            >
+                              <option value="">Todas las sedes</option>
+                              {sedes.map((sede) => (
+                                <option key={sede.id} value={sede.id}>
+                                  {sede.nombre}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+
+                          <td>
+                            <select
+                              className="import-select-cuenta"
+                              value={mov.cuenta}
+                              onChange={(e) =>
+                                updateMovimientoPreview(mov.previewId, "cuenta", e.target.value)
+                              }
+                            >
+                              <option value="">Cuenta</option>
+                              {cuentasPorSede.map((cuenta) => (
+                                <option key={cuenta.id} value={cuenta.nombre}>
+                                  {cuenta.nombre}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+
+                          <td>
+                            <select
+                              className="import-select-tipo"
+                              value={mov.tipo}
+                              onChange={(e) =>
+                                updateMovimientoPreview(mov.previewId, "tipo", e.target.value)
+                              }
+                            >
+                              <option>Ingreso</option>
+                              <option>Egreso</option>
+                            </select>
+                          </td>
+
+                          <td>
+                            <input
+                              className="import-input-description"
+                              value={mov.descripcion}
+                              onChange={(e) =>
+                                updateMovimientoPreview(mov.previewId, "descripcion", e.target.value)
+                              }
+                            />
+                          </td>
+
+                          <td>
+                            <input
+                              className="import-input-money"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={mov.importe}
+                              onChange={(e) =>
+                                updateMovimientoPreview(mov.previewId, "importe", e.target.value)
+                              }
+                            />
+                          </td>
+
+                          <td className="import-money-cell">{formatMoney(mov.saldo)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {movimientosPreview.length === 0 && (
+              <div className="full document-preview">
+                <Eye size={16} /> No se detectaron movimientos importables en este PDF.
+                El archivo se puede guardar como documento, pero no generará movimientos bancarios.
+              </div>
+            )}
+
+            <div className="modal-actions import-footer-actions">
               <button
                 type="button"
                 className="secondary-button"
                 onClick={() => {
                   setExtractoPendiente(null);
+                  setExtractoParseado(null);
+                  setMovimientosPreview([]);
                   setModal(null);
                 }}
               >
@@ -1520,7 +2037,11 @@ export default function Bancos({ selectedSede, sedeId }) {
               </button>
 
               <button type="submit" className="primary-button" disabled={saving}>
-                {saving ? "Guardando..." : "Guardar extracto"}
+                {saving
+                  ? "Importando..."
+                  : movimientosPreview.length > 0
+                    ? "Guardar PDF e importar movimientos"
+                    : "Guardar solo PDF"}
               </button>
             </div>
           </form>

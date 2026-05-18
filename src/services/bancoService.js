@@ -21,6 +21,9 @@ function mapMovimiento(row) {
     origen: row.origen,
     estado: row.estado,
 
+    externalHash: row.external_hash || null,
+    metadata: row.metadata || {},
+
     ingresoId: row.ingreso_id || null,
     egresoId: row.egreso_id || null,
   };
@@ -51,19 +54,60 @@ export async function getMovimientosBancarios(sedeId = null) {
   return data.map(mapMovimiento);
 }
 
-export async function createMovimientoBancario(form) {
+export async function getMovimientosBancariosByHashes(hashes = []) {
+  const cleanHashes = [...new Set((hashes || []).filter(Boolean))];
+
+  if (cleanHashes.length === 0) return [];
+
   const { data, error } = await supabase
     .from("movimientos_bancarios")
-    .insert({
-      fecha: form.fecha,
-      sede_id: form.sedeId,
-      cuenta: form.cuenta,
-      tipo: form.tipo,
-      descripcion: form.descripcion,
-      importe: Number(form.importe || 0),
-      origen: form.origen || "Carga manual",
-      estado: form.estado || "Pendiente",
-    })
+    .select(`
+      id,
+      fecha,
+      sede_id,
+      cuenta,
+      tipo,
+      descripcion,
+      importe,
+      origen,
+      estado,
+      external_hash,
+      metadata,
+      sedes (
+        id,
+        nombre
+      )
+    `)
+    .in("external_hash", cleanHashes);
+
+  if (error) throw error;
+
+  return (data || []).map(mapMovimiento);
+}
+
+export async function createMovimientoBancario(form) {
+  const payload = {
+    fecha: form.fecha,
+    sede_id: form.sedeId || null,
+    cuenta: form.cuenta,
+    tipo: form.tipo,
+    descripcion: form.descripcion,
+    importe: Number(form.importe || 0),
+    origen: form.origen || "Carga manual",
+    estado: form.estado || "Pendiente",
+  };
+
+  if (form.externalHash) {
+    payload.external_hash = form.externalHash;
+  }
+
+  if (form.metadata) {
+    payload.metadata = form.metadata;
+  }
+
+  const { data, error } = await supabase
+    .from("movimientos_bancarios")
+    .insert(payload)
     .select(`
       *,
       sedes (
@@ -73,7 +117,13 @@ export async function createMovimientoBancario(form) {
     `)
     .single();
 
-  if (error) throw error;
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("Este movimiento ya fue importado anteriormente.");
+    }
+
+    throw error;
+  }
 
   return mapMovimiento(data);
 }
@@ -92,7 +142,6 @@ export async function deleteMovimientoBancario(id) {
    ========================================================= */
 
 export async function conciliarConIngreso(movimientoId, ingresoId) {
-  // 1. Vincular movimiento con ingreso
   const { error: errorMovimiento } = await supabase
     .from("movimientos_bancarios")
     .update({
@@ -105,7 +154,6 @@ export async function conciliarConIngreso(movimientoId, ingresoId) {
 
   if (errorMovimiento) throw errorMovimiento;
 
-  // 2. Marcar ingreso como cobrado
   const { error: errorIngreso } = await supabase
     .from("ingresos")
     .update({
@@ -118,7 +166,6 @@ export async function conciliarConIngreso(movimientoId, ingresoId) {
 }
 
 export async function conciliarConEgreso(movimientoId, egresoId) {
-  // 1. Vincular movimiento con egreso
   const { error: errorMovimiento } = await supabase
     .from("movimientos_bancarios")
     .update({
@@ -131,7 +178,6 @@ export async function conciliarConEgreso(movimientoId, egresoId) {
 
   if (errorMovimiento) throw errorMovimiento;
 
-  // 2. Marcar egreso como pagado
   const { error: errorEgreso } = await supabase
     .from("egresos")
     .update({
