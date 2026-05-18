@@ -509,6 +509,186 @@ export default function Egresos({ selectedSede, sedeId }) {
     return (importe * Number(porcentaje || 0)) / 100;
   }
 
+  function totalDistribucionEgresoPendiente() {
+    return totalDistribucion(egresoPendiente?.distribuciones || []);
+  }
+
+  function getSedesDisponiblesEgresoPendiente(indexActual) {
+    return getSedesDisponibles(indexActual, egresoPendiente?.distribuciones || []);
+  }
+
+  function agregarDistribucionEgresoPendiente() {
+    setEgresoPendiente((prev) => {
+      const distribucionesActuales = prev.distribuciones || [];
+      const sedesSeleccionadas = getSedesSeleccionadas(distribucionesActuales);
+
+      const primeraSedeLibre = sedes.find((sede) => !sedesSeleccionadas.includes(sede.id));
+
+      if (!primeraSedeLibre) {
+        toast.error("Ya seleccionaste todas las sedes disponibles.");
+        return prev;
+      }
+
+      const nuevasDistribuciones = [
+        ...distribucionesActuales,
+        {
+          sedeId: primeraSedeLibre.id,
+          porcentaje: 0,
+        },
+      ];
+
+      const porcentajeBase = redondearPorcentaje(100 / nuevasDistribuciones.length);
+      let acumulado = 0;
+
+      const distribucionesNormalizadas = nuevasDistribuciones.map((item, index) => {
+        const esUltimo = index === nuevasDistribuciones.length - 1;
+
+        const porcentaje = esUltimo
+          ? redondearPorcentaje(100 - acumulado)
+          : porcentajeBase;
+
+        acumulado = redondearPorcentaje(acumulado + porcentaje);
+
+        return {
+          ...item,
+          porcentaje,
+        };
+      });
+
+      return {
+        ...prev,
+        distribuciones: distribucionesNormalizadas,
+      };
+    });
+  }
+
+  function actualizarDistribucionEgresoPendiente(index, field, value) {
+    setEgresoPendiente((prev) => {
+      const distribuciones = [...(prev.distribuciones || [])];
+
+      if (field === "sedeId") {
+        const sedeYaUsada = distribuciones.some(
+          (item, itemIndex) => itemIndex !== index && item.sedeId === value
+        );
+
+        if (sedeYaUsada) {
+          toast.error("Esa sede ya fue seleccionada en la distribución.");
+          return prev;
+        }
+
+        distribuciones[index] = {
+          ...distribuciones[index],
+          sedeId: value,
+        };
+
+        return {
+          ...prev,
+          distribuciones,
+        };
+      }
+
+      if (field === "porcentaje") {
+        let nuevoPorcentaje = redondearPorcentaje(value);
+
+        if (nuevoPorcentaje < 0) nuevoPorcentaje = 0;
+        if (nuevoPorcentaje > 100) nuevoPorcentaje = 100;
+
+        const otrasLineas = distribuciones.filter((_, itemIndex) => itemIndex !== index);
+        const cantidadOtras = otrasLineas.length;
+
+        if (cantidadOtras === 0) {
+          distribuciones[index] = {
+            ...distribuciones[index],
+            porcentaje: Math.min(nuevoPorcentaje, 100),
+          };
+
+          return {
+            ...prev,
+            distribuciones,
+          };
+        }
+
+        const restante = redondearPorcentaje(100 - nuevoPorcentaje);
+
+        distribuciones[index] = {
+          ...distribuciones[index],
+          porcentaje: nuevoPorcentaje,
+        };
+
+        if (cantidadOtras === 1) {
+          const otroIndex = distribuciones.findIndex((_, itemIndex) => itemIndex !== index);
+
+          distribuciones[otroIndex] = {
+            ...distribuciones[otroIndex],
+            porcentaje: restante,
+          };
+        } else {
+          const porcentajePorLinea = redondearPorcentaje(restante / cantidadOtras);
+          let acumulado = 0;
+
+          distribuciones.forEach((item, itemIndex) => {
+            if (itemIndex === index) return;
+
+            const esUltimaOtra =
+              distribuciones
+                .map((_, mapIndex) => mapIndex)
+                .filter((mapIndex) => mapIndex !== index)
+                .at(-1) === itemIndex;
+
+            const porcentajeFinal = esUltimaOtra
+              ? redondearPorcentaje(restante - acumulado)
+              : porcentajePorLinea;
+
+            acumulado = redondearPorcentaje(acumulado + porcentajeFinal);
+
+            distribuciones[itemIndex] = {
+              ...item,
+              porcentaje: porcentajeFinal,
+            };
+          });
+        }
+
+        return {
+          ...prev,
+          distribuciones,
+        };
+      }
+
+      distribuciones[index] = {
+        ...distribuciones[index],
+        [field]: value,
+      };
+
+      return {
+        ...prev,
+        distribuciones,
+      };
+    });
+  }
+
+  function eliminarDistribucionEgresoPendiente(index) {
+    setEgresoPendiente((prev) => {
+      const distribuciones = (prev.distribuciones || []).filter((_, i) => i !== index);
+
+      if (distribuciones.length === 1) {
+        distribuciones[0] = {
+          ...distribuciones[0],
+          porcentaje: 100,
+        };
+      }
+
+      return {
+        ...prev,
+        distribuciones,
+      };
+    });
+  }
+
+  function calcularImporteDistribuidoEgresoPendiente(porcentaje) {
+    const importe = Number(egresoPendiente?.importe || 0);
+    return (importe * Number(porcentaje || 0)) / 100;
+  }
+
   async function handleCreate(e) {
     e.preventDefault();
 
@@ -654,6 +834,7 @@ export default function Egresos({ selectedSede, sedeId }) {
           puntoVenta,
           numeroComprobante,
         },
+        distribuciones: [],
       });
       setModal("revisarFactura");
     } catch (error) {
@@ -680,6 +861,28 @@ export default function Egresos({ selectedSede, sedeId }) {
     if (!egresoPendiente?.sedeId) {
       toast.error("Seleccioná una sede.");
       return;
+    }
+
+    if (egresoPendiente.distribuciones?.length) {
+      const total = totalDistribucion(egresoPendiente.distribuciones);
+
+      if (Math.abs(total - 100) > 0.01) {
+        toast.error("La distribución entre sedes debe sumar exactamente 100%.");
+        return;
+      }
+
+      const sedesSeleccionadas = egresoPendiente.distribuciones.map((item) => item.sedeId);
+      const sedesUnicas = new Set(sedesSeleccionadas);
+
+      if (sedesSeleccionadas.some((id) => !id)) {
+        toast.error("Todas las líneas de distribución deben tener una sede.");
+        return;
+      }
+
+      if (sedesUnicas.size !== sedesSeleccionadas.length) {
+        toast.error("No podés repetir la misma sede en la distribución.");
+        return;
+      }
     }
 
     setSaving(true);
@@ -1486,6 +1689,83 @@ export default function Egresos({ selectedSede, sedeId }) {
                 }
               />
             </label>
+
+            <div className="full split-box">
+              <div className="split-header">
+                <div>
+                  <strong>Distribución por sedes</strong>
+                  <small>
+                    Opcional. Si no agregás distribución, se aplica el 100% a la sede seleccionada.
+                  </small>
+                </div>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={agregarDistribucionEgresoPendiente}
+                >
+                  Agregar sede
+                </button>
+              </div>
+
+              {egresoPendiente.distribuciones?.length > 0 && (
+                <div className="split-table">
+                  {egresoPendiente.distribuciones.map((item, index) => (
+                    <div className="split-row" key={index}>
+                      <select
+                        value={item.sedeId}
+                        onChange={(e) =>
+                          actualizarDistribucionEgresoPendiente(index, "sedeId", e.target.value)
+                        }
+                        required
+                      >
+                        <option value="">Seleccionar sede</option>
+                        {getSedesDisponiblesEgresoPendiente(index).map((sede) => (
+                          <option key={sede.id} value={sede.id}>
+                            {sede.nombre}
+                          </option>
+                        ))}
+                      </select>
+
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        placeholder="%"
+                        value={item.porcentaje}
+                        onChange={(e) =>
+                          actualizarDistribucionEgresoPendiente(index, "porcentaje", e.target.value)
+                        }
+                        onBlur={(e) =>
+                          actualizarDistribucionEgresoPendiente(index, "porcentaje", e.target.value || 0)
+                        }
+                        required
+                      />
+
+                      <span>{formatMoney(calcularImporteDistribuidoEgresoPendiente(item.porcentaje))}</span>
+
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => eliminarDistribucionEgresoPendiente(index)}
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ))}
+
+                  <div className="split-total">
+                    <strong>Total distribuido: {totalDistribucionEgresoPendiente()}%</strong>
+                    <span>
+                      {Math.abs(totalDistribucionEgresoPendiente() - 100) <= 0.01
+                        ? "Correcto"
+                        : "Debe sumar 100%"}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <label>
               Comprobante
