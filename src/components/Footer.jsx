@@ -8,7 +8,7 @@ export default function Footer() {
   return (
     <footer className="app-footer">
       <div className="footer-left">
-        <span>© {year} {config.platformName || "Genetics"}</span>
+        <span>© {year} {config.platformName || "CEDIM"}</span>
         <span className="footer-separator">•</span>
         <span>{version}</span>
         <span>Ambiente: {config.footerEnvironment || "Demo"}</span>

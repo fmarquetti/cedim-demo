@@ -288,7 +288,7 @@ export default function Sedes({ selectedSede }) {
               Nombre fantasía
               <input
                 required
-                placeholder="Ej: Genetics Centro"
+                placeholder="Ej: CEDIM Centro"
                 value={form.sociedad}
                 onChange={(e) => setForm({ ...form, sociedad: e.target.value })}
               />
@@ -297,7 +297,7 @@ export default function Sedes({ selectedSede }) {
             <label>
               Razón social
               <input
-                placeholder="Ej: Genetics Salud S.A."
+                placeholder="Ej: CEDIM Salud S.A."
                 value={form.razonSocial}
                 onChange={(e) =>
                   setForm({ ...form, razonSocial: e.target.value })

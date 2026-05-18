@@ -261,7 +261,7 @@ export default function Configuracion() {
                       onChange={(e) =>
                         updateField("platformName", e.target.value)
                       }
-                      placeholder="Genetics"
+                      placeholder="CEDIM"
                     />
                   </label>
 
@@ -336,7 +336,7 @@ export default function Configuracion() {
                       onChange={(e) =>
                         updateField("loginTitle", e.target.value)
                       }
-                      placeholder="GENETICS"
+                      placeholder="CEDIM"
                     />
                   </label>
 
@@ -358,7 +358,7 @@ export default function Configuracion() {
                       onChange={(e) =>
                         updateField("loginFooterText", e.target.value)
                       }
-                      placeholder="Genetics · Versión"
+                      placeholder="CEDIM · Versión"
                     />
                   </label>
 

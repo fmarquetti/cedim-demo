@@ -1,5 +1,5 @@
 import { useState } from "react";
-import logo from "../assets/logo-genetics.png";
+import logo from "../assets/logo-cedim.png";
 import { loginWithEmail } from "../services/authService";
 import { useAppConfig } from "../context/AppConfigContext";
 
@@ -34,11 +34,11 @@ export default function Login({ onLogin }) {
         <div className="login-brand">
           <img
             src={loginLogo}
-            alt={config.loginTitle || config.platformName || "Genetics"}
+            alt={config.loginTitle || config.platformName || "CEDIM"}
             className="login-logo"
           />
 
-          <h1>{config.loginTitle || "GENETICS"}</h1>
+          <h1>{config.loginTitle || "CEDIM"}</h1>
 
           <p>
             {config.loginSubtitle ||
@@ -77,7 +77,7 @@ export default function Login({ onLogin }) {
         </form>
 
         <div className="login-footer">
-          {config.loginFooterText || "Genetics · Versión"}{" "}
+          {config.loginFooterText || "CEDIM · Versión"}{" "}
           <strong>{config.loginFooterHighlight || "SUPABASE"}</strong>
         </div>
       </section>

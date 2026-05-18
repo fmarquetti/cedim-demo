@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Lock, Eye, EyeOff, CheckCircle } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
-import logo from "../assets/logo-genetics.png";
+import logo from "../assets/logo-cedim.png";
 
 export default function SetPassword() {
   const [password, setPassword] = useState("");
@@ -51,8 +51,8 @@ export default function SetPassword() {
     <main className="login-page">
       <section className="login-card">
         <div className="login-brand">
-          <img src={logo} alt="Genetics" className="login-logo" />
-          <h1>GENETICS</h1>
+          <img src={logo} alt="CEDIM" className="login-logo" />
+          <h1>CEDIM</h1>
           <p>Definí tu contraseña para activar el acceso al sistema.</p>
         </div>
 

@@ -65,21 +65,21 @@ export const egresos = [
 export const usuarios = [
   {
     nombre: "Juan Pérez",
-    email: "juan@genetics.com",
+    email: "juan@CEDIM.com",
     rol: "Administrador",
     sede: "Todas",
     estado: "Activo",
   },
   {
     nombre: "María Gómez",
-    email: "maria@genetics.com",
+    email: "maria@CEDIM.com",
     rol: "Contador",
     sede: "Todas",
     estado: "Activo",
   },
   {
     nombre: "Ana López",
-    email: "ana@genetics.com",
+    email: "ana@CEDIM.com",
     rol: "Operador",
     sede: "Sede Norte",
     estado: "Activo",
@@ -241,7 +241,7 @@ export const sedes = [
   },
   {
     sede: "Sede Pilar",
-    sociedad: "Genetics Pilar S.R.L.",
+    sociedad: "CEDIM Pilar S.R.L.",
     responsable: "Lic. Ana Torres",
     usuarios: 5,
     estudiosMes: 420,

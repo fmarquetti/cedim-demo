@@ -234,7 +234,7 @@ export default function Reportes({ selectedSede, sedeId }) {
 
   const exportarExcel = async () => {
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = "Genetics - TECNEW";
+    workbook.creator = "CEDIM - TECNEW";
     workbook.created = new Date();
 
     const resumen = workbook.addWorksheet("Resumen");
@@ -408,7 +408,7 @@ export default function Reportes({ selectedSede, sedeId }) {
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(22);
-    doc.text("GENETICS", 14, 16);
+    doc.text("CEDIM", 14, 16);
 
     doc.setFontSize(15);
     doc.text("Reporte financiero integral", 14, 26);

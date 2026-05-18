@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import Modal from "../components/Modal";
 
-import logo from "../assets/logo-genetics.png";
+import logo from "../assets/logo-cedim.png";
 
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -389,7 +389,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
   const exportarReporteExcel = async () => {
     const workbook = new ExcelJS.Workbook();
 
-    workbook.creator = "Genetics";
+    workbook.creator = "CEDIM";
     workbook.created = new Date();
 
     const resumenSheet = workbook.addWorksheet("Resumen");
@@ -525,7 +525,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
 
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
-    doc.text("Plataforma de gestión GENETICS", 50, 22);
+    doc.text("Plataforma de gestión CEDIM", 50, 22);
     doc.text("Laboratorio de analisis clínicos", 50, 27);
 
     // Línea separadora

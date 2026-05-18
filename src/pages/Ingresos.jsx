@@ -778,7 +778,7 @@ export default function Ingresos({ selectedSede, sedeId }) {
   const exportarExcel = async () => {
     try {
       const workbook = new ExcelJS.Workbook();
-      workbook.creator = "Genetics - TECNEW";
+      workbook.creator = "CEDIM - TECNEW";
       workbook.created = new Date();
       const sedeName = typeof selectedSede === "object" ? selectedSede?.nombre : selectedSede || "Todas las sedes";
 
@@ -872,7 +872,7 @@ export default function Ingresos({ selectedSede, sedeId }) {
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(22);
-      doc.text("GENETICS", 14, 16);
+      doc.text("CEDIM", 14, 16);
       doc.setFontSize(15);
       doc.text("Reporte de ingresos", 14, 26);
       doc.setFont("helvetica", "normal");

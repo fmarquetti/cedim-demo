@@ -1,4 +1,4 @@
-name: Deploy Genetics Demo
+name: Deploy CEDIM Demo
 
 on:
   push:

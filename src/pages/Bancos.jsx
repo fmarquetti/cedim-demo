@@ -1062,7 +1062,7 @@ export default function Bancos({ selectedSede, sedeId }) {
 
   const exportarExcel = async () => {
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = "Genetics - TECNEW";
+    workbook.creator = "CEDIM - TECNEW";
     workbook.created = new Date();
 
     const resumenSheet = workbook.addWorksheet("Resumen");
@@ -1195,7 +1195,7 @@ export default function Bancos({ selectedSede, sedeId }) {
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(22);
-    doc.text("GENETICS", 14, 16);
+    doc.text("CEDIM", 14, 16);
 
     doc.setFontSize(15);
     doc.text("Reporte bancario y conciliación", 14, 26);

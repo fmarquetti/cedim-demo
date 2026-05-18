@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
 
     const { data: invitedData, error: inviteError } =
       await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-        redirectTo: "http://localhost:5173/genetics-demo/set-password",
+        redirectTo: "http://localhost:5173/CEDIM-demo/set-password",
         data: {
           nombre,
           rol,

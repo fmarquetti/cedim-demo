@@ -15,7 +15,7 @@ import {
     PanelLeftOpen,
 } from "lucide-react";
 
-import logo from "../assets/logo-genetics.png";
+import logo from "../assets/logo-cedim.png";
 import { useAppConfig } from "../context/AppConfigContext";
 
 const menu = [
@@ -63,10 +63,10 @@ export default function Sidebar({
     return (
         <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
             <div className="brand">
-                <img src={brandLogo} alt={config.platformName || "Genetics"} />
+                <img src={brandLogo} alt={config.platformName || "CEDIM"} />
 
                 <div>
-                    <strong>{config.platformName || "Genetics"}</strong>
+                    <strong>{config.platformName || "CEDIM"}</strong>
                     <span>{config.platformSubtitle || "Laboratorio clínico"}</span>
                 </div>
 

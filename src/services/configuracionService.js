@@ -1,13 +1,13 @@
 import { supabase } from "../lib/supabaseClient";
 
 export const defaultAppConfig = {
-    platformName: "Genetics",
+    platformName: "CEDIM",
     platformSubtitle: "Laboratorio clínico",
     platformIconUrl: "",
-    loginTitle: "GENETICS",
+    loginTitle: "CEDIM",
     loginSubtitle: "Plataforma de gestión para laboratorio clínico",
     loginIconUrl: "",
-    loginFooterText: "Genetics · Versión",
+    loginFooterText: "CEDIM · Versión",
     loginFooterHighlight: "SUPABASE",
     footerText: "Creado por TECNEW",
     footerEnvironment: "Demo",
