@@ -105,17 +105,9 @@ export async function createMovimientoBancario(form) {
     payload.metadata = form.metadata;
   }
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from("movimientos_bancarios")
-    .insert(payload)
-    .select(`
-      *,
-      sedes (
-        id,
-        nombre
-      )
-    `)
-    .single();
+    .insert(payload);
 
   if (error) {
     if (error.code === "23505") {
@@ -125,7 +117,7 @@ export async function createMovimientoBancario(form) {
     throw error;
   }
 
-  return mapMovimiento(data);
+  return true;
 }
 
 export async function deleteMovimientoBancario(id) {
