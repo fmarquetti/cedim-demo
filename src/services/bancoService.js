@@ -13,7 +13,7 @@ function mapMovimiento(row) {
     fecha: formatFecha(row.fecha),
     fechaDb: row.fecha,
     sedeId: row.sede_id,
-    sede: row.sedes?.nombre || "Sin sede",
+    sede: row.sedes?.nombre || "Todas las sedes",
     cuenta: row.cuenta,
     tipo: row.tipo,
     descripcion: row.descripcion,
@@ -51,7 +51,7 @@ export async function getMovimientosBancarios(sedeId = null) {
 
   if (error) throw error;
 
-  return data.map(mapMovimiento);
+  return (data || []).map(mapMovimiento);
 }
 
 export async function getMovimientosBancariosByHashes(hashes = []) {
@@ -85,8 +85,8 @@ export async function getMovimientosBancariosByHashes(hashes = []) {
   return (data || []).map(mapMovimiento);
 }
 
-export async function createMovimientoBancario(form) {
-  const payload = {
+function buildMovimientoPayload(form) {
+  return {
     fecha: form.fecha,
     sede_id: form.sedeId || null,
     cuenta: form.cuenta,
@@ -95,15 +95,13 @@ export async function createMovimientoBancario(form) {
     importe: Number(form.importe || 0),
     origen: form.origen || "Carga manual",
     estado: form.estado || "Pendiente",
+    external_hash: form.externalHash || null,
+    metadata: form.metadata || {},
   };
+}
 
-  if (form.externalHash) {
-    payload.external_hash = form.externalHash;
-  }
-
-  if (form.metadata) {
-    payload.metadata = form.metadata;
-  }
+export async function createMovimientoBancario(form) {
+  const payload = buildMovimientoPayload(form);
 
   const { error } = await supabase
     .from("movimientos_bancarios")
@@ -115,6 +113,31 @@ export async function createMovimientoBancario(form) {
     }
 
     throw error;
+  }
+
+  return true;
+}
+
+export async function createMovimientosBancariosBulk(movimientos = []) {
+  if (!Array.isArray(movimientos) || movimientos.length === 0) return true;
+
+  const payload = movimientos.map(buildMovimientoPayload);
+  const chunkSize = 50;
+
+  for (let i = 0; i < payload.length; i += chunkSize) {
+    const chunk = payload.slice(i, i + chunkSize);
+
+    const { error } = await supabase
+      .from("movimientos_bancarios")
+      .insert(chunk);
+
+    if (error) {
+      if (error.code === "23505") {
+        throw new Error("Uno o más movimientos ya fueron importados anteriormente.");
+      }
+
+      throw error;
+    }
   }
 
   return true;

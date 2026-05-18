@@ -31,6 +31,7 @@ import {
   conciliarMovimientoConIngreso,
   desconciliarMovimientoBancario,
   createMovimientoBancario,
+  createMovimientosBancariosBulk,
   deleteMovimientoBancario,
   getMovimientosBancarios,
   getMovimientosBancariosByHashes,
@@ -718,28 +719,30 @@ export default function Bancos({ selectedSede, sedeId }) {
         file: undefined,
       });
 
-      for (const mov of movimientosSeleccionados) {
-        await createMovimientoBancario({
-          fecha: mov.fecha,
-          sedeId: mov.sedeId,
-          cuenta: mov.cuenta,
-          tipo: mov.tipo,
-          descripcion: mov.descripcion,
-          importe: mov.importe,
-          origen: mov.origen || `Extracto ${extractoParseado?.banco || "bancario"}`,
-          estado: mov.estado || "Pendiente",
-          externalHash: mov.externalHash,
-          metadata: {
-            fuente: "extracto_pdf",
-            banco: extractoParseado?.banco || null,
-            cuentaDetectada: extractoParseado?.cuentaDetectada || null,
-            cbuDetectado: extractoParseado?.cbuDetectado || null,
-            archivo: extractoPendiente?.archivo || null,
-            saldoPdf: mov.saldo ?? null,
-            debitoPdf: mov.debito ?? null,
-            creditoPdf: mov.credito ?? null,
-          },
-        });
+      const movimientosParaCrear = movimientosSeleccionados.map((mov) => ({
+        fecha: mov.fecha,
+        sedeId: mov.sedeId,
+        cuenta: mov.cuenta,
+        tipo: mov.tipo,
+        descripcion: mov.descripcion,
+        importe: mov.importe,
+        origen: mov.origen || `Extracto ${extractoParseado?.banco || "bancario"}`,
+        estado: mov.estado || "Pendiente",
+        externalHash: mov.externalHash,
+        metadata: {
+          fuente: "extracto_pdf",
+          banco: extractoParseado?.banco || null,
+          cuentaDetectada: extractoParseado?.cuentaDetectada || null,
+          cbuDetectado: extractoParseado?.cbuDetectado || null,
+          archivo: extractoPendiente?.archivo || null,
+          saldoPdf: mov.saldo ?? null,
+          debitoPdf: mov.debito ?? null,
+          creditoPdf: mov.credito ?? null,
+        },
+      }));
+
+      if (movimientosParaCrear.length > 0) {
+        await createMovimientosBancariosBulk(movimientosParaCrear);
       }
 
       await loadData(sedeId);
@@ -750,7 +753,16 @@ export default function Bancos({ selectedSede, sedeId }) {
       setModal(null);
     } catch (error) {
       console.error("Error guardando extracto:", error);
-      alert(error.message || "No se pudo guardar el extracto.");
+
+      const message =
+        error?.message ||
+        error?.error_description ||
+        error?.details ||
+        error?.hint ||
+        JSON.stringify(error) ||
+        "No se pudo guardar el extracto.";
+
+      alert(message);
     } finally {
       setSaving(false);
       setImportandoExtracto(false);
