@@ -42,7 +42,7 @@ export default function Login({ onLogin }) {
 
           <p>
             {config.loginSubtitle ||
-              "Plataforma de gestión para laboratorio clínico"}
+              "Centro de estudios digestivos de Mendoza"}
           </p>
         </div>
 

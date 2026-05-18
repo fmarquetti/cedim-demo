@@ -2,10 +2,10 @@ import { supabase } from "../lib/supabaseClient";
 
 export const defaultAppConfig = {
     platformName: "CEDIM",
-    platformSubtitle: "Laboratorio clínico",
+    platformSubtitle: "Centro de estudios digestivos",
     platformIconUrl: "",
     loginTitle: "CEDIM",
-    loginSubtitle: "Plataforma de gestión para laboratorio clínico",
+    loginSubtitle: "Plataforma de gestión para centro de estudios digestivos",
     loginIconUrl: "",
     loginFooterText: "CEDIM · Versión",
     loginFooterHighlight: "SUPABASE",
