@@ -105,8 +105,8 @@ function AppContent() {
         activePage={activePage}
         setActivePage={setActivePage}
         currentUser={currentUser}
-        sidebarCollapsed={sidebarCollapsed}
-        setSidebarCollapsed={setSidebarCollapsed}
+        collapsed={sidebarCollapsed}
+        setCollapsed={setSidebarCollapsed}
       />
 
       <main className="main-content">
