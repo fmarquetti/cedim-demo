@@ -420,3 +420,85 @@
     width: 100%;
   }
 }
+
+.help-context-actions {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+}
+
+.help-context-actions button {
+    border: 1px solid var(--border);
+    background: #ffffff;
+    color: var(--text);
+    border-radius: 999px;
+    padding: 7px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.help-context-actions button:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.help-message-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.help-related {
+    margin-top: 10px;
+    border-top: 1px solid var(--border);
+    padding-top: 9px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.help-related span {
+    width: 100%;
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.help-related button {
+    border: 1px solid var(--border);
+    background: var(--surface-soft);
+    color: var(--text);
+    border-radius: 999px;
+    padding: 6px 9px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.help-related button:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+}
+
+.help-assistant-input {
+    align-items: center;
+}
+
+.help-assistant-input > svg {
+    margin-left: 10px;
+    color: var(--muted);
+    flex: 0 0 auto;
+}
