@@ -21,6 +21,8 @@ import SetPassword from "./pages/setPassword";
 import Footer from "./components/Footer";
 import HelpAssistant from "./components/HelpAssistant";
 import { ToastProvider } from "./components/ToastProvider";
+import { AppConfigProvider } from "./context/AppConfigContext";
+import FloatingNotice from "./components/FloatingNotice";
 
 function getSedeId(selectedSede) {
   if (!selectedSede) return "todas";
@@ -78,7 +80,7 @@ function getEffectiveSelectedSede(currentUser, selectedSede) {
   return selectedSede;
 }
 
-export default function App() {
+function AppContent() {
   const [activePage, setActivePage] = useState("dashboard");
   const [selectedSede, setSelectedSede] = useState("Todas las sedes");
   const [currentUser, setCurrentUser] = useState(null);
@@ -119,8 +121,18 @@ export default function App() {
 
         <HelpAssistant activePage={activePage} setActivePage={setActivePage} />
 
+        <FloatingNotice />
+
         <ToastProvider />
       </main>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AppConfigProvider>
+      <AppContent />
+    </AppConfigProvider>
   );
 }

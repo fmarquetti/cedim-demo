@@ -1,12 +1,17 @@
 import { useState } from "react";
 import logo from "../assets/logo-genetics.png";
 import { loginWithEmail } from "../services/authService";
+import { useAppConfig } from "../context/AppConfigContext";
 
 export default function Login({ onLogin }) {
+  const { config } = useAppConfig();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const loginLogo = config.loginIconUrl || config.platformIconUrl || logo;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -27,9 +32,18 @@ export default function Login({ onLogin }) {
     <main className="login-page">
       <section className="login-card">
         <div className="login-brand">
-          <img src={logo} alt="Genetics" className="login-logo" />
-          <h1>GENETICS</h1>
-          <p>Plataforma de gestión para laboratorio clínico</p>
+          <img
+            src={loginLogo}
+            alt={config.loginTitle || config.platformName || "Genetics"}
+            className="login-logo"
+          />
+
+          <h1>{config.loginTitle || "GENETICS"}</h1>
+
+          <p>
+            {config.loginSubtitle ||
+              "Plataforma de gestión para laboratorio clínico"}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
@@ -63,7 +77,8 @@ export default function Login({ onLogin }) {
         </form>
 
         <div className="login-footer">
-          Versión <strong>SUPABASE</strong>
+          {config.loginFooterText || "Genetics · Versión"}{" "}
+          <strong>{config.loginFooterHighlight || "SUPABASE"}</strong>
         </div>
       </section>
     </main>

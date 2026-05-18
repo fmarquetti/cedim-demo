@@ -1,115 +1,156 @@
-import { useMemo, useState } from "react";
-import { Eye, Save, RotateCcw, ShieldCheck } from "lucide-react";
-import Modal from "../components/Modal";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Eye,
+  EyeOff,
+  ImageUp,
+  Palette,
+  RotateCcw,
+  Save,
+  Settings,
+  Upload,
+} from "lucide-react";
+import { defaultAppConfig } from "../services/configuracionService";
+import { useAppConfig } from "../context/AppConfigContext";
+import { uploadConfigIcon } from "../services/configAssetService";
 
-const initialConfig = [
-  {
-    id: 1,
-    grupo: "Sistema",
-    parametro: "Nombre del sistema",
-    descripcion: "Nombre comercial visible en la plataforma.",
-    valor: "Genetics",
-    tipo: "Texto",
-    estado: "Activo",
-  },
-  {
-    id: 2,
-    grupo: "Usuarios y permisos",
-    parametro: "Acceso multisede",
-    descripcion: "Permite usuarios con acceso global o limitado a una sede.",
-    valor: "Activo",
-    tipo: "Booleano",
-    estado: "Activo",
-  },
-  {
-    id: 3,
-    grupo: "Documentos",
-    parametro: "Repositorio documental",
-    descripcion: "Storage previsto para facturas, comprobantes y resultados.",
-    valor: "Supabase Storage",
-    tipo: "Integración",
-    estado: "Pendiente integración",
-  },
-  {
-    id: 4,
-    grupo: "Autenticación",
-    parametro: "Proveedor de Auth",
-    descripcion: "Servicio previsto para login, sesiones y permisos.",
-    valor: "Supabase Auth",
-    tipo: "Integración",
-    estado: "Pendiente integración",
-  },
-  {
-    id: 5,
-    grupo: "Numeración",
-    parametro: "Numeración de documentos",
-    descripcion: "Secuencia automática para facturas, recibos y comprobantes.",
-    valor: "Automática",
-    tipo: "Sistema",
-    estado: "Activo",
-  },
-  {
-    id: 6,
-    grupo: "Auditoría",
-    parametro: "Registro de actividad",
-    descripcion: "Guarda acciones de usuarios sobre módulos críticos.",
-    valor: "Activo",
-    tipo: "Seguridad",
-    estado: "Activo",
-  },
+const menuOptions = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "ingresos", label: "Ingresos" },
+  { id: "egresos", label: "Egresos" },
+  { id: "cuentas", label: "Cuentas corrientes" },
+  { id: "bancos", label: "Bancos" },
+  { id: "reportes", label: "Reportes" },
+  { id: "documentos", label: "Documentos" },
+  { id: "pacientes", label: "Pacientes y estudios" },
+  { id: "turnos", label: "Turnos" },
+  { id: "sedes", label: "Sociedades / Sedes" },
+  { id: "usuarios", label: "Usuarios" },
+  { id: "configuracion", label: "Configuración" },
 ];
 
 export default function Configuracion() {
-  const [config, setConfig] = useState(initialConfig);
-  const [search, setSearch] = useState("");
-  const [grupoFiltro, setGrupoFiltro] = useState("Todos");
-  const [modal, setModal] = useState(null);
-  const [selectedConfig, setSelectedConfig] = useState(null);
+  const {
+    config,
+    setConfig,
+    updateConfig,
+    refreshConfig,
+    savingConfig,
+    loadingConfig,
+  } = useAppConfig();
 
-  const configFiltrada = useMemo(() => {
-    return config.filter((item) => {
-      const matchSearch =
-        item.parametro.toLowerCase().includes(search.toLowerCase()) ||
-        item.descripcion.toLowerCase().includes(search.toLowerCase()) ||
-        item.valor.toLowerCase().includes(search.toLowerCase());
+  const [form, setForm] = useState(config);
+  const [activeTab, setActiveTab] = useState("marca");
+  const [uploading, setUploading] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-      const matchGrupo = grupoFiltro === "Todos" || item.grupo === grupoFiltro;
+  useEffect(() => {
+    setForm(config);
+  }, [config]);
 
-      return matchSearch && matchGrupo;
-    });
-  }, [config, search, grupoFiltro]);
+  const hiddenCount = useMemo(() => {
+    return Array.isArray(form.hiddenMenuItems) ? form.hiddenMenuItems.length : 0;
+  }, [form.hiddenMenuItems]);
 
-  const activos = config.filter((c) => c.estado === "Activo").length;
-  const pendientes = config.filter((c) => c.estado === "Pendiente integración").length;
-  const seguridad = config.filter((c) => c.grupo === "Auditoría" || c.grupo === "Autenticación").length;
-  const integraciones = config.filter((c) => c.tipo === "Integración").length;
+  function updateField(field, value) {
+    const next = {
+      ...form,
+      [field]: value,
+    };
 
-  function abrirDetalle(item) {
-    setSelectedConfig(item);
-    setModal("detalle");
+    setForm(next);
+
+    if (
+      field === "primaryColor" ||
+      field === "secondaryColor" ||
+      field === "accentColor"
+    ) {
+      setConfig(next);
+    }
   }
 
-  function toggleEstado(id) {
-    setConfig((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              estado: item.estado === "Activo" ? "Pendiente integración" : "Activo",
-            }
-          : item
-      )
+  function isMenuHidden(id) {
+    return form.hiddenMenuItems?.includes(id);
+  }
+
+  function toggleMenuItem(id) {
+    if (id === "configuracion") return;
+
+    const current = Array.isArray(form.hiddenMenuItems)
+      ? form.hiddenMenuItems
+      : [];
+
+    const nextHidden = current.includes(id)
+      ? current.filter((item) => item !== id)
+      : [...current, id];
+
+    updateField("hiddenMenuItems", nextHidden);
+  }
+
+  async function handleIconUpload(e, field, folder) {
+    const file = e.target.files?.[0];
+
+    if (!file) return;
+
+    setUploading(field);
+    setMessage("");
+    setError("");
+
+    try {
+      const uploaded = await uploadConfigIcon(file, folder);
+      updateField(field, uploaded.publicUrl);
+      setMessage("Icono cargado correctamente. Presioná Guardar cambios para aplicar la configuración.");
+    } catch (err) {
+      setError(err.message || "No se pudo cargar el icono.");
+    } finally {
+      setUploading("");
+      e.target.value = "";
+    }
+  }
+
+  function restoreDefaults() {
+    setForm(defaultAppConfig);
+    setConfig(defaultAppConfig);
+    setMessage("");
+    setError("");
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+
+    setMessage("");
+    setError("");
+
+    try {
+      await updateConfig(form);
+      setMessage("Configuración guardada correctamente.");
+    } catch (err) {
+      setError(err.message || "No se pudo guardar la configuración.");
+    }
+  }
+
+  async function handleReload() {
+    setMessage("");
+    setError("");
+
+    try {
+      await refreshConfig();
+      setMessage("Configuración recargada desde Supabase.");
+    } catch {
+      setError("No se pudo recargar la configuración.");
+    }
+  }
+
+  if (loadingConfig) {
+    return (
+      <section className="page">
+        <div className="dashboard-loader">
+          <Settings className="dashboard-loader-icon" size={28} />
+          <h3>Cargando configuración</h3>
+          <p>Obteniendo parámetros generales de la plataforma.</p>
+        </div>
+      </section>
     );
-  }
-
-  function actualizarValor(id, nuevoValor) {
-    setConfig((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, valor: nuevoValor } : item))
-    );
-  }
-
-  function restaurarDemo() {
-    setConfig(initialConfig);
   }
 
   return (
@@ -117,108 +158,472 @@ export default function Configuracion() {
       <div className="page-header">
         <div>
           <h2>Configuración</h2>
-          <p>Parámetros generales, seguridad, numeración e integración futura con Supabase.</p>
+          <p>
+            Personalización general de marca, login, footer, colores, menú
+            lateral y avisos globales.
+          </p>
         </div>
 
         <div className="header-actions">
-          <button className="secondary-button" onClick={restaurarDemo}>
-            <RotateCcw size={16} /> Restaurar demo
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={handleReload}
+            disabled={savingConfig || uploading}
+          >
+            <RotateCcw size={16} />
+            Recargar
           </button>
 
-          <button className="primary-button">
-            <Save size={16} /> Guardar cambios
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={restoreDefaults}
+            disabled={savingConfig || uploading}
+          >
+            <RotateCcw size={16} />
+            Restaurar
+          </button>
+
+          <button
+            type="button"
+            className="primary-button"
+            onClick={handleSubmit}
+            disabled={savingConfig || uploading}
+          >
+            <Save size={16} />
+            {savingConfig ? "Guardando..." : "Guardar cambios"}
           </button>
         </div>
       </div>
 
-      <div className="stats-grid small">
-        <div className="stat-card"><div><span>Parámetros activos</span><strong>{activos}</strong><small>Configuraciones habilitadas</small></div></div>
-        <div className="stat-card"><div><span>Pendientes</span><strong>{pendientes}</strong><small>Integraciones futuras</small></div></div>
-        <div className="stat-card"><div><span>Seguridad</span><strong>{seguridad}</strong><small>Auth, roles y auditoría</small></div></div>
-        <div className="stat-card"><div><span>Integraciones</span><strong>{integraciones}</strong><small>Servicios externos previstos</small></div></div>
-      </div>
-
-      <div className="filters-bar">
-        <input
-          placeholder="Buscar parámetro, descripción o valor..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-
-        <select value={grupoFiltro} onChange={(e) => setGrupoFiltro(e.target.value)}>
-          <option>Todos</option>
-          <option>Sistema</option>
-          <option>Usuarios y permisos</option>
-          <option>Documentos</option>
-          <option>Autenticación</option>
-          <option>Numeración</option>
-          <option>Auditoría</option>
-        </select>
-      </div>
-
-      <div className="table-card">
-        <table>
-          <thead>
-            <tr>
-              <th>Grupo</th>
-              <th>Parámetro</th>
-              <th>Descripción</th>
-              <th>Valor</th>
-              <th>Tipo</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {configFiltrada.map((item) => (
-              <tr key={item.id}>
-                <td>{item.grupo}</td>
-                <td>{item.parametro}</td>
-                <td>{item.descripcion}</td>
-                <td>
-                  <input
-                    className="inline-input"
-                    value={item.valor}
-                    onChange={(e) => actualizarValor(item.id, e.target.value)}
-                  />
-                </td>
-                <td>{item.tipo}</td>
-                <td>
-                  <span className={`status-badge ${item.estado.toLowerCase().replaceAll(" ", "-")}`}>
-                    {item.estado}
-                  </span>
-                </td>
-                <td>
-                  <div className="table-actions">
-                    <button onClick={() => abrirDetalle(item)}><Eye size={16} /></button>
-                    <button onClick={() => toggleEstado(item.id)}><ShieldCheck size={16} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-
-            {configFiltrada.length === 0 && (
-              <tr><td colSpan="7">No se encontraron parámetros.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {modal === "detalle" && selectedConfig && (
-        <Modal title={`Configuración: ${selectedConfig.parametro}`} onClose={() => setModal(null)}>
-          <div className="detail-grid">
-            <div><span>Grupo</span><strong>{selectedConfig.grupo}</strong></div>
-            <div><span>Tipo</span><strong>{selectedConfig.tipo}</strong></div>
-            <div><span>Valor actual</span><strong>{selectedConfig.valor}</strong></div>
-            <div><span>Estado</span><strong>{selectedConfig.estado}</strong></div>
-            <div className="full"><span>Descripción</span><strong>{selectedConfig.descripcion}</strong></div>
-            <div className="full document-preview">
-              En producción, este parámetro se guardará en Supabase y podrá quedar auditado por usuario, fecha y módulo.
-            </div>
-          </div>
-        </Modal>
+      {(message || error) && (
+        <div className={`config-message ${error ? "error" : "success"}`}>
+          {error || message}
+        </div>
       )}
+
+      <div className="config-layout">
+        <aside className="config-tabs">
+          <button
+            type="button"
+            className={activeTab === "marca" ? "active" : ""}
+            onClick={() => setActiveTab("marca")}
+          >
+            <ImageUp size={17} />
+            Marca
+          </button>
+
+          <button
+            type="button"
+            className={activeTab === "colores" ? "active" : ""}
+            onClick={() => setActiveTab("colores")}
+          >
+            <Palette size={17} />
+            Colores
+          </button>
+
+          <button
+            type="button"
+            className={activeTab === "menu" ? "active" : ""}
+            onClick={() => setActiveTab("menu")}
+          >
+            <Eye size={17} />
+            Sidebar
+          </button>
+
+          <button
+            type="button"
+            className={activeTab === "avisos" ? "active" : ""}
+            onClick={() => setActiveTab("avisos")}
+          >
+            <Settings size={17} />
+            Avisos y footer
+          </button>
+        </aside>
+
+        <form className="config-grid" onSubmit={handleSubmit}>
+          {activeTab === "marca" && (
+            <>
+              <section className="config-panel">
+                <h3>Marca de la plataforma</h3>
+                <p>
+                  Define el nombre visible, subtítulo e icono principal del
+                  sistema.
+                </p>
+
+                <div className="config-form-grid">
+                  <label>
+                    Nombre de la plataforma
+                    <input
+                      value={form.platformName || ""}
+                      onChange={(e) =>
+                        updateField("platformName", e.target.value)
+                      }
+                      placeholder="Genetics"
+                    />
+                  </label>
+
+                  <label>
+                    Subtítulo / descripción
+                    <input
+                      value={form.platformSubtitle || ""}
+                      onChange={(e) =>
+                        updateField("platformSubtitle", e.target.value)
+                      }
+                      placeholder="Laboratorio clínico"
+                    />
+                  </label>
+
+                  <div className="config-upload-card full">
+                    <div className="config-preview-card">
+                      {form.platformIconUrl ? (
+                        <img
+                          src={form.platformIconUrl}
+                          alt="Icono plataforma"
+                        />
+                      ) : (
+                        <div className="config-preview-icon">
+                          <Upload size={20} />
+                        </div>
+                      )}
+
+                      <div>
+                        <strong>
+                          {form.platformName || "Nombre de plataforma"}
+                        </strong>
+                        <span>
+                          {form.platformSubtitle || "Subtítulo de plataforma"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <label className="file-upload-button">
+                      <ImageUp size={16} />
+                      {uploading === "platformIconUrl"
+                        ? "Subiendo..."
+                        : "Cargar icono de plataforma"}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                        onChange={(e) =>
+                          handleIconUpload(
+                            e,
+                            "platformIconUrl",
+                            "platform-icons"
+                          )
+                        }
+                        disabled={Boolean(uploading)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </section>
+
+              <section className="config-panel">
+                <h3>Pantalla de login</h3>
+                <p>
+                  Cambia el título, descripción e icono que se muestran antes de
+                  iniciar sesión.
+                </p>
+
+                <div className="config-form-grid">
+                  <label>
+                    Nombre en login
+                    <input
+                      value={form.loginTitle || ""}
+                      onChange={(e) =>
+                        updateField("loginTitle", e.target.value)
+                      }
+                      placeholder="GENETICS"
+                    />
+                  </label>
+
+                  <label>
+                    Texto descriptivo de login
+                    <input
+                      value={form.loginSubtitle || ""}
+                      onChange={(e) =>
+                        updateField("loginSubtitle", e.target.value)
+                      }
+                      placeholder="Plataforma de gestión para laboratorio clínico"
+                    />
+                  </label>
+
+                  <label>
+                    Texto inferior del login
+                    <input
+                      value={form.loginFooterText || ""}
+                      onChange={(e) =>
+                        updateField("loginFooterText", e.target.value)
+                      }
+                      placeholder="Genetics · Versión"
+                    />
+                  </label>
+
+                  <label>
+                    Texto destacado inferior
+                    <input
+                      value={form.loginFooterHighlight || ""}
+                      onChange={(e) =>
+                        updateField("loginFooterHighlight", e.target.value)
+                      }
+                      placeholder="SUPABASE"
+                    />
+                  </label>
+
+                  <div className="config-upload-card full">
+                    <div className="config-preview-card">
+                      {form.loginIconUrl || form.platformIconUrl ? (
+                        <img
+                          src={form.loginIconUrl || form.platformIconUrl}
+                          alt="Icono login"
+                        />
+                      ) : (
+                        <div className="config-preview-icon">
+                          <Upload size={20} />
+                        </div>
+                      )}
+
+                      <div>
+                        <strong>{form.loginTitle || "Título de login"}</strong>
+                        <span>
+                          {form.loginSubtitle || "Descripción de login"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <label className="file-upload-button">
+                      <ImageUp size={16} />
+                      {uploading === "loginIconUrl"
+                        ? "Subiendo..."
+                        : "Cargar icono de login"}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                        onChange={(e) =>
+                          handleIconUpload(e, "loginIconUrl", "login-icons")
+                        }
+                        disabled={Boolean(uploading)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
+
+          {activeTab === "colores" && (
+            <section className="config-panel">
+              <h3>Colores generales</h3>
+              <p>
+                Estos colores modifican botones principales, menú activo,
+                acentos y detalles visuales generales.
+              </p>
+
+              <div className="config-form-grid">
+                <label>
+                  Color primario
+                  <input
+                    type="color"
+                    value={form.primaryColor || defaultAppConfig.primaryColor}
+                    onChange={(e) =>
+                      updateField("primaryColor", e.target.value)
+                    }
+                  />
+                </label>
+
+                <label>
+                  Color secundario
+                  <input
+                    type="color"
+                    value={
+                      form.secondaryColor || defaultAppConfig.secondaryColor
+                    }
+                    onChange={(e) =>
+                      updateField("secondaryColor", e.target.value)
+                    }
+                  />
+                </label>
+
+                <label>
+                  Color de acento
+                  <input
+                    type="color"
+                    value={form.accentColor || defaultAppConfig.accentColor}
+                    onChange={(e) => updateField("accentColor", e.target.value)}
+                  />
+                </label>
+
+                <div className="config-color-preview">
+                  <span style={{ background: form.primaryColor }} />
+                  <span style={{ background: form.secondaryColor }} />
+                  <span style={{ background: form.accentColor }} />
+                </div>
+              </div>
+
+              <div className="config-theme-preview">
+                <button type="button" className="primary-button">
+                  Botón principal
+                </button>
+
+                <button type="button" className="secondary-button">
+                  Botón secundario
+                </button>
+
+                <div className="config-mini-sidebar">
+                  <div className="active">Menú activo</div>
+                  <div>Menú normal</div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {activeTab === "menu" && (
+            <section className="config-panel">
+              <h3>Visibilidad del sidebar</h3>
+              <p>
+                Oculta módulos completos del menú lateral para todos los
+                usuarios. Configuración no puede ocultarse desde esta pantalla.
+              </p>
+
+              <div className="config-summary">
+                <strong>{hiddenCount}</strong>
+                <span>módulos ocultos globalmente</span>
+              </div>
+
+              <div className="menu-visibility-grid">
+                {menuOptions.map((item) => {
+                  const hidden = isMenuHidden(item.id);
+                  const locked = item.id === "configuracion";
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`menu-visibility-item ${locked ? "locked" : ""
+                        }`}
+                    >
+                      <div>
+                        <span>{item.label}</span>
+                        <small>
+                          {locked
+                            ? "Siempre visible para administración"
+                            : hidden
+                              ? "Oculto para todos"
+                              : "Visible"}
+                        </small>
+                      </div>
+
+                      <button
+                        type="button"
+                        className={`visibility-toggle ${hidden ? "hidden" : ""
+                          }`}
+                        onClick={() => toggleMenuItem(item.id)}
+                        disabled={locked}
+                        title={hidden ? "Mostrar módulo" : "Ocultar módulo"}
+                      >
+                        {hidden ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {activeTab === "avisos" && (
+            <>
+              <section className="config-panel">
+                <h3>Footer</h3>
+                <p>Texto inferior global de la plataforma.</p>
+
+                <div className="config-form-grid">
+                  <label>
+                    Texto de footer
+                    <input
+                      value={form.footerText || ""}
+                      onChange={(e) =>
+                        updateField("footerText", e.target.value)
+                      }
+                      placeholder="Creado por TECNEW"
+                    />
+                  </label>
+
+                  <label>
+                    Ambiente
+                    <input
+                      value={form.footerEnvironment || ""}
+                      onChange={(e) =>
+                        updateField("footerEnvironment", e.target.value)
+                      }
+                      placeholder="Demo / Producción"
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="config-panel">
+                <h3>Aviso flotante por falta de pago</h3>
+                <p>
+                  Permite mostrar un aviso global dentro de la plataforma sin
+                  bloquear completamente el uso.
+                </p>
+
+                <div className="config-form-grid">
+                  <label className="config-switch-row full">
+                    <div>
+                      <strong>Mostrar aviso flotante</strong>
+                      <span>
+                        Cuando está activo, todos los usuarios ven el mensaje.
+                      </span>
+                    </div>
+
+                    <input
+                      className="switch-input"
+                      type="checkbox"
+                      checked={Boolean(form.paymentNoticeEnabled)}
+                      onChange={(e) =>
+                        updateField("paymentNoticeEnabled", e.target.checked)
+                      }
+                    />
+                  </label>
+
+                  <label className="full">
+                    Texto del aviso
+                    <textarea
+                      value={form.paymentNoticeText || ""}
+                      onChange={(e) =>
+                        updateField("paymentNoticeText", e.target.value)
+                      }
+                      placeholder="Mensaje administrativo..."
+                    />
+                  </label>
+                </div>
+              </section>
+            </>
+          )}
+
+          <div className="config-sticky-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={restoreDefaults}
+              disabled={savingConfig || uploading}
+            >
+              Restaurar valores por defecto
+            </button>
+
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={savingConfig || uploading}
+            >
+              <Save size={16} />
+              {savingConfig ? "Guardando..." : "Guardar configuración"}
+            </button>
+          </div>
+        </form>
+      </div>
     </section>
   );
 }
