@@ -1,6 +1,6 @@
-export default function StatCard({ title, value, detail, icon }) {
+export default function StatCard({ title, value, detail, icon, dataTour }) {
   return (
-    <div className="stat-card">
+    <div className="stat-card" data-tour={dataTour}>
       <div className="stat-icon">{icon}</div>
       <div>
         <span>{title}</span>

@@ -1298,7 +1298,7 @@ export default function Bancos({ selectedSede, sedeId }) {
 
   return (
     <section className="page">
-      <div className="page-header">
+      <div className="page-header" data-tour="bancos-header">
         <div>
           <h2>Bancos y conciliación</h2>
           <p>
@@ -1355,14 +1355,14 @@ export default function Bancos({ selectedSede, sedeId }) {
             <Plus size={16} /> Nueva cuenta
           </button>
 
-          <button className="primary-button" onClick={openNuevoMovimiento}>
+          <button className="primary-button" onClick={openNuevoMovimiento} data-tour="bancos-nuevo">
             <Plus size={16} /> Nuevo movimiento
           </button>
         </div>
       </div>
 
-      <div className="stats-grid small">
-        <div className="stat-card">
+      <div className="stats-grid small" data-tour="bancos-resumen">
+        <div className="stat-card" data-tour="bancos-resumen-ingresos">
           <div>
             <span>Ingresos bancarios</span>
             <strong>{formatMoney(totalIngresos)}</strong>
@@ -1372,7 +1372,7 @@ export default function Bancos({ selectedSede, sedeId }) {
           </div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card" data-tour="bancos-resumen-egresos">
           <div>
             <span>Egresos bancarios</span>
             <strong>{formatMoney(totalEgresos)}</strong>
@@ -1382,7 +1382,7 @@ export default function Bancos({ selectedSede, sedeId }) {
           </div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card" data-tour="bancos-resumen-saldo">
           <div>
             <span>Saldo operativo</span>
             <strong>{formatMoney(saldoOperativo)}</strong>
@@ -1399,11 +1399,12 @@ export default function Bancos({ selectedSede, sedeId }) {
         </div>
       </div>
 
-      <div className="filters-bar">
+      <div className="filters-bar" data-tour="bancos-filtros">
         <input
           placeholder="Buscar por cuenta, descripción, sede u origen..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          data-tour="bancos-busqueda"
         />
 
         <label className="filter-field">
@@ -1517,7 +1518,7 @@ export default function Bancos({ selectedSede, sedeId }) {
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: 18 }}>
+      <div className="panel" style={{ marginTop: 18 }} data-tour="bancos-tabla">
         <h3>Movimientos bancarios</h3>
 
         <div className="table-card">
@@ -1545,7 +1546,7 @@ export default function Bancos({ selectedSede, sedeId }) {
               )}
 
               {!loading &&
-                movimientosFiltrados.map((mov) => {
+                movimientosFiltrados.map((mov, index) => {
                   const vinculado = mov.ingresoId || mov.egresoId;
                   const sugerenciaAuto = sugerenciasConciliacionAuto.find(
                     (sug) => sug.movimiento.id === mov.id
@@ -1599,7 +1600,7 @@ export default function Bancos({ selectedSede, sedeId }) {
                         )}
                       </td>
                       <td>
-                        <div className="table-actions">
+                        <div className="table-actions" data-tour={index === 0 ? "bancos-acciones" : undefined}>
                           {!vinculado && (
                             <button title="Conciliar" onClick={() => openConciliacion(mov)}>
                               <Link2 size={16} />

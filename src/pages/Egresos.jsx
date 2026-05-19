@@ -1121,7 +1121,7 @@ export default function Egresos({ selectedSede, sedeId }) {
 
   return (
     <section className="page">
-      <div className="page-header">
+      <div className="page-header" data-tour="egresos-header">
         <div>
           <h2>Egresos</h2>
           <p>Control de proveedores, gastos operativos, reactivos e insumos.</p>
@@ -1153,14 +1153,14 @@ export default function Egresos({ selectedSede, sedeId }) {
             {importandoFactura ? "Leyendo factura..." : "Importar factura PDF"}
           </button>
 
-          <button className="primary-button" onClick={openNuevoEgreso}>
+          <button className="primary-button" onClick={openNuevoEgreso} data-tour="egresos-nuevo">
             <Plus size={16} /> Nuevo egreso
           </button>
         </div>
       </div>
 
       <div className="stats-grid small">
-        <div className="stat-card">
+        <div className="stat-card" data-tour="egresos-resumen-total">
           <div>
             <span>Total egresos</span>
             <strong>{formatMoney(totalFiltrado)}</strong>
@@ -1168,7 +1168,7 @@ export default function Egresos({ selectedSede, sedeId }) {
           </div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card" data-tour="egresos-resumen-pagado">
           <div>
             <span>Total pagado</span>
             <strong>{formatMoney(totalPagado)}</strong>
@@ -1176,7 +1176,7 @@ export default function Egresos({ selectedSede, sedeId }) {
           </div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card" data-tour="egresos-resumen-pendiente">
           <div>
             <span>Pendiente de pago</span>
             <strong>{formatMoney(totalPendiente)}</strong>
@@ -1193,11 +1193,12 @@ export default function Egresos({ selectedSede, sedeId }) {
         </div>
       </div>
 
-      <div className="filters-bar">
+      <div className="filters-bar" data-tour="egresos-filtros">
         <input
           placeholder="Buscar por proveedor, sociedad, sede, concepto, categoría o comprobante..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          data-tour="egresos-busqueda"
         />
 
         <label className="filter-field">
@@ -1268,7 +1269,7 @@ export default function Egresos({ selectedSede, sedeId }) {
           <FileSpreadsheet size={15} /> Excel
         </button>
 
-        <button className="primary-button" onClick={exportarPDF} disabled={loading}>
+        <button className="primary-button" onClick={exportarPDF} disabled={loading} data-tour="egresos-exportar">
           <FileText size={15} /> PDF
         </button>
       </div>
@@ -1311,7 +1312,7 @@ export default function Egresos({ selectedSede, sedeId }) {
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: 18 }}>
+      <div className="panel" style={{ marginTop: 18 }} data-tour="egresos-tabla">
         <h3>Detalle de egresos</h3>
 
         <div className="table-card">
@@ -1338,7 +1339,7 @@ export default function Egresos({ selectedSede, sedeId }) {
               )}
 
               {!loading &&
-                egresosFiltrados.map((item) => (
+                egresosFiltrados.map((item, index) => (
                   <tr key={item.id}>
                     <td>{formatDate(getFechaReal(item))}</td>
                     <td>{item.proveedor}</td>
@@ -1372,7 +1373,7 @@ export default function Egresos({ selectedSede, sedeId }) {
                       </span>
                     </td>
                     <td>
-                      <div className="table-actions">
+                      <div className="table-actions" data-tour={index === 0 ? "egresos-acciones" : undefined}>
                         {item.datosFiscales?.qrUrl && (
                           <button
                             title="Ver comprobante en AFIP"

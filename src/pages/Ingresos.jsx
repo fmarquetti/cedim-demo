@@ -928,74 +928,92 @@ export default function Ingresos({ selectedSede, sedeId }) {
 
   return (
     <section className="page">
-      <div className="page-header">
+      <div className="page-header" data-tour="ingresos-header">
         <div>
           <h2>Ingresos</h2>
           <p>Registro de cobros, obras sociales, prepagas y pagos particulares.</p>
         </div>
         <div className="header-actions">
           <input ref={facturaInputRef} type="file" accept="application/pdf" hidden onChange={importarFacturaFiscal} />
-          <button className="secondary-button" onClick={loadData} disabled={loading}><RefreshCw size={16} /> Actualizar</button>
-          <button className="secondary-button" onClick={() => facturaInputRef.current?.click()} disabled={importandoFactura}>
+          <button
+            className="secondary-button"
+            onClick={loadData}
+            disabled={loading}
+            data-tour="ingresos-actualizar"
+          >
+            <RefreshCw size={16} /> Actualizar
+          </button>
+          <button
+            className="secondary-button"
+            onClick={() => facturaInputRef.current?.click()}
+            disabled={importandoFactura}
+            data-tour="ingresos-importar-factura"
+          >
             <Upload size={16} />{importandoFactura ? "Leyendo factura..." : "Importar factura PDF"}
           </button>
-          <button className="primary-button" onClick={() => setModal("nuevo")}><Plus size={16} /> Nuevo ingreso</button>
+          <button
+            className="primary-button"
+            onClick={() => setModal("nuevo")}
+            data-tour="ingresos-nuevo"
+          >
+            <Plus size={16} /> Nuevo ingreso
+          </button>
         </div>
       </div>
 
-      <div className="stats-grid small">
-        <div className="stat-card"><div>
+      <div className="stats-grid small" data-tour="ingresos-resumen">
+        <div className="stat-card" data-tour="ingresos-resumen-total"><div>
           <span>Total ingresos</span>
           <strong>{formatMoney(totalGeneral)}</strong>
           <small>{ingresosFiltrados.length} registros filtrados</small>
         </div></div>
-        <div className="stat-card"><div>
+        <div className="stat-card" data-tour="ingresos-resumen-cobrado"><div>
           <span>Total cobrado</span>
           <strong>{formatMoney(totalCobrado)}</strong>
           <small>Ingresos confirmados</small>
         </div></div>
-        <div className="stat-card"><div>
+        <div className="stat-card" data-tour="ingresos-resumen-pendiente"><div>
           <span>Pendiente de cobro</span>
           <strong>{formatMoney(totalPendiente)}</strong>
           <small>Ingresos aún no acreditados</small>
         </div></div>
-        <div className="stat-card"><div>
+        <div className="stat-card" data-tour="ingresos-resumen-facturas"><div>
           <span>Facturas fiscales</span>
           <strong>{ingresosFiscales.length}</strong>
           <small>Con QR AFIP disponible</small>
         </div></div>
       </div>
 
-      <div className="filters-bar">
-        <input placeholder="Buscar por concepto, sociedad, sede, origen o comprobante..." value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="filters-bar" data-tour="ingresos-filtros">
+        <input placeholder="Buscar por concepto, sociedad, sede, origen o comprobante..." value={search} onChange={(e) => setSearch(e.target.value)} data-tour="ingresos-busqueda" />
         <label className="filter-field"><span>Estado</span>
-          <select value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)}>
+          <select value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)} data-tour="ingresos-filtro-estado">
             <option>Todos</option><option>Cobrado</option><option>Pendiente</option>
           </select>
         </label>
         <label className="filter-field"><span>Origen</span>
-          <select value={origenFiltro} onChange={(e) => setOrigenFiltro(e.target.value)}>
+          <select value={origenFiltro} onChange={(e) => setOrigenFiltro(e.target.value)} data-tour="ingresos-filtro-origen">
             <option>Todos</option>
             {origenes.map((origen) => <option key={origen} value={origen}>{origen}</option>)}
           </select>
         </label>
         <label className="filter-field"><span>Cobro</span>
-          <select value={cobroFiltro} onChange={(e) => setCobroFiltro(e.target.value)}>
+          <select value={cobroFiltro} onChange={(e) => setCobroFiltro(e.target.value)} data-tour="ingresos-filtro-cobro">
             <option>Todos</option>
             {formasCobro.map((forma) => <option key={forma} value={forma}>{forma}</option>)}
           </select>
         </label>
-        <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
-        <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-        <button className="secondary-button" onClick={() => aplicarFiltroRapido("hoy")}>Hoy</button>
-        <button className="secondary-button" onClick={() => aplicarFiltroRapido("mes")}>Este mes</button>
-        <button className="secondary-button" onClick={() => aplicarFiltroRapido("pendientes")}>Pendientes</button>
-        <button className="secondary-button" onClick={() => aplicarFiltroRapido("limpiar")}>Limpiar</button>
-        <button className="secondary-button" onClick={exportarExcel} disabled={loading}><FileSpreadsheet size={15} /> Excel</button>
-        <button className="primary-button" onClick={exportarPDF} disabled={loading}><FileText size={15} /> PDF</button>
+        <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} data-tour="ingresos-filtro-desde" />
+        <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} data-tour="ingresos-filtro-hasta" />
+        <button className="secondary-button" onClick={() => aplicarFiltroRapido("hoy")} data-tour="ingresos-filtro-hoy">Hoy</button>
+        <button className="secondary-button" onClick={() => aplicarFiltroRapido("mes")} data-tour="ingresos-filtro-mes">Este mes</button>
+        <button className="secondary-button" onClick={() => aplicarFiltroRapido("pendientes")} data-tour="ingresos-filtro-pendientes">Pendientes</button>
+        <button className="secondary-button" onClick={() => aplicarFiltroRapido("limpiar")} data-tour="ingresos-filtro-limpiar">Limpiar</button>
+        <button className="secondary-button" onClick={exportarExcel} disabled={loading} data-tour="ingresos-exportar-excel"><FileSpreadsheet size={15} /> Excel</button>
+        <button className="primary-button" onClick={exportarPDF} disabled={loading} data-tour="ingresos-exportar-pdf"><FileText size={15} /> PDF</button>
       </div>
 
-      <div className="panel">
+      <div className="panel" data-tour="ingresos-resumen-origen">
         <h3>Resumen por origen</h3>
         <div className="table-card">
           <table>
@@ -1020,7 +1038,7 @@ export default function Ingresos({ selectedSede, sedeId }) {
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: 18 }}>
+      <div className="panel" style={{ marginTop: 18 }} data-tour="ingresos-tabla">
         <h3>Detalle de ingresos</h3>
         <div className="table-card">
           <table>
@@ -1033,7 +1051,7 @@ export default function Ingresos({ selectedSede, sedeId }) {
             </thead>
             <tbody>
               {loading && <tr><td colSpan="10">Cargando ingresos...</td></tr>}
-              {!loading && ingresosFiltrados.map((item) => (
+              {!loading && ingresosFiltrados.map((item, index) => (
                 <tr key={item.id}>
                   <td>{formatDate(getFechaReal(item))}</td>
                   <td>
@@ -1062,7 +1080,7 @@ export default function Ingresos({ selectedSede, sedeId }) {
                   <td><span className={`status-badge ${item.estado.toLowerCase()}`}>{item.estado}</span></td>
                   <td>{item.comprobante || "-"}</td>
                   <td>
-                    <div className="table-actions">
+                    <div className="table-actions" data-tour={index === 0 ? "ingresos-acciones" : undefined}>
                       {item.datosFiscales?.qrUrl && (
                         <button title="Ver comprobante en AFIP" onClick={() => verAfip(item.datosFiscales.qrUrl)}>
                           <ExternalLink size={16} />

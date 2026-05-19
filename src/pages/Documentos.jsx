@@ -441,7 +441,7 @@ export default function Documentos({ selectedSede, sedeId }) {
 
   return (
     <section className="page">
-      <div className="page-header">
+      <div className="page-header" data-tour="documentos-header">
         <div>
           <h2>Documentos</h2>
           <p>
@@ -476,7 +476,7 @@ export default function Documentos({ selectedSede, sedeId }) {
             {importandoFactura ? "Leyendo factura..." : "Importar factura PDF"}
           </button>
 
-          <button className="primary-button" onClick={openNuevo}>
+          <button className="primary-button" onClick={openNuevo} data-tour="documentos-subir">
             <Plus size={16} /> Subir documento
           </button>
         </div>
@@ -516,14 +516,15 @@ export default function Documentos({ selectedSede, sedeId }) {
         </div>
       </div>
 
-      <div className="filters-bar">
+      <div className="filters-bar" data-tour="documentos-filtros">
         <input
           placeholder="Buscar por descripción, entidad, sede o archivo..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          data-tour="documentos-busqueda"
         />
 
-        <select value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)}>
+        <select value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)} data-tour="documentos-tipo">
           <option>Todos</option>
           <option>Factura</option>
           <option>Comprobante</option>
@@ -533,7 +534,7 @@ export default function Documentos({ selectedSede, sedeId }) {
         </select>
       </div>
 
-      <div className="table-card">
+      <div className="table-card" data-tour="documentos-tabla">
         <table>
           <thead>
             <tr>
@@ -556,7 +557,7 @@ export default function Documentos({ selectedSede, sedeId }) {
             )}
 
             {!loading &&
-              documentosFiltrados.map((item) => (
+              documentosFiltrados.map((item, index) => (
                 <tr key={item.id}>
                   <td>{item.fecha}</td>
                   <td>{item.tipo}</td>
@@ -570,7 +571,7 @@ export default function Documentos({ selectedSede, sedeId }) {
                     </span>
                   </td>
                   <td>
-                    <div className="table-actions">
+                    <div className="table-actions" data-tour={index === 0 ? "documentos-acciones" : undefined}>
                       <button onClick={() => abrirDetalle(item)} title="Ver detalle">
                         <Eye size={16} />
                       </button>

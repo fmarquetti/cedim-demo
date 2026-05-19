@@ -141,7 +141,7 @@ export default function Sedes({ selectedSede }) {
 
   return (
     <section className="page">
-      <div className="page-header">
+      <div className="page-header" data-tour="sedes-header">
         <div>
           <h2>Sociedades / Sedes</h2>
           <p>
@@ -150,7 +150,7 @@ export default function Sedes({ selectedSede }) {
           </p>
         </div>
 
-        <button className="primary-button" onClick={abrirNuevaSede}>
+        <button className="primary-button" onClick={abrirNuevaSede} data-tour="sedes-nueva">
           <Plus size={16} /> Nueva sede
         </button>
       </div>
@@ -194,6 +194,7 @@ export default function Sedes({ selectedSede }) {
           placeholder="Buscar por sede, sociedad, CUIT, ubicación o responsable..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          data-tour="sedes-busqueda"
         />
 
         <select
@@ -206,7 +207,7 @@ export default function Sedes({ selectedSede }) {
         </select>
       </div>
 
-      <div className="table-card">
+      <div className="table-card" data-tour="sedes-tabla">
         <table>
           <thead>
             <tr>
@@ -229,7 +230,7 @@ export default function Sedes({ selectedSede }) {
             )}
 
             {!loading &&
-              sedesFiltradas.map((item) => (
+              sedesFiltradas.map((item, index) => (
                 <tr key={item.id}>
                   <td>{item.sede}</td>
                   <td>{item.sociedad}</td>
@@ -245,7 +246,7 @@ export default function Sedes({ selectedSede }) {
                     </span>
                   </td>
                   <td>
-                    <div className="table-actions">
+                    <div className="table-actions" data-tour={index === 0 ? "sedes-acciones" : undefined}>
                       <button onClick={() => abrirDetalle(item)}>
                         <Eye size={16} />
                       </button>

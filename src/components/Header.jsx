@@ -53,11 +53,11 @@ export default function Header({
       <div className="topbar-actions">
         <div className="search-box">
           <Search size={16} />
-          <input placeholder="Buscar..." />
+          <input placeholder="Buscar..." data-tour="global-search" />
         </div>
 
         {isAdmin ? (
-          <select value={valorActual} onChange={handleChangeSede}>
+          <select value={valorActual} onChange={handleChangeSede} data-tour="dashboard-sede-selector">
             <option value="todas">Todas las sedes</option>
             {sedes.map((sede) => (
               <option key={sede.id} value={sede.id}>
@@ -66,7 +66,7 @@ export default function Header({
             ))}
           </select>
         ) : (
-          <span className="sede-indicator">Vista: {currentUser.sede}</span>
+          <span className="sede-indicator" data-tour="dashboard-sede-selector">Vista: {currentUser.sede}</span>
         )}
 
         <button className="icon-button">

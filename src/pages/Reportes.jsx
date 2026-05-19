@@ -514,13 +514,13 @@ export default function Reportes({ selectedSede, sedeId }) {
 
   return (
     <section className="page">
-      <div className="page-header">
+      <div className="page-header" data-tour="reportes-header">
         <div>
           <h2>Reportes</h2>
           <p>Informes financieros reales generados desde Supabase.</p>
         </div>
 
-        <button className="secondary-button" onClick={() => loadData(sedeId)} disabled={loading}>
+        <button className="secondary-button" onClick={() => loadData(sedeId)} disabled={loading} data-tour="reportes-generar">
           <RefreshCw size={16} /> Actualizar
         </button>
       </div>
@@ -563,8 +563,8 @@ export default function Reportes({ selectedSede, sedeId }) {
         </div>
       </div>
 
-      <div className="filters-bar">
-        <select value={tipoReporte} onChange={(e) => setTipoReporte(e.target.value)}>
+      <div className="filters-bar" data-tour="reportes-periodo">
+        <select value={tipoReporte} onChange={(e) => setTipoReporte(e.target.value)} data-tour="reportes-tipo">
           <option>Financiero general</option>
           <option>Ingresos y egresos</option>
           <option>Cuentas corrientes</option>
@@ -574,16 +574,16 @@ export default function Reportes({ selectedSede, sedeId }) {
         <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
         <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
 
-        <button className="secondary-button" onClick={exportarExcel} disabled={loading}>
+        <button className="secondary-button" onClick={exportarExcel} disabled={loading} data-tour="reportes-exportar-excel">
           <FileSpreadsheet size={16} /> Exportar Excel
         </button>
 
-        <button className="primary-button" onClick={exportarPDF} disabled={loading}>
+        <button className="primary-button" onClick={exportarPDF} disabled={loading} data-tour="reportes-exportar-pdf">
           <FileText size={16} /> Exportar PDF
         </button>
       </div>
 
-      <div className="panel">
+      <div className="panel" data-tour="reportes-resultados">
         <h3>Resultado por sede</h3>
 
         <div className="table-card">

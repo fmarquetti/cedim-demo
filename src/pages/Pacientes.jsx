@@ -497,7 +497,7 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
 
   return (
     <section className="page">
-      <div className="page-header">
+      <div className="page-header" data-tour="pacientes-header">
         <div>
           <h2>Pacientes y estudios</h2>
           <p>
@@ -515,7 +515,7 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
             <RefreshCw size={16} /> Actualizar
           </button>
 
-          <button className="primary-button" onClick={openNuevo}>
+          <button className="primary-button" onClick={openNuevo} data-tour="pacientes-nuevo">
             <Plus size={16} /> Nueva orden
           </button>
         </div>
@@ -555,11 +555,12 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
         </div>
       </div>
 
-      <div className="filters-bar">
+      <div className="filters-bar" data-tour="pacientes-filtros">
         <input
           placeholder="Buscar por paciente, DNI, estudio, sede, obra social, archivo o link..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          data-tour="pacientes-busqueda"
         />
 
         <select value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)}>
@@ -571,7 +572,7 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
         </select>
       </div>
 
-      <div className="table-card">
+      <div className="table-card" data-tour="pacientes-tabla">
         <table>
           <thead>
             <tr>
@@ -618,7 +619,7 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
             )}
 
             {!loading &&
-              pacientesFiltrados.map((item) => (
+              pacientesFiltrados.map((item, index) => (
                 <tr key={item.id}>
                   <td>{item.fecha}</td>
                   <td>{item.paciente}</td>
@@ -654,7 +655,7 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
                     )}
                   </td>
                   <td>
-                    <div className="table-actions">
+                    <div className="table-actions" data-tour={index === 0 ? "pacientes-acciones" : undefined}>
                       <button onClick={() => abrirDetalle(item)} title="Ver detalle e historial">
                         <Eye size={16} />
                       </button>

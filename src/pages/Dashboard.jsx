@@ -485,7 +485,7 @@ export default function Dashboard({ selectedSede, sedeId }) {
   if (error) {
     return (
       <section className="page">
-        <div className="page-header">
+        <div className="page-header" data-tour="dashboard-header">
           <div>
             <h2>Dashboard principal</h2>
             <p>{error}</p>
@@ -500,7 +500,7 @@ export default function Dashboard({ selectedSede, sedeId }) {
 
   return (
     <section className="page">
-      <div className="page-header">
+      <div className="page-header" data-tour="dashboard-header">
         <div>
           <h2>Dashboard principal</h2>
           <p>Resumen financiero y operativo · {labelPeriodo}</p>
@@ -542,18 +542,20 @@ export default function Dashboard({ selectedSede, sedeId }) {
         )}
       </div>
 
-      <div className="stats-grid">
+      <div className="stats-grid" data-tour="dashboard-kpis">
         <StatCard
           title="Ingresos"
           value={formatMoney(totalIngresos)}
           detail={`${ingresosFiltrados.length} registros`}
           icon={<ArrowDownCircle size={22} />}
+          dataTour="dashboard-kpi-ingresos"
         />
         <StatCard
           title="Egresos"
           value={formatMoney(totalEgresos)}
           detail={`${egresosFiltrados.length} registros`}
           icon={<ArrowUpCircle size={22} />}
+          dataTour="dashboard-kpi-egresos"
         />
         <StatCard
           title="Resultado"
@@ -566,6 +568,7 @@ export default function Dashboard({ selectedSede, sedeId }) {
           value={formatMoney(cajaBancos)}
           detail={`${movimientosFiltrados.length} movimientos`}
           icon={<Wallet size={22} />}
+          dataTour="dashboard-kpi-pendientes"
         />
         <StatCard
           title="A cobrar"
@@ -590,10 +593,11 @@ export default function Dashboard({ selectedSede, sedeId }) {
           value={conciliacionesPendientes.length}
           detail="Movimientos bancarios pendientes"
           icon={<AlertTriangle size={22} />}
+          dataTour="dashboard-kpi-turnos"
         />
       </div>
 
-      <div className="charts-grid">
+      <div className="charts-grid" data-tour="dashboard-graficos">
         <div className="panel">
           <div className="panel-toolbar">
             <h3 className="panel-toolbar-title">
@@ -707,7 +711,7 @@ export default function Dashboard({ selectedSede, sedeId }) {
         </div>
       </div>
 
-      <div className="content-grid">
+      <div className="content-grid" data-tour="dashboard-actividad">
         <div className="panel wide">
           <h3>Resumen por sede</h3>
           <DataTable

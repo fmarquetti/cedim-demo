@@ -481,7 +481,7 @@ export default function Turnos({ selectedSede, sedeId }) {
 
     return (
         <section className="page">
-            <div className="page-header">
+            <div className="page-header" data-tour="turnos-header">
                 <div>
                     <h2>Turnos / Sala de espera</h2>
                     <p>
@@ -502,7 +502,7 @@ export default function Turnos({ selectedSede, sedeId }) {
                         <Monitor size={16} /> Modo TV
                     </button>
 
-                    <button className="primary-button" onClick={openNuevoTurno}>
+                    <button className="primary-button" onClick={openNuevoTurno} data-tour="turnos-nuevo">
                         <Plus size={16} /> Nuevo ingreso
                     </button>
                 </div>
@@ -565,6 +565,7 @@ export default function Turnos({ selectedSede, sedeId }) {
                 <select
                     value={estadoFiltro}
                     onChange={(e) => setEstadoFiltro(e.target.value)}
+                    data-tour="turnos-estado"
                 >
                     {estadoOptions.map((estado) => (
                         <option key={estado}>{estado}</option>
@@ -578,7 +579,7 @@ export default function Turnos({ selectedSede, sedeId }) {
                 </select>
             </div>
 
-            <div className="table-card">
+            <div className="table-card" data-tour="turnos-calendario">
                 <table>
                     <thead>
                         <tr>
@@ -631,7 +632,7 @@ export default function Turnos({ selectedSede, sedeId }) {
                         )}
 
                         {!loading &&
-                            turnosFiltrados.map((turno) => (
+                            turnosFiltrados.map((turno, index) => (
                                 <tr key={turno.id}>
                                     <td>{turno.horaIngreso}</td>
                                     <td>{turno.pacienteNombre}</td>
@@ -651,7 +652,7 @@ export default function Turnos({ selectedSede, sedeId }) {
                                     </td>
                                     <td>{getWaitMinutes(turno.horaIngresoDb)} min</td>
                                     <td>
-                                        <div className="table-actions turnos-actions">
+                                        <div className="table-actions turnos-actions" data-tour={index === 0 ? "turnos-acciones" : undefined}>
                                             {turno.estado === "En espera" && (
                                                 <button
                                                     title="Llamar paciente"

@@ -827,7 +827,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
 
   return (
     <section className="page">
-      <div className="page-header">
+      <div className="page-header" data-tour="cuentas-header">
         <div>
           <h2>Cuentas corrientes</h2>
           <p>
@@ -835,13 +835,13 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
           </p>
         </div>
 
-        <button className="primary-button" onClick={() => setModal("nuevo")}>
+        <button className="primary-button" onClick={() => setModal("nuevo")} data-tour="cuentas-nueva">
           <Plus size={16} /> Registrar Comprobante
         </button>
       </div>
 
-      <div className="stats-grid small">
-        <div className="stat-card">
+      <div className="stats-grid small" data-tour="cuentas-resumen">
+        <div className="stat-card" data-tour="cuentas-resumen-total">
           <div>
             <span>A Cobrar</span>
             <strong>{formatMoney(totalCuentasACobrar)}</strong>
@@ -849,7 +849,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
           </div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card" data-tour="cuentas-resumen-pendiente">
           <div>
             <span>A Pagar</span>
             <strong>{formatMoney(totalCuentasAPagar)}</strong>
@@ -882,11 +882,12 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
         </div>
       </div>
 
-      <div className="filters-bar">
+      <div className="filters-bar" data-tour="cuentas-filtros">
         <input
           placeholder="Buscar por entidad, sede, concepto, comprobante o número..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          data-tour="cuentas-busqueda"
         />
 
         <select value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)}>
@@ -1048,7 +1049,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: 18 }}>
+      <div className="panel" style={{ marginTop: 18 }} data-tour="cuentas-tabla">
         <h3>Historial de movimientos</h3>
 
         <div className="table-card">
@@ -1069,7 +1070,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
             </thead>
 
             <tbody>
-              {movimientosFiltrados.map((item) => (
+              {movimientosFiltrados.map((item, index) => (
                 <tr key={item.id}>
                   <td>{formatDate(item.fecha)}</td>
                   <td>{item.entidad}</td>
@@ -1089,7 +1090,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
                     </span>
                   </td>
                   <td>
-                    <div className="table-actions">
+                    <div className="table-actions" data-tour={index === 0 ? "cuentas-acciones" : undefined}>
                       {item.estado === "Pendiente" && (
                         <button onClick={() => handleAplicar(item.id)}>
                           <CheckCircle size={16} />

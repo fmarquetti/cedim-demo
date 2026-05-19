@@ -24,6 +24,8 @@ import { ToastProvider } from "./components/ToastProvider";
 import { AppConfigProvider } from "./context/AppConfigContext";
 import FloatingNotice from "./components/FloatingNotice";
 
+import DemoTour from "./components/DemoTour";
+
 function getSedeId(selectedSede) {
   if (!selectedSede) return "todas";
 
@@ -117,7 +119,9 @@ function AppContent() {
           onLogout={() => setCurrentUser(null)}
         />
 
-        <div className="page-content">
+        <DemoTour activePage={activePage} currentUser={currentUser} />
+
+        <div className="page-content" data-tour="page-content">
           {getPage(activePage, effectiveSelectedSede, currentUser)}
         </div>
 
