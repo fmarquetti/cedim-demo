@@ -246,6 +246,18 @@ const tourStepsByPage = {
         "Acá se administran los gastos y salidas de dinero. Cada egreso representa un pago, compra, servicio o movimiento económico negativo.",
     },
     {
+      target: '[data-tour="egresos-actualizar"]',
+      title: "Actualizar informaciÃ³n",
+      content:
+        "Este botÃ³n vuelve a consultar los egresos guardados y refresca los datos que ves en pantalla.",
+    },
+    {
+      target: '[data-tour="egresos-importar-factura"]',
+      title: "Importar factura PDF",
+      content:
+        "Permite subir una factura en PDF para que el sistema intente leer sus datos y ayude a cargar el egreso mÃ¡s rÃ¡pido.",
+    },
+    {
       target: '[data-tour="egresos-nuevo"]',
       title: "Nuevo egreso",
       content:
@@ -282,10 +294,70 @@ const tourStepsByPage = {
         "Los filtros permiten reducir la información visible por fecha, estado, categoría, proveedor u otros criterios.",
     },
     {
-      target: '[data-tour="egresos-exportar"]',
-      title: "Exportar información",
+      target: '[data-tour="egresos-filtro-estado"]',
+      title: "Filtro por estado",
       content:
-        "Permite generar archivos o reportes con los egresos filtrados.",
+        "Permite ver todos los egresos o solo los que están pagados o pendientes.",
+    },
+    {
+      target: '[data-tour="egresos-filtro-categoria"]',
+      title: "Filtro por categoría",
+      content:
+        "Sirve para revisar gastos de una categoría específica, como insumos, servicios o proveedores.",
+    },
+    {
+      target: '[data-tour="egresos-filtro-sociedad"]',
+      title: "Filtro por sociedad",
+      content:
+        "Permite limitar el listado a los egresos asociados a una sociedad determinada.",
+    },
+    {
+      target: '[data-tour="egresos-filtro-desde"]',
+      title: "Fecha desde",
+      content:
+        "Define el inicio del período que querés consultar.",
+    },
+    {
+      target: '[data-tour="egresos-filtro-hasta"]',
+      title: "Fecha hasta",
+      content:
+        "Define el final del período que querés consultar.",
+    },
+    {
+      target: '[data-tour="egresos-filtro-hoy"]',
+      title: "Ver egresos de hoy",
+      content:
+        "Aplica rápidamente el filtro para ver solo los egresos del día actual.",
+    },
+    {
+      target: '[data-tour="egresos-filtro-mes"]',
+      title: "Ver egresos del mes",
+      content:
+        "Aplica rápidamente el período del mes actual.",
+    },
+    {
+      target: '[data-tour="egresos-filtro-pendientes"]',
+      title: "Ver pendientes",
+      content:
+        "Muestra los egresos que todavía no fueron marcados como pagados.",
+    },
+    {
+      target: '[data-tour="egresos-filtro-limpiar"]',
+      title: "Limpiar filtros",
+      content:
+        "Quita los filtros rápidos para volver a una vista más general.",
+    },
+    {
+      target: '[data-tour="egresos-exportar-excel"]',
+      title: "Exportar a Excel",
+      content:
+        "Genera un archivo Excel con los egresos filtrados para revisar o trabajar la información fuera del sistema.",
+    },
+    {
+      target: '[data-tour="egresos-exportar-pdf"]',
+      title: "Exportar a PDF",
+      content:
+        "Genera un reporte PDF con los egresos filtrados, listo para guardar, imprimir o compartir.",
     },
     {
       target: '[data-tour="egresos-tabla"]',
@@ -423,10 +495,10 @@ const tourStepsByPage = {
         "Permite seleccionar desde qué fecha y hasta qué fecha se quiere analizar la información.",
     },
     {
-      target: '[data-tour="reportes-sede"]',
+      target: '[data-tour="dashboard-sede-selector"]',
       title: "Filtro por sede",
       content:
-        "Permite generar reportes de una sede específica o de todas las sedes disponibles.",
+        "El selector global de sede permite analizar reportes de todas las sedes disponibles o enfocarse en una sede específica.",
     },
     {
       target: '[data-tour="reportes-tipo"]',

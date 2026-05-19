@@ -1140,6 +1140,7 @@ export default function Egresos({ selectedSede, sedeId }) {
             className="secondary-button"
             onClick={() => loadData(sedeId)}
             disabled={loading}
+            data-tour="egresos-actualizar"
           >
             <RefreshCw size={16} /> Actualizar
           </button>
@@ -1148,6 +1149,7 @@ export default function Egresos({ selectedSede, sedeId }) {
             className="secondary-button"
             onClick={() => facturaInputRef.current?.click()}
             disabled={importandoFactura}
+            data-tour="egresos-importar-factura"
           >
             <Upload size={16} />
             {importandoFactura ? "Leyendo factura..." : "Importar factura PDF"}
@@ -1203,7 +1205,7 @@ export default function Egresos({ selectedSede, sedeId }) {
 
         <label className="filter-field">
           <span>Estado</span>
-          <select value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)}>
+          <select value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)} data-tour="egresos-filtro-estado">
             <option>Todos</option>
             <option>Pagado</option>
             <option>Pendiente</option>
@@ -1215,6 +1217,7 @@ export default function Egresos({ selectedSede, sedeId }) {
           <select
             value={categoriaFiltro}
             onChange={(e) => setCategoriaFiltro(e.target.value)}
+            data-tour="egresos-filtro-categoria"
           >
             <option>Todas</option>
             {CATEGORIAS.map((categoria) => (
@@ -1233,6 +1236,7 @@ export default function Egresos({ selectedSede, sedeId }) {
           <select
             value={sociedadFiltro}
             onChange={(e) => setSociedadFiltro(e.target.value)}
+            data-tour="egresos-filtro-sociedad"
           >
             <option>Todas</option>
             {sociedades.map((sociedad) => (
@@ -1243,33 +1247,34 @@ export default function Egresos({ selectedSede, sedeId }) {
           </select>
         </label>
 
-        <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
-        <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+        <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} data-tour="egresos-filtro-desde" />
+        <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} data-tour="egresos-filtro-hasta" />
 
-        <button className="secondary-button" onClick={() => aplicarFiltroRapido("hoy")}>
+        <button className="secondary-button" onClick={() => aplicarFiltroRapido("hoy")} data-tour="egresos-filtro-hoy">
           Hoy
         </button>
 
-        <button className="secondary-button" onClick={() => aplicarFiltroRapido("mes")}>
+        <button className="secondary-button" onClick={() => aplicarFiltroRapido("mes")} data-tour="egresos-filtro-mes">
           Este mes
         </button>
 
         <button
           className="secondary-button"
           onClick={() => aplicarFiltroRapido("pendientes")}
+          data-tour="egresos-filtro-pendientes"
         >
           Pendientes
         </button>
 
-        <button className="secondary-button" onClick={() => aplicarFiltroRapido("limpiar")}>
+        <button className="secondary-button" onClick={() => aplicarFiltroRapido("limpiar")} data-tour="egresos-filtro-limpiar">
           Limpiar
         </button>
 
-        <button className="secondary-button" onClick={exportarExcel} disabled={loading}>
+        <button className="secondary-button" onClick={exportarExcel} disabled={loading} data-tour="egresos-exportar-excel">
           <FileSpreadsheet size={15} /> Excel
         </button>
 
-        <button className="primary-button" onClick={exportarPDF} disabled={loading} data-tour="egresos-exportar">
+        <button className="primary-button" onClick={exportarPDF} disabled={loading} data-tour="egresos-exportar-pdf">
           <FileText size={15} /> PDF
         </button>
       </div>
