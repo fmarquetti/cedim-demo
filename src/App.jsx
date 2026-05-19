@@ -17,6 +17,7 @@ import Sedes from "./pages/Sedes";
 import Usuarios from "./pages/Usuarios";
 import Configuracion from "./pages/Configuracion";
 import SetPassword from "./pages/setPassword";
+import Facturacion from "./pages/Facturacion";
 
 import Footer from "./components/Footer";
 import HelpAssistant from "./components/HelpAssistant";
@@ -58,6 +59,7 @@ function getPage(activePage, selectedSede, currentUser) {
     sedes: <Sedes {...props} />,
     usuarios: <Usuarios {...props} />,
     configuracion: <Configuracion {...props} />,
+    facturacion: <Facturacion {...props} />
   };
 
   return pages[activePage] || pages.dashboard;

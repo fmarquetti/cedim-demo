@@ -3696,3 +3696,219 @@ td {
     align-items: center;
   }
 }
+
+/* =========================================================
+   FACTURACIÓN / ARCA
+   ========================================================= */
+
+.facturacion-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.facturacion-page .page-header {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+.facturacion-page .page-header h1 {
+  margin: 0;
+  font-size: 26px;
+  color: var(--text);
+}
+
+.facturacion-page .page-header p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  max-width: 760px;
+  line-height: 1.45;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.75fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+.card h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  color: var(--text);
+}
+
+.card h3 {
+  margin: 18px 0 10px;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.facturacion-page .form-grid {
+  margin-top: 18px;
+}
+
+.facturacion-page .form-grid input,
+.facturacion-page .form-grid select {
+  width: 100%;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0 12px;
+  background: white;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.facturacion-page .form-grid input:focus,
+.facturacion-page .form-grid select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(1, 156, 197, 0.12);
+}
+
+.form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.btn-primary,
+.btn-secondary {
+  min-height: 42px;
+  border-radius: 12px;
+  padding: 10px 15px;
+  border: 0;
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: white;
+  box-shadow: 0 10px 22px rgba(2, 139, 175, 0.22);
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 26px rgba(2, 139, 175, 0.28);
+}
+
+.btn-primary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-secondary {
+  background: white;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(1, 156, 197, 0.05);
+}
+
+.notice {
+  margin-top: 16px;
+  border: 1px solid rgba(1, 156, 197, 0.18);
+  background: rgba(1, 156, 197, 0.08);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.draft-summary {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.draft-summary p {
+  margin: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+.draft-summary strong {
+  color: var(--text);
+}
+
+.draft-summary .btn-primary {
+  margin-top: 8px;
+  width: 100%;
+}
+
+.extension-help {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.extension-help ol {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.extension-help li::marker {
+  color: var(--primary);
+  font-weight: 800;
+}
+
+@media (max-width: 1050px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .facturacion-page .page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .facturacion-page .page-header .btn-primary {
+    width: 100%;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .form-actions button {
+    width: 100%;
+  }
+}
