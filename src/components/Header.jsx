@@ -50,7 +50,7 @@ export default function Header({
         <p>Gestión operativa integrada</p>
       </div>*/}
 
-      <div className="topbar-actions">
+      <div className="topbar-actions" data-tour="reportes-sede">
         <div className="search-box">
           <Search size={16} />
           <input placeholder="Buscar..." data-tour="global-search" />

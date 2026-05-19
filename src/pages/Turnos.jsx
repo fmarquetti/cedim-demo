@@ -620,7 +620,7 @@ export default function Turnos({ selectedSede, sedeId }) {
                                 </button>
                             </th>
 
-                            <th>Acciones</th>
+                            <th data-tour="turnos-acciones">Acciones</th>
                         </tr>
                     </thead>
 

@@ -9,7 +9,7 @@ export const defaultAppConfig = {
     loginIconUrl: "",
     loginFooterText: "CEDIM · Versión",
     loginFooterHighlight: "SUPABASE",
-    footerText: "Creado por TECNEW",
+    footerText: "Creado por Marquetti & Asociados",
     footerEnvironment: "Demo",
     primaryColor: "#028baf",
     secondaryColor: "#3a73b9",

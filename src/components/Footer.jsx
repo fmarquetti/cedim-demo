@@ -15,7 +15,7 @@ export default function Footer() {
       </div>
 
       <div className="footer-right">
-        <span>{config.footerText || "Creado por TECNEW"}</span>
+        <span>{config.footerText || "Creado por Marquetti & Asociados"}</span>
       </div>
     </footer>
   );

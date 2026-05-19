@@ -218,7 +218,7 @@ export default function Sedes({ selectedSede }) {
               <th>Responsable</th>
               <th>Usuarios</th>
               <th>Estado</th>
-              <th>Acciones</th>
+              <th data-tour="sedes-acciones">Acciones</th>
             </tr>
           </thead>
 

@@ -877,7 +877,7 @@ export default function Ingresos({ selectedSede, sedeId }) {
       doc.text("Reporte de ingresos", 14, 26);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
-      doc.text("Reporte generado por plataforma creada por TECNEW", 14, 32);
+      doc.text("Reporte generado por plataforma de gestión CEDIM", 14, 32);
       doc.setDrawColor(210);
       doc.line(14, 37, pageWidth - 14, 37);
       doc.text(`Sede: ${sedeName}`, 14, 44);
@@ -915,7 +915,7 @@ export default function Ingresos({ selectedSede, sedeId }) {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8);
         doc.setTextColor(130);
-        doc.text("Generado por plataforma TECNEW", 14, pageHeight - 8);
+        doc.text("Generado por plataforma de gestión CEDIM", 14, pageHeight - 8);
         doc.text(`Página ${i} de ${pageCount}`, pageWidth - 35, pageHeight - 8);
       }
 
@@ -1046,7 +1046,7 @@ export default function Ingresos({ selectedSede, sedeId }) {
               <tr>
                 <th>Fecha</th><th>Concepto</th><th>Sociedad</th><th>Sede</th>
                 <th>Origen</th><th>Importe</th><th>Cobro</th><th>Estado</th>
-                <th>Comprobante</th><th>Acciones</th>
+                <th>Comprobante</th><th data-tour="ingresos-acciones">Acciones</th>
               </tr>
             </thead>
             <tbody>

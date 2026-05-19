@@ -607,7 +607,7 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
               </th>
 
               <th>Adjunto</th>
-              <th>Acciones</th>
+              <th data-tour="pacientes-acciones">Acciones</th>
             </tr>
           </thead>
 

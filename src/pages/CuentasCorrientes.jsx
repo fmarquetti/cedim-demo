@@ -653,7 +653,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
       doc.setTextColor(150);
 
       doc.text(
-        "Generado por plataforma TECNEW",
+        "Generado por plataforma de gestión CEDIM",
         14,
         doc.internal.pageSize.getHeight() - 8
       );
@@ -1065,7 +1065,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
                 <th>Importe</th>
                 <th>Vencimiento</th>
                 <th>Estado</th>
-                <th>Acciones</th>
+                <th data-tour="cuentas-acciones">Acciones</th>
               </tr>
             </thead>
 

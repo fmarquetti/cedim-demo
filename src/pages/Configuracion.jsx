@@ -546,7 +546,7 @@ export default function Configuracion() {
                       onChange={(e) =>
                         updateField("footerText", e.target.value)
                       }
-                      placeholder="Creado por TECNEW"
+                      placeholder="Creado por Marquetti & Asociados"
                     />
                   </label>
 

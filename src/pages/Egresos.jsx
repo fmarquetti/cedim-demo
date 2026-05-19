@@ -1030,7 +1030,7 @@ export default function Egresos({ selectedSede, sedeId }) {
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
-      doc.text("Reporte generado por plataforma creada por TECNEW", 14, 32);
+      doc.text("Reporte generado por plataforma de gestión CEDIM", 14, 32);
 
       doc.setDrawColor(210);
       doc.line(14, 37, pageWidth - 14, 37);
@@ -1108,7 +1108,7 @@ export default function Egresos({ selectedSede, sedeId }) {
         doc.setFontSize(8);
         doc.setTextColor(130);
 
-        doc.text("Generado por plataforma TECNEW", 14, pageHeight - 8);
+        doc.text("Generado por plataforma de gestión CEDIM", 14, pageHeight - 8);
         doc.text(`Página ${i} de ${pageCount}`, pageWidth - 35, pageHeight - 8);
       }
 
@@ -1327,7 +1327,7 @@ export default function Egresos({ selectedSede, sedeId }) {
                 <th>Categoría</th>
                 <th>Importe</th>
                 <th>Estado</th>
-                <th>Acciones</th>
+                <th data-tour="egresos-acciones">Acciones</th>
               </tr>
             </thead>
 

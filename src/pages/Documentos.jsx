@@ -545,7 +545,7 @@ export default function Documentos({ selectedSede, sedeId }) {
               <th>Sede</th>
               <th>Archivo</th>
               <th>Estado</th>
-              <th>Acciones</th>
+              <th data-tour="documentos-acciones">Acciones</th>
             </tr>
           </thead>
 
