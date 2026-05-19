@@ -503,7 +503,7 @@ export default function Dashboard({ selectedSede, sedeId }) {
       <div className="page-header">
         <div>
           <h2>Dashboard principal</h2>
-          <p>Resumen financiero y operativo del laboratorio · {labelPeriodo}</p>
+          <p>Resumen financiero y operativo · {labelPeriodo}</p>
         </div>
         <button className="secondary-button" onClick={loadDashboard}>
           <RefreshCw size={16} /> Actualizar

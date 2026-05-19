@@ -839,7 +839,7 @@ export default function HelpAssistant({ activePage, setActivePage }) {
                 sender: "bot",
                 kind: "welcome",
                 text:
-                    "Hola. Soy Tecnew Bot, tu asistente operativo dentro del sistema. Puedo guiarte para cargar pacientes, registrar ingresos o egresos, importar extractos bancarios, conciliar movimientos, usar reportes, administrar usuarios y más.",
+                    "Hola. Soy CEDIM-Bot, tu asistente operativo dentro del sistema. Puedo guiarte para cargar pacientes, registrar ingresos o egresos, importar extractos bancarios, conciliar movimientos, usar reportes, administrar usuarios y más.",
             },
         ]
     );
@@ -989,7 +989,7 @@ export default function HelpAssistant({ activePage, setActivePage }) {
                 className="help-bot-button"
                 onClick={() => setIsOpen(true)}
                 aria-label="Abrir asistente de ayuda"
-                title="Asistente Tecnew"
+                title="Asistente CEDIM"
             >
                 <span className="help-bot-tooltip">¿Necesitás ayuda?</span>
 
@@ -1095,7 +1095,7 @@ export default function HelpAssistant({ activePage, setActivePage }) {
                                 <MessageCircle size={20} />
                             </div>
                             <div>
-                                <strong>Tecnew Bot</strong>
+                                <strong>CEDIM-Bot</strong>
                                 <span>Asistencia operativa dentro del sistema</span>
                             </div>
                         </div>

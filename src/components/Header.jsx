@@ -45,10 +45,10 @@ export default function Header({
 
   return (
     <header className="topbar">
-      <div>
+      {/*<div>
         <h1>Panel de gestión</h1>
         <p>Gestión operativa integrada</p>
-      </div>
+      </div>*/}
 
       <div className="topbar-actions">
         <div className="search-box">
