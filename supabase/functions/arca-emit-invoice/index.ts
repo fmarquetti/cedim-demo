@@ -8,6 +8,8 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const SEND_CBTE_FCH = false;
+
 type InvoicePayload = {
   cliente_nombre: string;
   cliente_documento: string;
@@ -20,11 +22,20 @@ type InvoicePayload = {
   importe_total: number;
   tipo_comprobante?: number;
   punto_venta?: number;
+  debugOnly?: boolean;
 };
 
 type LastVoucherResult = {
   lastVoucher: number;
   raw: unknown;
+};
+
+type AfipAuth = {
+  token: string;
+  sign: string;
+  taxId: string;
+  environment: string;
+  accessToken: string;
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -54,6 +65,14 @@ function cleanNumber(value: string | number | null | undefined) {
 function toMoney(value: unknown) {
   const number = Number(value || 0);
   return Number(number.toFixed(2));
+}
+
+function assertMoneyClose(label: string, actual: number, expected: number) {
+  if (Math.abs(actual - expected) > 0.01) {
+    throw new Error(
+      `${label} no cierra. actual=${actual}, esperado=${expected}`,
+    );
+  }
 }
 
 function payloadNumber(value: unknown, fallback: number) {
@@ -126,6 +145,18 @@ function validatePayload(payload: InvoicePayload) {
 
   if (!payload.importe_total || Number(payload.importe_total) <= 0) {
     throw new Error("El importe_total debe ser mayor a 0.");
+  }
+
+  const total = toMoney(payload.importe_total);
+  const iva = toMoney(payload.importe_iva || 0);
+  const neto = toMoney(payload.importe_neto || total - iva);
+
+  if (iva > 0) {
+    if (neto <= 0) {
+      throw new Error("El importe_neto debe ser mayor a 0 cuando hay IVA.");
+    }
+
+    assertMoneyClose("importe_neto + importe_iva", toMoney(neto + iva), total);
   }
 }
 
@@ -216,6 +247,99 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function sanitizeAfipRequestParams(params: Record<string, unknown>) {
+  return {
+    ...params,
+    Auth: {
+      Token: "[redacted]",
+      Sign: "[redacted]",
+      Cuit: (params.Auth as Record<string, unknown> | undefined)?.Cuit,
+    },
+  };
+}
+
+function buildVoucherDetail(payload: InvoicePayload, nextNumber: number) {
+  const total = toMoney(payload.importe_total);
+  const iva = toMoney(payload.importe_iva || 0);
+
+  let neto = toMoney(payload.importe_neto || total - iva);
+  let exento = 0;
+
+  const hasIva = iva > 0;
+
+  if (hasIva) {
+    assertMoneyClose("importe_neto + importe_iva", toMoney(neto + iva), total);
+  } else {
+    neto = 0;
+    exento = total;
+  }
+
+  const { DocTipo, DocNro } = getDocumentType(payload.cliente_documento);
+
+  const detail: Record<string, unknown> = {
+    Concepto: 1,
+    DocTipo,
+    DocNro,
+    CbteDesde: Number(nextNumber),
+    CbteHasta: Number(nextNumber),
+    ImpTotal: total,
+    ImpTotConc: 0,
+    ImpNeto: neto,
+    ImpOpEx: exento,
+    ImpIVA: iva,
+    ImpTrib: 0,
+    MonId: "PES",
+    MonCotiz: 1,
+    CondicionIVAReceptorId: getCondicionIVAReceptorId(payload.cliente_iva),
+  };
+
+  if (SEND_CBTE_FCH) {
+    detail.CbteFch = getTodayAfipDate();
+  }
+
+  if (hasIva) {
+    detail.Iva = {
+      AlicIva: [
+        {
+          Id: 5,
+          BaseImp: neto,
+          Importe: iva,
+        },
+      ],
+    };
+  }
+
+  return detail;
+}
+
+function buildFECaeRequest(
+  auth: Pick<AfipAuth, "token" | "sign" | "taxId">,
+  payload: InvoicePayload,
+  nextNumber: number,
+) {
+  const puntoVenta = Number(payloadNumber(payload.punto_venta, 1));
+  const tipoComprobante = Number(payloadNumber(payload.tipo_comprobante, 6));
+  const detail = buildVoucherDetail(payload, nextNumber);
+
+  return {
+    Auth: {
+      Token: auth.token,
+      Sign: auth.sign,
+      Cuit: String(auth.taxId),
+    },
+    FeCAEReq: {
+      FeCabReq: {
+        CantReg: 1,
+        PtoVta: puntoVenta,
+        CbteTipo: tipoComprobante,
+      },
+      FeDetReq: {
+        FECAEDetRequest: detail,
+      },
+    },
+  };
+}
+
 async function parseResponse(response: Response) {
   const text = await response.text();
 
@@ -226,7 +350,7 @@ async function parseResponse(response: Response) {
   }
 }
 
-async function afipSdkAuth() {
+async function afipSdkAuth(): Promise<AfipAuth> {
   const accessToken = requiredEnv("AFIPSDK_ACCESS_TOKEN");
   const environment = Deno.env.get("AFIPSDK_ENV") || "dev";
   const taxId = Deno.env.get("AFIPSDK_TAX_ID") || "20409378472";
@@ -420,54 +544,12 @@ async function createCAE(params: {
 }) {
   const puntoVenta = Number(payloadNumber(params.payload.punto_venta, 1));
   const tipoComprobante = Number(payloadNumber(params.payload.tipo_comprobante, 6));
-
-  const total = toMoney(params.payload.importe_total);
-  const iva = toMoney(params.payload.importe_iva || 0);
-
-  let neto = toMoney(params.payload.importe_neto || total - iva);
-  let exento = 0;
-
-  const hasIva = iva > 0;
-
-  if (!hasIva) {
-    neto = 0;
-    exento = total;
-  }
-
-  const { DocTipo, DocNro } = getDocumentType(params.payload.cliente_documento);
-  const date = getTodayAfipDate();
-
-  const detail: Record<string, unknown> = {
-    Concepto: 1,
-    DocTipo,
-    DocNro,
-    CbteDesde: params.nextNumber,
-    CbteHasta: params.nextNumber,
-    CbteFch: date,
-    ImpTotal: total,
-    ImpTotConc: 0,
-    ImpNeto: neto,
-    ImpOpEx: exento,
-    ImpIVA: iva,
-    ImpTrib: 0,
-    MonId: "PES",
-    MonCotiz: 1,
-    CondicionIVAReceptorId: getCondicionIVAReceptorId(
-      params.payload.cliente_iva,
-    ),
-  };
-
-  if (hasIva) {
-    detail.Iva = {
-      AlicIva: [
-        {
-          Id: 5,
-          BaseImp: neto,
-          Importe: iva,
-        },
-      ],
-    };
-  }
+  const requestParams = buildFECaeRequest(
+    params,
+    params.payload,
+    params.nextNumber,
+  );
+  const detail = requestParams.FeCAEReq.FeDetReq.FECAEDetRequest;
 
   console.log(
     "FECAESolicitar DETAIL",
@@ -478,24 +560,6 @@ async function createCAE(params: {
       detail,
     }),
   );
-
-  const requestParams = {
-    Auth: {
-      Token: params.token,
-      Sign: params.sign,
-      Cuit: String(params.taxId),
-    },
-    FeCAEReq: {
-      FeCabReq: {
-        CantReg: 1,
-        PtoVta: puntoVenta,
-        CbteTipo: tipoComprobante,
-      },
-      FeDetReq: {
-        FECAEDetRequest: detail,
-      },
-    },
-  };
 
   const response = await afipSdkRequest({
     accessToken: params.accessToken,
@@ -511,7 +575,7 @@ async function createCAE(params: {
       tipoComprobante,
       nextNumber: params.nextNumber,
       detail,
-      requestParams,
+      requestParams: sanitizeAfipRequestParams(requestParams),
     },
   };
 }
@@ -572,7 +636,47 @@ serve(async (req) => {
       tipoComprobante,
       payload,
       cbteFch: getTodayAfipDate(),
+      sendCbteFch: SEND_CBTE_FCH,
     };
+
+    if (payload.debugOnly) {
+      const auth = await afipSdkAuth();
+
+      const lastVoucherResult = await getLastVoucher({
+        ...auth,
+        puntoVenta,
+        tipoComprobante,
+      });
+
+      const lastVoucher = lastVoucherResult.lastVoucher;
+      const nextNumber = lastVoucher + 1;
+      const requestParams = buildFECaeRequest(auth, payload, nextNumber);
+      const sanitizedRequestParams = sanitizeAfipRequestParams(requestParams);
+      const detail = requestParams.FeCAEReq.FeDetReq.FECAEDetRequest;
+
+      return jsonResponse({
+        ok: true,
+        debugOnly: true,
+        message: "Payload construido sin llamar a FECAESolicitar.",
+        invoice_id: null,
+        debug: {
+          ...debugData,
+          environment: auth.environment,
+          taxId: auth.taxId,
+          lastVoucher,
+          nextNumber,
+          cbteFch: getTodayAfipDate(),
+          lastVoucherRaw: lastVoucherResult.raw,
+          sentToAfip: {
+            puntoVenta,
+            tipoComprobante,
+            nextNumber,
+            detail,
+            requestParams: sanitizedRequestParams,
+          },
+        },
+      });
+    }
 
     const pendingInsert = await supabase
       .from("arca_invoices")
@@ -669,6 +773,7 @@ serve(async (req) => {
         ...debugData,
         sentToAfip: caeResult.sent,
         parsed,
+        afipResponse: caeResponse,
       };
 
       console.log("CAE PARSED", JSON.stringify(parsed));
