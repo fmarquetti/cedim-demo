@@ -197,6 +197,25 @@ function extractCAE(response: Record<string, unknown>) {
   };
 }
 
+function responseHasAfipErrorCode(response: unknown, code: number) {
+  const errors = findFirstKeyDeep(response, "Err");
+
+  if (Array.isArray(errors)) {
+    return errors.some((err) => {
+      const record = err as Record<string, unknown>;
+      return Number(record.Code) === code;
+    });
+  }
+
+  const singleCode = findFirstKeyDeep(response, "Code");
+
+  return Number(singleCode) === code;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function parseResponse(response: Response) {
   const text = await response.text();
 
@@ -460,28 +479,41 @@ async function createCAE(params: {
     }),
   );
 
-  return await afipSdkRequest({
+  const requestParams = {
+    Auth: {
+      Token: params.token,
+      Sign: params.sign,
+      Cuit: String(params.taxId),
+    },
+    FeCAEReq: {
+      FeCabReq: {
+        CantReg: 1,
+        PtoVta: puntoVenta,
+        CbteTipo: tipoComprobante,
+      },
+      FeDetReq: {
+        FECAEDetRequest: detail,
+      },
+    },
+  };
+
+  const response = await afipSdkRequest({
     accessToken: params.accessToken,
     environment: params.environment,
     method: "FECAESolicitar",
-    params: {
-      Auth: {
-        Token: params.token,
-        Sign: params.sign,
-        Cuit: String(params.taxId),
-      },
-      FeCAEReq: {
-        FeCabReq: {
-          CantReg: 1,
-          PtoVta: puntoVenta,
-          CbteTipo: tipoComprobante,
-        },
-        FeDetReq: {
-          FECAEDetRequest: detail,
-        },
-      },
-    },
+    params: requestParams,
   });
+
+  return {
+    response,
+    sent: {
+      puntoVenta,
+      tipoComprobante,
+      nextNumber: params.nextNumber,
+      detail,
+      requestParams,
+    },
+  };
 }
 
 serve(async (req) => {
@@ -578,61 +610,102 @@ serve(async (req) => {
       taxId: auth.taxId,
     };
 
-    const lastVoucherResult = await getLastVoucher({
-      ...auth,
-      puntoVenta,
-      tipoComprobante,
-    });
+    let parsed: ReturnType<typeof extractCAE> | null = null;
+    let lastVoucherResult: LastVoucherResult | null = null;
+    let lastVoucher = 0;
+    let nextNumber = 0;
+    let caeResponse: Record<string, unknown> | null = null;
 
-    const lastVoucher = lastVoucherResult.lastVoucher;
-    const nextNumber = lastVoucher + 1;
-    const cbteFch = getTodayAfipDate();
+    const maxAttempts = 5;
 
-    if (!Number.isFinite(nextNumber) || nextNumber <= 0) {
-      throw new Error(
-        `Número de comprobante inválido. lastVoucher=${lastVoucher}, nextNumber=${nextNumber}`,
-      );
-    }
-
-    debugData = {
-      ...debugData,
-      lastVoucher,
-      nextNumber,
-      cbteFch,
-      lastVoucherRaw: lastVoucherResult.raw,
-    };
-
-    console.log(
-      "NEXT VOUCHER",
-      JSON.stringify({
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      lastVoucherResult = await getLastVoucher({
+        ...auth,
         puntoVenta,
         tipoComprobante,
+      });
+
+      lastVoucher = lastVoucherResult.lastVoucher;
+      nextNumber = lastVoucher + 1;
+
+      if (!Number.isFinite(nextNumber) || nextNumber <= 0) {
+        throw new Error(
+          `Número de comprobante inválido. lastVoucher=${lastVoucher}, nextNumber=${nextNumber}`,
+        );
+      }
+
+      debugData = {
+        ...debugData,
+        attempt,
         lastVoucher,
         nextNumber,
-        cbteFch,
+        cbteFch: getTodayAfipDate(),
         lastVoucherRaw: lastVoucherResult.raw,
-      }),
-    );
+      };
 
-    const caeResponse = await createCAE({
-      ...auth,
-      payload,
-      nextNumber,
-    });
+      console.log(
+        "NEXT VOUCHER ATTEMPT",
+        JSON.stringify({
+          attempt,
+          puntoVenta,
+          tipoComprobante,
+          lastVoucher,
+          nextNumber,
+          cbteFch: getTodayAfipDate(),
+          lastVoucherRaw: lastVoucherResult.raw,
+        }),
+      );
 
-    const parsed = extractCAE(caeResponse);
+      const caeResult = await createCAE({
+        ...auth,
+        payload,
+        nextNumber,
+      });
 
-    console.log("CAE PARSED", JSON.stringify(parsed));
+      caeResponse = caeResult.response as Record<string, unknown>;
+      parsed = extractCAE(caeResponse);
 
-    if (!parsed.cae) {
-      const afipErrorMessage = JSON.stringify(parsed.afip_errors || parsed.raw);
+      debugData = {
+        ...debugData,
+        sentToAfip: caeResult.sent,
+        parsed,
+      };
+
+      console.log("CAE PARSED", JSON.stringify(parsed));
+
+      if (parsed.cae) {
+        break;
+      }
+
+      const hasNumberError = responseHasAfipErrorCode(caeResponse, 10016);
+
+      if (!hasNumberError || attempt === maxAttempts) {
+        break;
+      }
+
+      console.log(
+        "AFIP ERROR 10016 - RETRYING WITH NEW LAST VOUCHER",
+        JSON.stringify({
+          attempt,
+          nextAttempt: attempt + 1,
+          lastVoucher,
+          nextNumber,
+        }),
+      );
+
+      await sleep(400);
+    }
+
+    if (!parsed || !parsed.cae) {
+      const afipErrorMessage =
+        JSON.stringify(parsed?.afip_errors || parsed?.raw || caeResponse) || "";
 
       await supabase
         .from("arca_invoices")
         .update({
           numero_comprobante: nextNumber,
           estado: "error",
-          proveedor_response: parsed.raw,
+          proveedor_response: parsed?.raw || caeResponse,
           error_message: afipErrorMessage.slice(0, 2000),
         })
         .eq("id", invoiceId);
@@ -641,15 +714,12 @@ serve(async (req) => {
         {
           ok: false,
           error: `ARCA no devolvió CAE. Resultado: ${
-            parsed.resultado || "-"
+            parsed?.resultado || "-"
           }. Detalle: ${afipErrorMessage}`,
           invoice_id: invoiceId,
-          afip_response: parsed.raw,
-          afip_errors: parsed.afip_errors,
-          debug: {
-            ...debugData,
-            parsed,
-          },
+          afip_response: parsed?.raw || caeResponse,
+          afip_errors: parsed?.afip_errors || null,
+          debug: debugData,
         },
         400,
       );
