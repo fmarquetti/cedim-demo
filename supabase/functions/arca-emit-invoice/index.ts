@@ -8,8 +8,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const SEND_CBTE_FCH = false;
-
 type InvoicePayload = {
   cliente_nombre: string;
   cliente_documento: string;
@@ -292,10 +290,6 @@ function buildVoucherDetail(payload: InvoicePayload, nextNumber: number) {
     MonCotiz: 1,
     CondicionIVAReceptorId: getCondicionIVAReceptorId(payload.cliente_iva),
   };
-
-  if (SEND_CBTE_FCH) {
-    detail.CbteFch = getTodayAfipDate();
-  }
 
   if (hasIva) {
     detail.Iva = {
@@ -636,7 +630,6 @@ serve(async (req) => {
       tipoComprobante,
       payload,
       cbteFch: getTodayAfipDate(),
-      sendCbteFch: SEND_CBTE_FCH,
     };
 
     if (payload.debugOnly) {
