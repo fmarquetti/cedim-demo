@@ -3,6 +3,7 @@ import {
   registrarAsientoEgresoCargado,
   registrarAsientoEgresoPagado,
 } from "./contabilidadAutomationService";
+import { validarPeriodoAbierto } from "./contabilidadService";
 
 function formatFecha(fecha) {
   if (!fecha) return "";
@@ -235,6 +236,7 @@ function buildConceptoResumen(form) {
 
 export async function createEgreso(form) {
   validarDistribuciones(form);
+  await validarPeriodoAbierto(form.fecha);
   const factura = await validarFacturaDuplicada(form);
   const conceptoResumen = buildConceptoResumen(form);  
 
@@ -286,6 +288,7 @@ export async function createEgreso(form) {
   await registrarAsientoEgresoCargado(egreso);
 
   if (egreso.estado === "Pagado") {
+    await validarPeriodoAbierto(egreso.fechaDb || form.fecha);
     await registrarAsientoEgresoPagado(egreso);
   }
 
@@ -299,6 +302,16 @@ export async function deleteEgreso(id) {
 }
 
 export async function marcarEgresoPagado(id) {
+  const { data: egresoActual, error: actualError } = await supabase
+    .from("egresos")
+    .select("fecha")
+    .eq("id", id)
+    .single();
+
+  if (actualError) throw actualError;
+
+  await validarPeriodoAbierto(egresoActual?.fecha || new Date().toISOString().split("T")[0]);
+
   const { error } = await supabase
     .from("egresos")
     .update({

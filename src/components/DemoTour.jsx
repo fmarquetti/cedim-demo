@@ -21,6 +21,11 @@ const pageIntro = {
     content:
       "En esta pantalla se cargan y consultan los gastos o salidas de dinero. Sirve para registrar pagos a proveedores, servicios, compras, sueldos u otros egresos administrativos.",
   },
+  ordenesPago: {
+    title: "Órdenes de Pago",
+    content:
+      "Esta pantalla permite agrupar egresos pendientes, aprobar pagos a proveedores y registrar el pago contable de manera ordenada.",
+  },
   facturacion: {
     title: "Facturación",
     content:
@@ -45,6 +50,11 @@ const pageIntro = {
     title: "Contabilidad",
     content:
       "Esta pantalla reune la informacion contable formal del sistema: plan de cuentas, libro diario, mayores y balance de sumas y saldos.",
+  },
+  periodosContables: {
+    title: "Períodos Contables",
+    content:
+      "Esta pantalla permite administrar cierres mensuales, bloquear períodos y controlar operaciones pendientes de asiento contable.",
   },
   iva: {
     title: "IVA",
@@ -388,6 +398,46 @@ const tourStepsByPage = {
     },
   ],
 
+  ordenesPago: [
+    {
+      target: '[data-tour="ordenes-pago-header"]',
+      title: "Órdenes de Pago",
+      content:
+        "Este módulo permite gestionar pagos a proveedores a partir de egresos pendientes.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="ordenes-pago-filtros"]',
+      title: "Filtros",
+      content:
+        "Permiten buscar órdenes por fecha, estado o proveedor.",
+    },
+    {
+      target: '[data-tour="ordenes-pago-nueva"]',
+      title: "Nueva orden",
+      content:
+        "Desde este botón se crea una nueva orden de pago seleccionando egresos pendientes.",
+    },
+    {
+      target: '[data-tour="ordenes-pago-resumen"]',
+      title: "Resumen",
+      content:
+        "Estos indicadores muestran el estado general de las órdenes y los importes pagados.",
+    },
+    {
+      target: '[data-tour="ordenes-pago-tabla"]',
+      title: "Listado de órdenes",
+      content:
+        "La tabla muestra las órdenes creadas, su proveedor, importe, estado y acciones disponibles.",
+    },
+    {
+      target: '[data-tour="ordenes-pago-pdf"]',
+      title: "PDF de orden de pago",
+      content:
+        "Desde esta accion se descarga la orden de pago formal en PDF, con detalle, totales y espacios de firma.",
+    },
+  ],
+
   facturacion: [
     {
       target: '[data-tour="facturacion-header"]',
@@ -631,6 +681,34 @@ const tourStepsByPage = {
       title: "Resultado contable",
       content:
         "En esta seccion se muestra la informacion contable segun la vista seleccionada.",
+    },
+  ],
+
+  periodosContables: [
+    {
+      target: '[data-tour="periodos-header"]',
+      title: "Períodos contables",
+      content:
+        "Desde acá se gestionan los meses contables abiertos y cerrados.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="periodos-acciones"]',
+      title: "Acciones del período",
+      content:
+        "Permite crear períodos mensuales, actualizar la información y revisar pendientes contables.",
+    },
+    {
+      target: '[data-tour="periodos-tabla"]',
+      title: "Tabla de períodos",
+      content:
+        "Muestra cada período, su estado y las acciones disponibles para cerrar o reabrir.",
+    },
+    {
+      target: '[data-tour="periodos-pendientes"]',
+      title: "Control de pendientes",
+      content:
+        "Este panel ayuda a detectar facturas, pagos o movimientos que todavía no tienen asiento contable.",
     },
   ],
 

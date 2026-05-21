@@ -73,6 +73,51 @@ function mapAsiento(row) {
   };
 }
 
+function mapPeriodo(row) {
+  return {
+    id: row.id,
+    anio: row.anio,
+    mes: row.mes,
+    fechaDesde: row.fecha_desde,
+    fechaHasta: row.fecha_hasta,
+    estado: row.estado,
+    cerradoPor: row.cerrado_por,
+    cerradoAt: row.cerrado_at,
+    observaciones: row.observaciones,
+  };
+}
+
+function validarAnioMes(anio, mes) {
+  const year = Number(anio);
+  const month = Number(mes);
+
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    throw new Error("El año del período no es válido.");
+  }
+
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error("El mes del período no es válido.");
+  }
+
+  return { year, month };
+}
+
+function getPeriodoFechas(anio, mes) {
+  const { year, month } = validarAnioMes(anio, mes);
+  const mm = String(month).padStart(2, "0");
+  const hasta = new Date(Date.UTC(year, month, 0)).toISOString().split("T")[0];
+
+  return {
+    fechaDesde: `${year}-${mm}-01`,
+    fechaHasta: hasta,
+  };
+}
+
+function dateOnly(value) {
+  if (!value) return new Date().toISOString().split("T")[0];
+  return String(value).includes("T") ? String(value).split("T")[0] : String(value);
+}
+
 function validarLinea(linea, index) {
   if (!linea?.cuentaId) {
     throw new Error(`La linea ${index + 1} no tiene cuenta contable.`);
@@ -162,6 +207,7 @@ export async function getAsientosContables({ desde, hasta, sedeId } = {}) {
 
 export async function crearAsientoContable(payload) {
   validarAsiento(payload);
+  await validarPeriodoAbierto(payload.fecha);
 
   const { data: asiento, error: asientoError } = await supabase
     .from("contabilidad_asientos")
@@ -244,6 +290,305 @@ export async function asientoContableExiste(origen, origenId) {
   if (error) throw error;
 
   return Boolean(data?.id);
+}
+
+export async function crearAsientoSiNoExiste(payload) {
+  if (await asientoContableExiste(payload.origen, payload.origenId)) {
+    return null;
+  }
+
+  return crearAsientoContable(payload);
+}
+
+export async function getPeriodosContables() {
+  const { data, error } = await supabase
+    .from("contabilidad_periodos")
+    .select("*")
+    .order("anio", { ascending: false })
+    .order("mes", { ascending: false });
+
+  if (error) throw error;
+
+  return (data || []).map(mapPeriodo);
+}
+
+export async function crearPeriodoContable({ anio, mes, observaciones } = {}) {
+  const { year, month } = validarAnioMes(anio, mes);
+  const { fechaDesde, fechaHasta } = getPeriodoFechas(year, month);
+
+  const { data, error } = await supabase
+    .from("contabilidad_periodos")
+    .insert({
+      anio: year,
+      mes: month,
+      fecha_desde: fechaDesde,
+      fecha_hasta: fechaHasta,
+      estado: "abierto",
+      observaciones: observaciones || null,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("El período ya existe.");
+    }
+
+    throw error;
+  }
+
+  return mapPeriodo(data);
+}
+
+export async function crearPeriodosDelAnio(anio) {
+  const year = validarAnioMes(anio, 1).year;
+  const payload = Array.from({ length: 12 }, (_, index) => {
+    const mes = index + 1;
+    const { fechaDesde, fechaHasta } = getPeriodoFechas(year, mes);
+
+    return {
+      anio: year,
+      mes,
+      fecha_desde: fechaDesde,
+      fecha_hasta: fechaHasta,
+      estado: "abierto",
+    };
+  });
+
+  const { error } = await supabase
+    .from("contabilidad_periodos")
+    .upsert(payload, { onConflict: "anio,mes", ignoreDuplicates: true });
+
+  if (error) throw error;
+
+  return getPeriodosContables();
+}
+
+export async function cerrarPeriodoContable(id, observaciones) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from("contabilidad_periodos")
+    .update({
+      estado: "cerrado",
+      cerrado_por: user?.id || null,
+      cerrado_at: new Date().toISOString(),
+      observaciones: observaciones || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+
+  return mapPeriodo(data);
+}
+
+export async function reabrirPeriodoContable(id) {
+  const { data, error } = await supabase
+    .from("contabilidad_periodos")
+    .update({
+      estado: "abierto",
+      cerrado_por: null,
+      cerrado_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+
+  return mapPeriodo(data);
+}
+
+export async function getPeriodoPorFecha(fecha) {
+  const cleanFecha = dateOnly(fecha);
+  const { data, error } = await supabase
+    .from("contabilidad_periodos")
+    .select("*")
+    .lte("fecha_desde", cleanFecha)
+    .gte("fecha_hasta", cleanFecha)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data ? mapPeriodo(data) : null;
+}
+
+export async function validarPeriodoAbierto(fecha) {
+  const periodo = await getPeriodoPorFecha(fecha);
+
+  if (!periodo) return true;
+
+  if (periodo.estado === "cerrado") {
+    throw new Error("El período contable correspondiente a esta fecha está cerrado.");
+  }
+
+  return true;
+}
+
+function applyDateAndSedeFilters(query, { desde, hasta, sedeId } = {}, fechaColumn = "fecha") {
+  let nextQuery = query;
+
+  if (desde) nextQuery = nextQuery.gte(fechaColumn, desde);
+  if (hasta) nextQuery = nextQuery.lte(fechaColumn, hasta);
+  if (sedeId && sedeId !== "todas") nextQuery = nextQuery.eq("sede_id", sedeId);
+
+  return nextQuery;
+}
+
+async function getAsientoOrigenIds(origenes = []) {
+  const { data, error } = await supabase
+    .from("contabilidad_asientos")
+    .select("origen, origen_id")
+    .in("origen", origenes)
+    .neq("estado", "anulado");
+
+  if (error) throw error;
+
+  return (data || []).reduce((acc, row) => {
+    if (!acc[row.origen]) acc[row.origen] = new Set();
+    if (row.origen_id) acc[row.origen].add(row.origen_id);
+    return acc;
+  }, {});
+}
+
+async function getEgresosEnOrdenPagadaIds() {
+  const { data, error } = await supabase
+    .from("orden_pago_items")
+    .select("egreso_id, ordenes_pago!inner(estado)")
+    .eq("ordenes_pago.estado", "pagada");
+
+  if (error) throw error;
+
+  return new Set((data || []).map((item) => item.egreso_id).filter(Boolean));
+}
+
+export async function getAsientosPendientesControl({ desde, hasta, sedeId } = {}) {
+  const origenes = [
+    "arca_invoice",
+    "ingreso_cobro",
+    "egreso",
+    "egreso_pago",
+    "orden_pago",
+    "conciliacion_ingreso",
+    "conciliacion_egreso",
+    "banco_conciliacion",
+  ];
+
+  const [
+    asientosPorOrigen,
+    egresosEnOrdenPagada,
+    facturasResult,
+    ingresosResult,
+    egresosResult,
+    ordenesResult,
+    conciliacionesIngresoResult,
+    conciliacionesEgresoResult,
+  ] = await Promise.all([
+    getAsientoOrigenIds(origenes),
+    getEgresosEnOrdenPagadaIds(),
+    applyDateAndSedeFilters(
+      supabase.from("arca_invoices").select("*").eq("estado", "emitida").neq("es_fiscal", false),
+      { desde, hasta, sedeId },
+      "created_at",
+    ),
+    applyDateAndSedeFilters(
+      supabase.from("ingresos").select("*").eq("estado", "Cobrado"),
+      { desde, hasta, sedeId },
+    ),
+    applyDateAndSedeFilters(
+      supabase.from("egresos").select("*"),
+      { desde, hasta, sedeId },
+    ),
+    applyDateAndSedeFilters(
+      supabase.from("ordenes_pago").select("*").eq("estado", "pagada"),
+      { desde, hasta, sedeId },
+    ),
+    applyDateAndSedeFilters(
+      supabase.from("movimientos_bancarios").select("*").eq("estado", "Conciliado").not("ingreso_id", "is", null),
+      { desde, hasta, sedeId },
+    ),
+    applyDateAndSedeFilters(
+      supabase.from("movimientos_bancarios").select("*").eq("estado", "Conciliado").not("egreso_id", "is", null),
+      { desde, hasta, sedeId },
+    ),
+  ]);
+
+  const results = [facturasResult, ingresosResult, egresosResult, ordenesResult, conciliacionesIngresoResult, conciliacionesEgresoResult];
+  const failed = results.find((result) => result.error);
+  if (failed) throw failed.error;
+
+  const hasAsiento = (origen, id) => Boolean(asientosPorOrigen[origen]?.has(id));
+  const hasConciliacion = (id) =>
+    hasAsiento("conciliacion_ingreso", id) ||
+    hasAsiento("conciliacion_egreso", id) ||
+    hasAsiento("banco_conciliacion", id);
+
+  const facturasArcaSinAsiento = (facturasResult.data || [])
+    .filter((item) => item.es_fiscal !== false)
+    .filter((item) => !["remito_interno", "recibo_interno"].includes(String(item.comprobante_categoria || item.tipo_comprobante)))
+    .filter((item) => !hasAsiento("arca_invoice", item.id));
+  const ingresosCobradosSinAsiento = (ingresosResult.data || []).filter((item) => !hasAsiento("ingreso_cobro", item.id));
+  const egresosSinAsiento = (egresosResult.data || []).filter((item) => !hasAsiento("egreso", item.id));
+  const egresosPagadosSinAsiento = (egresosResult.data || [])
+    .filter((item) => item.estado === "Pagado")
+    .filter((item) => !egresosEnOrdenPagada.has(item.id))
+    .filter((item) => !hasAsiento("egreso_pago", item.id));
+  const ordenesPagoPagadasSinAsiento = (ordenesResult.data || []).filter((item) => !hasAsiento("orden_pago", item.id));
+  const conciliacionesIngresoSinAsiento = (conciliacionesIngresoResult.data || []).filter((item) => !hasConciliacion(item.id));
+  const conciliacionesEgresoSinAsiento = (conciliacionesEgresoResult.data || []).filter((item) => !hasConciliacion(item.id));
+  const totalPendientes = [
+    facturasArcaSinAsiento,
+    ingresosCobradosSinAsiento,
+    egresosSinAsiento,
+    egresosPagadosSinAsiento,
+    ordenesPagoPagadasSinAsiento,
+    conciliacionesIngresoSinAsiento,
+    conciliacionesEgresoSinAsiento,
+  ].reduce((acc, list) => acc + list.length, 0);
+
+  return {
+    facturasArcaSinAsiento,
+    ingresosCobradosSinAsiento,
+    egresosSinAsiento,
+    egresosPagadosSinAsiento,
+    ordenesPagoPagadasSinAsiento,
+    conciliacionesIngresoSinAsiento,
+    conciliacionesEgresoSinAsiento,
+    resumen: { totalPendientes },
+  };
+}
+
+export async function resolverCuentasPorCodigo(codigos = []) {
+  const codigosUnicos = [...new Set(codigos.filter(Boolean))];
+
+  if (!codigosUnicos.length) return {};
+
+  const { data, error } = await supabase
+    .from("contabilidad_cuentas")
+    .select("*")
+    .in("codigo", codigosUnicos);
+
+  if (error) throw error;
+
+  const cuentas = {};
+
+  (data || []).forEach((row) => {
+    cuentas[row.codigo] = mapCuenta(row);
+  });
+
+  codigosUnicos.forEach((codigo) => {
+    if (!cuentas[codigo]) {
+      throw new Error(`No existe la cuenta contable ${codigo}.`);
+    }
+  });
+
+  return cuentas;
 }
 
 export async function generarLibroDiario({ desde, hasta, sedeId } = {}) {

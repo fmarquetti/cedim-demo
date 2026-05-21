@@ -4,6 +4,7 @@ import {
   registrarAsientoConciliacionEgreso,
   registrarAsientoConciliacionIngreso,
 } from "./contabilidadAutomationService";
+import { validarPeriodoAbierto } from "./contabilidadService";
 
 function formatFecha(fecha) {
   if (!fecha) return "";
@@ -231,6 +232,9 @@ export async function deleteMovimientoBancario(id) {
    ========================================================= */
 
 export async function conciliarConIngreso(movimientoId, ingresoId) {
+  const movimientoActual = await getMovimientoById(movimientoId);
+  await validarPeriodoAbierto(movimientoActual.fechaDb || movimientoActual.fecha);
+
   const { error: errorMovimiento } = await supabase
     .from("movimientos_bancarios")
     .update({
@@ -262,6 +266,9 @@ export async function conciliarConIngreso(movimientoId, ingresoId) {
 }
 
 export async function conciliarConEgreso(movimientoId, egresoId) {
+  const movimientoActual = await getMovimientoById(movimientoId);
+  await validarPeriodoAbierto(movimientoActual.fechaDb || movimientoActual.fecha);
+
   const { error: errorMovimiento } = await supabase
     .from("movimientos_bancarios")
     .update({

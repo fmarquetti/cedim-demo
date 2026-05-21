@@ -7,10 +7,12 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Ingresos from "./pages/Ingresos";
 import Egresos from "./pages/Egresos";
+import OrdenesPago from "./pages/OrdenesPago";
 import CuentasCorrientes from "./pages/CuentasCorrientes";
 import Bancos from "./pages/Bancos";
 import Reportes from "./pages/Reportes";
 import Contabilidad from "./pages/Contabilidad";
+import PeriodosContables from "./pages/PeriodosContables";
 import Iva from "./pages/Iva";
 import Documentos from "./pages/Documentos";
 import Pacientes from "./pages/Pacientes";
@@ -52,10 +54,12 @@ function getPage(activePage, selectedSede, currentUser) {
     dashboard: <Dashboard {...props} />,
     ingresos: <Ingresos {...props} />,
     egresos: <Egresos {...props} />,
+    ordenesPago: <OrdenesPago {...props} />,
     cuentas: <CuentasCorrientes {...props} />,
     bancos: <Bancos {...props} />,
     reportes: <Reportes {...props} />,
     contabilidad: <Contabilidad {...props} />,
+    periodosContables: <PeriodosContables {...props} />,
     iva: <Iva {...props} />,
     documentos: <Documentos {...props} />,
     pacientes: <Pacientes {...props} />,

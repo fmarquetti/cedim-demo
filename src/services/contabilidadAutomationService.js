@@ -230,7 +230,7 @@ export async function registrarAsientoConciliacionIngreso(movimiento, ingreso) {
   return crearAsientoSiNoExiste({
     fecha: dateOnly(movimiento.fechaDb || movimiento.fecha),
     concepto: `Conciliacion bancaria ingreso: ${ingreso.concepto || movimiento.descripcion || ingreso.id}`,
-    origen: "banco_conciliacion",
+    origen: "conciliacion_ingreso",
     origenId: movimiento.id,
     sedeId: movimiento.sedeId || ingreso.sedeId,
     estado: "confirmado",
@@ -254,7 +254,7 @@ export async function registrarAsientoConciliacionEgreso(movimiento, egreso) {
   return crearAsientoSiNoExiste({
     fecha: dateOnly(movimiento.fechaDb || movimiento.fecha),
     concepto: `Conciliacion bancaria egreso: ${egreso.concepto || movimiento.descripcion || egreso.id}`,
-    origen: "banco_conciliacion",
+    origen: "conciliacion_egreso",
     origenId: movimiento.id,
     sedeId: movimiento.sedeId || egreso.sedeId,
     estado: "confirmado",

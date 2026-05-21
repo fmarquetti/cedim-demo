@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, RefreshCw } from "lucide-react";
+import { FileSpreadsheet, FileText, RefreshCw } from "lucide-react";
 
 import {
   generarBalanceSumasYSaldos,
@@ -7,6 +7,18 @@ import {
   generarLibroMayor,
   getCuentasContables,
 } from "../services/contabilidadService";
+import {
+  addPdfFooter,
+  addPdfHeader,
+  autoTable,
+  ExcelJS,
+  exportWorkbook,
+  formatDate,
+  formatMoney,
+  jsPDF,
+  safeFileName,
+  styleWorkbook,
+} from "../utils/reportUtils";
 
 const VISTAS = {
   plan: "Plan de cuentas",
@@ -14,39 +26,6 @@ const VISTAS = {
   mayor: "Libro mayor",
   balance: "Balance de sumas y saldos",
 };
-
-const formatMoney = (value = 0) =>
-  `$ ${Number(value || 0).toLocaleString("es-AR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-
-const formatDate = (fecha) => {
-  if (!fecha) return "-";
-  const clean = String(fecha).includes("T") ? fecha.split("T")[0] : fecha;
-  const [year, month, day] = clean.split("-");
-  if (!year || !month || !day) return fecha;
-  return `${day}/${month}/${year}`;
-};
-
-const csvCell = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
-
-function downloadCsv(nombre, headers, rows) {
-  const contenido = [
-    headers.map(csvCell).join(","),
-    ...rows.map((row) => row.map(csvCell).join(",")),
-  ].join("\n");
-
-  const blob = new Blob([contenido], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${nombre}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
 
 function EmptyRow({ colSpan }) {
   return (
@@ -104,75 +83,216 @@ export default function Contabilidad({ sedeId }) {
     [cuentas]
   );
 
-  const exportarCsv = () => {
+  const periodoArchivo = `${desde || "inicio"}_${hasta || "actual"}`;
+  const periodoPdf = `Periodo: ${desde ? formatDate(desde) : "Inicio"} al ${hasta ? formatDate(hasta) : "Actual"}`;
+  const nombreArchivo = `Contabilidad_${safeFileName(VISTAS[vista])}_${safeFileName(periodoArchivo)}`;
+
+  const exportarExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "CEDIM - TECNEW";
+    workbook.created = new Date();
+
     if (vista === "plan") {
-      downloadCsv(
-        "contabilidad_plan_de_cuentas",
-        ["Codigo", "Nombre", "Tipo", "Imputable", "Activa"],
-        cuentas.map((cuenta) => [
-          cuenta.codigo,
-          cuenta.nombre,
-          cuenta.tipo,
-          cuenta.imputable ? "Si" : "No",
-          cuenta.activa ? "Si" : "No",
-        ])
-      );
-      return;
+      const sheet = workbook.addWorksheet("Plan de cuentas");
+      sheet.columns = [
+        { header: "Codigo", key: "codigo", width: 16 },
+        { header: "Nombre", key: "nombre", width: 34 },
+        { header: "Tipo", key: "tipo", width: 16 },
+        { header: "Subtipo", key: "subtipo", width: 18 },
+        { header: "Imputable", key: "imputable", width: 12 },
+        { header: "Activa", key: "activa", width: 12 },
+      ];
+      sheet.addRows(cuentas.map((cuenta) => ({
+        codigo: cuenta.codigo,
+        nombre: cuenta.nombre,
+        tipo: cuenta.tipo,
+        subtipo: cuenta.subtipo || "",
+        imputable: cuenta.imputable ? "Si" : "No",
+        activa: cuenta.activa ? "Si" : "No",
+      })));
     }
 
     if (vista === "diario") {
-      downloadCsv(
-        "contabilidad_libro_diario",
-        ["Fecha", "Numero", "Concepto", "Cuenta", "Debe", "Haber", "Origen"],
-        libroDiario.map((fila) => [
-          formatDate(fila.fecha),
-          fila.numero,
-          fila.concepto,
-          `${fila.cuentaCodigo} ${fila.cuentaNombre}`,
-          fila.debe,
-          fila.haber,
-          fila.origen,
-        ])
-      );
-      return;
+      const sheet = workbook.addWorksheet("Libro diario");
+      sheet.columns = [
+        { header: "Fecha", key: "fecha", width: 14 },
+        { header: "Numero", key: "numero", width: 16 },
+        { header: "Concepto", key: "concepto", width: 34 },
+        { header: "Codigo cuenta", key: "codigo", width: 16 },
+        { header: "Cuenta", key: "cuenta", width: 34 },
+        { header: "Descripcion", key: "descripcion", width: 34 },
+        { header: "Debe", key: "debe", width: 16 },
+        { header: "Haber", key: "haber", width: 16 },
+        { header: "Origen", key: "origen", width: 18 },
+      ];
+      sheet.addRows(libroDiario.map((fila) => ({
+        fecha: formatDate(fila.fecha),
+        numero: fila.numero,
+        concepto: fila.concepto,
+        codigo: fila.cuentaCodigo,
+        cuenta: fila.cuentaNombre,
+          descripcion: fila.descripcion || "",
+        debe: Number(fila.debe || 0),
+        haber: Number(fila.haber || 0),
+        origen: fila.origen,
+      })));
+      sheet.getColumn("debe").numFmt = '"$"#,##0.00';
+      sheet.getColumn("haber").numFmt = '"$"#,##0.00';
     }
 
     if (vista === "mayor") {
-      const rows = libroMayor.flatMap((grupo) =>
-        grupo.movimientos.map((mov) => [
-          grupo.cuentaCodigo,
-          grupo.cuentaNombre,
-          formatDate(mov.fecha),
-          mov.numero,
-          mov.concepto,
-          mov.descripcion || "",
-          mov.debe,
-          mov.haber,
-          mov.saldo,
-        ])
-      );
-
-      downloadCsv(
-        "contabilidad_libro_mayor",
-        ["Codigo", "Cuenta", "Fecha", "Numero", "Concepto", "Descripcion", "Debe", "Haber", "Saldo"],
-        rows
-      );
-      return;
+      const sheet = workbook.addWorksheet("Libro mayor");
+      sheet.columns = [
+        { header: "Cuenta", key: "cuenta", width: 38 },
+        { header: "Fecha", key: "fecha", width: 14 },
+        { header: "Numero", key: "numero", width: 16 },
+        { header: "Concepto", key: "concepto", width: 34 },
+        { header: "Descripcion", key: "descripcion", width: 34 },
+        { header: "Debe", key: "debe", width: 16 },
+        { header: "Haber", key: "haber", width: 16 },
+        { header: "Saldo", key: "saldo", width: 16 },
+      ];
+      sheet.addRows(libroMayor.flatMap((grupo) =>
+        grupo.movimientos.map((mov) => ({
+          cuenta: `${grupo.cuentaCodigo} - ${grupo.cuentaNombre}`,
+          fecha: formatDate(mov.fecha),
+          numero: mov.numero,
+          concepto: mov.concepto,
+          descripcion: mov.descripcion || "",
+          debe: Number(mov.debe || 0),
+          haber: Number(mov.haber || 0),
+          saldo: Number(mov.saldo || 0),
+        }))
+      ));
+      ["debe", "haber", "saldo"].forEach((key) => {
+        sheet.getColumn(key).numFmt = '"$"#,##0.00';
+      });
     }
 
-    downloadCsv(
-      "contabilidad_balance_sumas_y_saldos",
-      ["Codigo", "Cuenta", "Tipo", "Suma debe", "Suma haber", "Saldo deudor", "Saldo acreedor"],
-      balance.map((fila) => [
-        fila.cuentaCodigo,
-        fila.cuentaNombre,
-        fila.tipo,
-        fila.sumaDebe,
-        fila.sumaHaber,
-        fila.saldoDeudor,
-        fila.saldoAcreedor,
-      ])
-    );
+    if (vista === "balance") {
+      const sheet = workbook.addWorksheet("Balance");
+      sheet.columns = [
+        { header: "Codigo", key: "codigo", width: 16 },
+        { header: "Cuenta", key: "cuenta", width: 34 },
+        { header: "Tipo", key: "tipo", width: 16 },
+        { header: "Suma Debe", key: "sumaDebe", width: 16 },
+        { header: "Suma Haber", key: "sumaHaber", width: 16 },
+        { header: "Saldo Deudor", key: "saldoDeudor", width: 16 },
+        { header: "Saldo Acreedor", key: "saldoAcreedor", width: 16 },
+      ];
+      sheet.addRows(balance.map((fila) => ({
+        codigo: fila.cuentaCodigo,
+        cuenta: fila.cuentaNombre,
+        tipo: fila.tipo,
+        sumaDebe: Number(fila.sumaDebe || 0),
+        sumaHaber: Number(fila.sumaHaber || 0),
+        saldoDeudor: Number(fila.saldoDeudor || 0),
+        saldoAcreedor: Number(fila.saldoAcreedor || 0),
+      })));
+      ["sumaDebe", "sumaHaber", "saldoDeudor", "saldoAcreedor"].forEach((key) => {
+        sheet.getColumn(key).numFmt = '"$"#,##0.00';
+      });
+    }
+
+    styleWorkbook(workbook);
+    await exportWorkbook(workbook, `${nombreArchivo}.xlsx`);
+  };
+
+  const exportarPdf = () => {
+    const doc = new jsPDF("landscape", "mm", "a4");
+    addPdfHeader(doc, { title: VISTAS[vista], subtitle: periodoPdf });
+
+    if (vista === "plan") {
+      autoTable(doc, {
+        startY: 42,
+        head: [["Codigo", "Nombre", "Tipo", "Subtipo", "Imputable", "Activa"]],
+        body: cuentas.map((cuenta) => [
+          cuenta.codigo,
+          cuenta.nombre,
+          cuenta.tipo,
+          cuenta.subtipo || "",
+          cuenta.imputable ? "Si" : "No",
+          cuenta.activa ? "Si" : "No",
+        ]),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [30, 58, 138] },
+      });
+    }
+
+    if (vista === "diario") {
+      autoTable(doc, {
+        startY: 42,
+        head: [["Fecha", "Nro", "Concepto", "Cuenta", "Debe", "Haber", "Origen"]],
+        body: libroDiario.map((fila) => [
+          formatDate(fila.fecha),
+          fila.numero,
+          fila.concepto,
+          `${fila.cuentaCodigo} - ${fila.cuentaNombre}`,
+          formatMoney(fila.debe),
+          formatMoney(fila.haber),
+          fila.origen,
+        ]),
+        styles: { fontSize: 7 },
+        headStyles: { fillColor: [30, 58, 138] },
+        columnStyles: { 4: { halign: "right" }, 5: { halign: "right" } },
+      });
+    }
+
+    if (vista === "mayor") {
+      const body = cuentaMayorId
+        ? libroMayor.flatMap((grupo) =>
+            grupo.movimientos.map((mov) => [
+              formatDate(mov.fecha),
+              mov.numero,
+              mov.concepto,
+              mov.descripcion || "",
+              formatMoney(mov.debe),
+              formatMoney(mov.haber),
+              formatMoney(mov.saldo),
+            ])
+          )
+        : libroMayor.map((grupo) => [
+            `${grupo.cuentaCodigo} - ${grupo.cuentaNombre}`,
+            formatMoney(grupo.totalDebe),
+            formatMoney(grupo.totalHaber),
+            formatMoney(grupo.saldoFinal),
+          ]);
+
+      autoTable(doc, {
+        startY: 42,
+        head: cuentaMayorId
+          ? [["Fecha", "Nro", "Concepto", "Descripcion", "Debe", "Haber", "Saldo"]]
+          : [["Cuenta", "Total Debe", "Total Haber", "Saldo Final"]],
+        body,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [30, 58, 138] },
+        columnStyles: cuentaMayorId
+          ? { 4: { halign: "right" }, 5: { halign: "right" }, 6: { halign: "right" } }
+          : { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" } },
+      });
+    }
+
+    if (vista === "balance") {
+      autoTable(doc, {
+        startY: 42,
+        head: [["Codigo", "Cuenta", "Tipo", "Suma Debe", "Suma Haber", "Saldo Deudor", "Saldo Acreedor"]],
+        body: balance.map((fila) => [
+          fila.cuentaCodigo,
+          fila.cuentaNombre,
+          fila.tipo,
+          formatMoney(fila.sumaDebe),
+          formatMoney(fila.sumaHaber),
+          formatMoney(fila.saldoDeudor),
+          formatMoney(fila.saldoAcreedor),
+        ]),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [30, 58, 138] },
+        columnStyles: { 3: { halign: "right" }, 4: { halign: "right" }, 5: { halign: "right" }, 6: { halign: "right" } },
+      });
+    }
+
+    addPdfFooter(doc);
+    doc.save(`${nombreArchivo}.pdf`);
   };
 
   const hasExportData =
@@ -193,10 +313,20 @@ export default function Contabilidad({ sedeId }) {
           <button className="secondary-button" onClick={loadData} disabled={loading}>
             <RefreshCw size={16} /> Actualizar
           </button>
-          <button className="primary-button" onClick={exportarCsv} disabled={loading || !hasExportData}>
-            <Download size={16} /> Exportar CSV
+          <button className="secondary-button" onClick={exportarExcel} disabled={loading || !hasExportData}>
+            <FileSpreadsheet size={16} /> Exportar Excel
+          </button>
+          <button className="primary-button" onClick={exportarPdf} disabled={loading || !hasExportData}>
+            <FileText size={16} /> Exportar PDF
           </button>
         </div>
+      </div>
+
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <p className="muted" style={{ margin: 0 }}>
+          Los reportes contables dependen de los asientos generados y del estado de los períodos contables.
+          Cerrá un período solo después de revisar pendientes.
+        </p>
       </div>
 
       <div className="filters-bar" data-tour="contabilidad-filtros">

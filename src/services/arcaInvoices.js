@@ -46,7 +46,11 @@ export async function emitArcaInvoice(payload) {
   try {
     await registrarAsientoFacturaArca(data.invoice);
   } catch (error) {
-    console.error("No se pudo generar el asiento contable ARCA:", error);
+    if (error.message === "El período contable correspondiente a esta fecha está cerrado.") {
+      console.error("Factura emitida, pero el período contable está cerrado y no se generó asiento.");
+    } else {
+      console.error("No se pudo generar el asiento contable ARCA:", error);
+    }
 
     return {
       ...data.invoice,

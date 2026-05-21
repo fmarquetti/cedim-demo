@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Calculator, FileSpreadsheet, Percent, ReceiptText, RefreshCw } from "lucide-react";
-import ExcelJS from "exceljs";
-import { saveAs } from "file-saver";
+import { Calculator, FileSpreadsheet, FileText, Percent, ReceiptText, RefreshCw } from "lucide-react";
 
 import {
   getResumenIva,
@@ -10,25 +8,23 @@ import {
   calcularResumenIvaVentas,
   calcularResumenIvaCompras,
 } from "../services/ivaService";
+import {
+  addPdfFooter,
+  addPdfHeader,
+  autoTable,
+  ExcelJS,
+  exportWorkbook,
+  formatDate,
+  formatMoney,
+  jsPDF,
+  safeFileName,
+  styleWorkbook,
+} from "../utils/reportUtils";
 
 const VISTAS = {
   resumen: "Resumen",
   ventas: "IVA Ventas",
   compras: "IVA Compras",
-};
-
-const formatMoney = (value = 0) =>
-  `$ ${Number(value || 0).toLocaleString("es-AR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-
-const formatDate = (fecha) => {
-  if (!fecha) return "-";
-  const clean = String(fecha).includes("T") ? fecha.split("T")[0] : fecha;
-  const [year, month, day] = clean.split("-");
-  if (!year || !month || !day) return fecha;
-  return `${day}/${month}/${year}`;
 };
 
 const statusClass = (estado) =>
@@ -37,13 +33,6 @@ const statusClass = (estado) =>
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, "-");
-
-const safeFileName = (text) =>
-  String(text || "iva")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9-_]/g, "_")
-    .replace(/_+/g, "_");
 
 function EmptyRow({ colSpan }) {
   return (
@@ -142,8 +131,8 @@ export default function Iva({ selectedSede, sedeId }) {
       desde || hasta
         ? `${desde || "inicio"}_${hasta || "actual"}`
         : "todos_los_periodos";
-    return `IVA_${safeFileName(selectedSedeName)}_${safeFileName(periodo)}`;
-  }, [desde, hasta, selectedSedeName]);
+    return `IVA_${safeFileName(VISTAS[vista])}_${safeFileName(periodo)}`;
+  }, [desde, hasta, vista]);
 
   const exportarExcel = async () => {
     const workbook = new ExcelJS.Workbook();
@@ -226,14 +215,7 @@ export default function Iva({ selectedSede, sedeId }) {
       }))
     );
 
-    workbook.worksheets.forEach((sheet) => {
-      sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
-      sheet.getRow(1).fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF1E3A8A" },
-      };
-    });
+    styleWorkbook(workbook);
 
     [
       resumen.getColumn("valor"),
@@ -249,13 +231,84 @@ export default function Iva({ selectedSede, sedeId }) {
       column.numFmt = '"$"#,##0.00';
     });
 
-    const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(
-      new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      }),
-      `${nombreArchivo}.xlsx`
-    );
+    await exportWorkbook(workbook, `${nombreArchivo}.xlsx`);
+  };
+
+  const exportarPDF = () => {
+    const doc = new jsPDF("landscape", "mm", "a4");
+    const periodo = `Periodo: ${desde ? formatDate(desde) : "Inicio"} al ${hasta ? formatDate(hasta) : "Actual"} | Sede: ${selectedSedeName}`;
+
+    addPdfHeader(doc, { title: VISTAS[vista], subtitle: periodo });
+
+    if (vista === "resumen") {
+      autoTable(doc, {
+        startY: 42,
+        head: [["Indicador", "Valor"]],
+        body: [
+          ["IVA debito fiscal", formatMoney(ivaDebito)],
+          ["IVA credito fiscal", formatMoney(ivaCredito)],
+          ["Saldo IVA", formatMoney(saldoIva)],
+          ["Total ventas", formatMoney(resumenVentas.total)],
+          ["Total compras", formatMoney(resumenCompras.total)],
+          ["Neto gravado ventas", formatMoney(resumenVentas.netoGravado)],
+          ["Neto gravado compras", formatMoney(resumenCompras.netoGravado)],
+          ["No gravado ventas", formatMoney(resumenVentas.noGravado)],
+          ["No gravado compras", formatMoney(resumenCompras.noGravado)],
+        ],
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [30, 58, 138] },
+        columnStyles: { 1: { halign: "right" } },
+      });
+    }
+
+    if (vista === "ventas") {
+      autoTable(doc, {
+        startY: 42,
+        head: [["Fecha", "Tipo", "Comprobante", "Cliente", "Documento", "Neto gravado", "IVA", "No gravado", "Total", "CAE", "Estado"]],
+        body: ventas.map((row) => [
+          formatDate(row.fecha),
+          row.tipoComprobanteLabel,
+          row.comprobante,
+          row.clienteNombre,
+          row.clienteDocumento,
+          formatMoney(row.netoGravado),
+          formatMoney(row.iva),
+          formatMoney(row.noGravado),
+          formatMoney(row.total),
+          row.cae,
+          row.estado,
+        ]),
+        styles: { fontSize: 7 },
+        headStyles: { fillColor: [30, 58, 138] },
+        columnStyles: { 5: { halign: "right" }, 6: { halign: "right" }, 7: { halign: "right" }, 8: { halign: "right" } },
+      });
+    }
+
+    if (vista === "compras") {
+      autoTable(doc, {
+        startY: 42,
+        head: [["Fecha", "Tipo", "Comprobante", "Proveedor", "CUIT", "Categoria", "Neto gravado", "IVA", "No gravado", "Total", "Estado"]],
+        body: compras.map((row) => [
+          formatDate(row.fecha),
+          row.tipoComprobanteLabel,
+          row.comprobante,
+          row.proveedor,
+          row.proveedorCuit,
+          row.categoria,
+          formatMoney(row.netoGravado),
+          formatMoney(row.iva),
+          formatMoney(row.noGravado),
+          formatMoney(row.total),
+          row.estado,
+        ]),
+        styles: { fontSize: 7 },
+        headStyles: { fillColor: [30, 58, 138] },
+        columnStyles: { 6: { halign: "right" }, 7: { halign: "right" }, 8: { halign: "right" }, 9: { halign: "right" } },
+      });
+    }
+
+    addPdfFooter(doc);
+    doc.save(`${nombreArchivo}.pdf`);
   };
 
   return (
@@ -270,8 +323,11 @@ export default function Iva({ selectedSede, sedeId }) {
           <button className="secondary-button" onClick={loadData} disabled={loading}>
             <RefreshCw size={16} /> Actualizar
           </button>
-          <button className="primary-button" onClick={exportarExcel} disabled={loading}>
+          <button className="secondary-button" onClick={exportarExcel} disabled={loading}>
             <FileSpreadsheet size={16} /> Exportar Excel
+          </button>
+          <button className="primary-button" onClick={exportarPDF} disabled={loading}>
+            <FileText size={16} /> Exportar PDF
           </button>
         </div>
       </div>
