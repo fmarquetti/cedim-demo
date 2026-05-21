@@ -41,6 +41,16 @@ const pageIntro = {
     content:
       "Desde esta pantalla se generan reportes administrativos y contables para analizar la información del sistema y exportarla cuando sea necesario.",
   },
+  contabilidad: {
+    title: "Contabilidad",
+    content:
+      "Esta pantalla reune la informacion contable formal del sistema: plan de cuentas, libro diario, mayores y balance de sumas y saldos.",
+  },
+  iva: {
+    title: "IVA",
+    content:
+      "Esta pantalla permite consultar el IVA ventas, IVA compras y el saldo fiscal estimado del período.",
+  },
   documentos: {
     title: "Documentos",
     content:
@@ -593,6 +603,68 @@ const tourStepsByPage = {
       title: "Resultados del reporte",
       content:
         "En esta zona se visualiza la información calculada según los filtros aplicados.",
+    },
+  ],
+
+  contabilidad: [
+    {
+      target: '[data-tour="contabilidad-header"]',
+      title: "Modulo de contabilidad",
+      content:
+        "Desde aca se consulta la informacion contable generada por el sistema.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="contabilidad-filtros"]',
+      title: "Filtros contables",
+      content:
+        "Estos filtros permiten consultar la informacion por periodo y actualizar los datos visibles.",
+    },
+    {
+      target: '[data-tour="contabilidad-vista"]',
+      title: "Tipo de reporte contable",
+      content:
+        "Permite cambiar entre plan de cuentas, libro diario, libro mayor y balance de sumas y saldos.",
+    },
+    {
+      target: '[data-tour="contabilidad-contenido"]',
+      title: "Resultado contable",
+      content:
+        "En esta seccion se muestra la informacion contable segun la vista seleccionada.",
+    },
+  ],
+
+  iva: [
+    {
+      target: '[data-tour="iva-header"]',
+      title: "Módulo IVA",
+      content:
+        "Desde acá se revisa la información fiscal del período, separando IVA ventas, IVA compras y saldo estimado.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="iva-filtros"]',
+      title: "Filtros del período",
+      content:
+        "Permiten seleccionar desde qué fecha y hasta qué fecha se quiere calcular el IVA.",
+    },
+    {
+      target: '[data-tour="iva-vista"]',
+      title: "Vista del módulo",
+      content:
+        "Podés alternar entre resumen general, libro IVA ventas y libro IVA compras.",
+    },
+    {
+      target: '[data-tour="iva-resumen"]',
+      title: "Resumen de IVA",
+      content:
+        "Muestra el IVA débito fiscal, IVA crédito fiscal y el saldo estimado del período.",
+    },
+    {
+      target: '[data-tour="iva-tabla"]',
+      title: "Detalle fiscal",
+      content:
+        "Acá se listan los comprobantes que componen el libro IVA seleccionado.",
     },
   ],
 

@@ -890,6 +890,9 @@ export default function Facturacion() {
                 invoice,
               )}. CAE: ${invoice.cae || "-"}`,
           invoice.warning_pdf ? `PDF pendiente: ${invoice.warning_pdf}` : "",
+          invoice.warning_contabilidad
+            ? `Asiento contable pendiente: ${invoice.warning_contabilidad}`
+            : "",
         ]
           .filter(Boolean)
           .join(" "),

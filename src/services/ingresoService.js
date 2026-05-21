@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { registrarAsientoIngresoCobrado } from "./contabilidadAutomationService";
 
 function formatFecha(fecha) {
   if (!fecha) return "";
@@ -282,7 +283,13 @@ export async function createIngreso(form) {
     throw distribucionError;
   }
 
-  return mapIngreso({ ...data, ingreso_distribuciones: [] });
+  const ingreso = mapIngreso({ ...data, ingreso_distribuciones: [] });
+
+  if (ingreso.estado === "Cobrado") {
+    await registrarAsientoIngresoCobrado(ingreso);
+  }
+
+  return ingreso;
 }
 
 export async function deleteIngreso(id) {
@@ -292,12 +299,31 @@ export async function deleteIngreso(id) {
 }
 
 export async function marcarIngresoCobrado(id) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("ingresos")
     .update({
       estado: "Cobrado",
+      updated_at: new Date().toISOString(),
     })
     .eq("id", id);
 
   if (error) throw error;
+
+  const { data: ingresoData, error: ingresoError } = await supabase
+    .from("ingresos")
+    .select(`
+      *,
+      sedes (
+        id,
+        nombre
+      )
+    `)
+    .eq("id", id)
+    .single();
+
+  if (ingresoError) throw ingresoError;
+
+  await registrarAsientoIngresoCobrado(
+    mapIngreso({ ...(data || ingresoData), ...ingresoData, ingreso_distribuciones: [] })
+  );
 }

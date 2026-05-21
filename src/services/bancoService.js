@@ -1,5 +1,9 @@
 // src/services/bancoService.js
 import { supabase } from "../lib/supabaseClient";
+import {
+  registrarAsientoConciliacionEgreso,
+  registrarAsientoConciliacionIngreso,
+} from "./contabilidadAutomationService";
 
 function formatFecha(fecha) {
   if (!fecha) return "";
@@ -27,6 +31,76 @@ function mapMovimiento(row) {
     ingresoId: row.ingreso_id || null,
     egresoId: row.egreso_id || null,
   };
+}
+
+function mapIngresoContable(row) {
+  return {
+    id: row.id,
+    fecha: row.fecha,
+    fechaDb: row.fecha,
+    sedeId: row.sede_id,
+    concepto: row.concepto,
+    sociedad: row.sociedad,
+    importe: Number(row.importe || 0),
+    cobro: row.cobro,
+    estado: row.estado,
+  };
+}
+
+function mapEgresoContable(row) {
+  return {
+    id: row.id,
+    fecha: row.fecha,
+    fechaDb: row.fecha,
+    sedeId: row.sede_id,
+    proveedor: row.proveedor,
+    concepto: row.concepto,
+    importe: Number(row.importe || 0),
+    categoria: row.categoria,
+    estado: row.estado,
+  };
+}
+
+async function getMovimientoById(id) {
+  const { data, error } = await supabase
+    .from("movimientos_bancarios")
+    .select(`
+      *,
+      sedes (
+        id,
+        nombre
+      )
+    `)
+    .eq("id", id)
+    .single();
+
+  if (error) throw error;
+
+  return mapMovimiento(data);
+}
+
+async function getIngresoById(id) {
+  const { data, error } = await supabase
+    .from("ingresos")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) throw error;
+
+  return mapIngresoContable(data);
+}
+
+async function getEgresoById(id) {
+  const { data, error } = await supabase
+    .from("egresos")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) throw error;
+
+  return mapEgresoContable(data);
 }
 
 export async function getMovimientosBancarios(sedeId = null) {
@@ -178,6 +252,13 @@ export async function conciliarConIngreso(movimientoId, ingresoId) {
     .eq("id", ingresoId);
 
   if (errorIngreso) throw errorIngreso;
+
+  const [movimiento, ingreso] = await Promise.all([
+    getMovimientoById(movimientoId),
+    getIngresoById(ingresoId),
+  ]);
+
+  await registrarAsientoConciliacionIngreso(movimiento, ingreso);
 }
 
 export async function conciliarConEgreso(movimientoId, egresoId) {
@@ -202,6 +283,13 @@ export async function conciliarConEgreso(movimientoId, egresoId) {
     .eq("id", egresoId);
 
   if (errorEgreso) throw errorEgreso;
+
+  const [movimiento, egreso] = await Promise.all([
+    getMovimientoById(movimientoId),
+    getEgresoById(egresoId),
+  ]);
+
+  await registrarAsientoConciliacionEgreso(movimiento, egreso);
 }
 
 /* =========================================================

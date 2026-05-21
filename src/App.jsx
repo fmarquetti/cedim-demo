@@ -10,6 +10,8 @@ import Egresos from "./pages/Egresos";
 import CuentasCorrientes from "./pages/CuentasCorrientes";
 import Bancos from "./pages/Bancos";
 import Reportes from "./pages/Reportes";
+import Contabilidad from "./pages/Contabilidad";
+import Iva from "./pages/Iva";
 import Documentos from "./pages/Documentos";
 import Pacientes from "./pages/Pacientes";
 import Turnos from "./pages/Turnos";
@@ -53,6 +55,8 @@ function getPage(activePage, selectedSede, currentUser) {
     cuentas: <CuentasCorrientes {...props} />,
     bancos: <Bancos {...props} />,
     reportes: <Reportes {...props} />,
+    contabilidad: <Contabilidad {...props} />,
+    iva: <Iva {...props} />,
     documentos: <Documentos {...props} />,
     pacientes: <Pacientes {...props} />,
     turnos: <Turnos {...props} />,

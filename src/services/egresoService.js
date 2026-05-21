@@ -1,4 +1,8 @@
 import { supabase } from "../lib/supabaseClient";
+import {
+  registrarAsientoEgresoCargado,
+  registrarAsientoEgresoPagado,
+} from "./contabilidadAutomationService";
 
 function formatFecha(fecha) {
   if (!fecha) return "";
@@ -277,7 +281,15 @@ export async function createEgreso(form) {
     throw distribucionError;
   }
 
-  return mapEgreso({ ...data, egreso_distribuciones: [] });
+  const egreso = mapEgreso({ ...data, egreso_distribuciones: [] });
+
+  await registrarAsientoEgresoCargado(egreso);
+
+  if (egreso.estado === "Pagado") {
+    await registrarAsientoEgresoPagado(egreso);
+  }
+
+  return egreso;
 }
 
 export async function deleteEgreso(id) {
@@ -296,4 +308,22 @@ export async function marcarEgresoPagado(id) {
     .eq("id", id);
 
   if (error) throw error;
+
+  const { data: egresoData, error: egresoError } = await supabase
+    .from("egresos")
+    .select(`
+      *,
+      sedes (
+        id,
+        nombre
+      )
+    `)
+    .eq("id", id)
+    .single();
+
+  if (egresoError) throw egresoError;
+
+  await registrarAsientoEgresoPagado(
+    mapEgreso({ ...egresoData, egreso_distribuciones: [] })
+  );
 }

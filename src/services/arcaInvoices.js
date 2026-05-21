@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { registrarAsientoFacturaArca } from "./contabilidadAutomationService";
 
 const arcaApiUrl =
   import.meta.env.VITE_ARCA_API_URL || "http://localhost:3001";
@@ -40,6 +41,18 @@ export async function emitArcaInvoice(payload) {
 
   if (!data.invoice) {
     throw new Error("El servidor ARCA no devolvió el registro de factura.");
+  }
+
+  try {
+    await registrarAsientoFacturaArca(data.invoice);
+  } catch (error) {
+    console.error("No se pudo generar el asiento contable ARCA:", error);
+
+    return {
+      ...data.invoice,
+      warning_contabilidad:
+        error.message || "La factura se emitio, pero no se genero el asiento contable.",
+    };
   }
 
   return data.invoice;
