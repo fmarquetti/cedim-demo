@@ -3826,6 +3826,18 @@ td {
   flex-wrap: wrap;
 }
 
+.billing-settings-grid {
+  align-items: start;
+}
+
+.billing-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
 .btn-primary,
 .btn-secondary {
   min-height: 42px;

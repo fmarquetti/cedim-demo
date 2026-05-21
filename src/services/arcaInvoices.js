@@ -177,25 +177,9 @@ export async function updateArcaSettings(settings) {
     origen: "CEDIM",
     updated_at: new Date().toISOString(),
   };
-
-  const current = await getArcaSettings();
-
-  if (current?.id) {
-    const { data, error } = await supabase
-      .from("arca_settings")
-      .update(payload)
-      .eq("id", current.id)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    return data;
-  }
-
   const { data, error } = await supabase
     .from("arca_settings")
-    .insert(payload)
+    .upsert(payload, { onConflict: "origen" })
     .select()
     .single();
 

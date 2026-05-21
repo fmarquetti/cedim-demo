@@ -13,6 +13,10 @@ import {
 import { defaultAppConfig } from "../services/configuracionService";
 import { useAppConfig } from "../context/AppConfigContext";
 import { uploadConfigIcon } from "../services/configAssetService";
+import {
+  getArcaSettings,
+  updateArcaSettings,
+} from "../services/arcaInvoices";
 
 const menuOptions = [
   { id: "dashboard", label: "Dashboard" },
@@ -29,7 +33,53 @@ const menuOptions = [
   { id: "configuracion", label: "Configuración" },
 ];
 
-export default function Configuracion() {
+const defaultArcaSettingsForm = {
+  emisor_nombre: "",
+  emisor_cuit: "",
+  emisor_domicilio: "",
+  emisor_iva: "",
+  punto_venta_default: "1",
+  tipo_comprobante_default: "6",
+  email_from_name: "",
+  email_from_address: "",
+  pdf_leyenda: "",
+  pdf_footer: "",
+  arca_environment: "dev",
+};
+
+function isAdminUser(currentUser) {
+  const role = String(
+    currentUser?.rol ||
+      currentUser?.role ||
+      currentUser?.perfil ||
+      "",
+  ).toLowerCase();
+
+  const email = String(currentUser?.email || "").toLowerCase();
+
+  return (
+    role.includes("admin") ||
+    role.includes("administrador") ||
+    email === "francomarquetti@gmail.com"
+  );
+}
+
+function buildArcaSettingsForm(settings = null) {
+  return {
+    ...defaultArcaSettingsForm,
+    ...Object.fromEntries(
+      Object.entries(settings || {}).map(([key, value]) => [
+        key,
+        value === null || value === undefined ? "" : String(value),
+      ]),
+    ),
+    punto_venta_default: String(settings?.punto_venta_default || "1"),
+    tipo_comprobante_default: String(settings?.tipo_comprobante_default || "6"),
+    arca_environment: settings?.arca_environment || "dev",
+  };
+}
+
+export default function Configuracion({ currentUser }) {
   const {
     config,
     setConfig,
@@ -44,10 +94,54 @@ export default function Configuracion() {
   const [uploading, setUploading] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [arcaSettings, setArcaSettings] = useState(null);
+  const [arcaSettingsForm, setArcaSettingsForm] = useState(
+    buildArcaSettingsForm(),
+  );
+  const [loadingArcaSettings, setLoadingArcaSettings] = useState(false);
+  const [savingArcaSettings, setSavingArcaSettings] = useState(false);
+  const userIsAdmin = isAdminUser(currentUser);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setForm(config);
   }, [config]);
+
+  useEffect(() => {
+    if (!userIsAdmin) return;
+
+    let cancelled = false;
+
+    async function loadArcaSettings() {
+      setLoadingArcaSettings(true);
+      setError("");
+
+      try {
+        const settings = await getArcaSettings();
+
+        if (cancelled) return;
+
+        setArcaSettings(settings);
+        setArcaSettingsForm(buildArcaSettingsForm(settings));
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err.message || "No se pudo cargar la configuracion de facturacion.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingArcaSettings(false);
+        }
+      }
+    }
+
+    loadArcaSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userIsAdmin]);
 
   const hiddenCount = useMemo(() => {
     return Array.isArray(form.hiddenMenuItems) ? form.hiddenMenuItems.length : 0;
@@ -68,6 +162,13 @@ export default function Configuracion() {
     ) {
       setConfig(next);
     }
+  }
+
+  function updateArcaSettingsField(field, value) {
+    setArcaSettingsForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
   }
 
   function isMenuHidden(id) {
@@ -139,6 +240,40 @@ export default function Configuracion() {
       setMessage("Configuración recargada desde Supabase.");
     } catch {
       setError("No se pudo recargar la configuración.");
+    }
+  }
+
+  async function handleSaveArcaSettings() {
+    setMessage("");
+    setError("");
+    setSavingArcaSettings(true);
+
+    try {
+      const saved = await updateArcaSettings({
+        emisor_nombre: arcaSettingsForm.emisor_nombre.trim() || null,
+        emisor_cuit: arcaSettingsForm.emisor_cuit.trim() || null,
+        emisor_domicilio: arcaSettingsForm.emisor_domicilio.trim() || null,
+        emisor_iva: arcaSettingsForm.emisor_iva.trim() || null,
+        punto_venta_default: Number(arcaSettingsForm.punto_venta_default || 1),
+        tipo_comprobante_default: Number(
+          arcaSettingsForm.tipo_comprobante_default || 6,
+        ),
+        email_from_name: arcaSettingsForm.email_from_name.trim() || null,
+        email_from_address: arcaSettingsForm.email_from_address.trim() || null,
+        pdf_leyenda: arcaSettingsForm.pdf_leyenda.trim() || null,
+        pdf_footer: arcaSettingsForm.pdf_footer.trim() || null,
+        arca_environment: arcaSettingsForm.arca_environment || "dev",
+      });
+
+      setArcaSettings(saved);
+      setArcaSettingsForm(buildArcaSettingsForm(saved));
+      setMessage("Configuracion de facturacion guardada correctamente.");
+    } catch (err) {
+      setError(
+        err.message || "No se pudo guardar la configuracion de facturacion.",
+      );
+    } finally {
+      setSavingArcaSettings(false);
     }
   }
 
@@ -241,6 +376,17 @@ export default function Configuracion() {
             <Settings size={17} />
             Avisos y footer
           </button>
+
+          {userIsAdmin && (
+            <button
+              type="button"
+              className={activeTab === "facturacion" ? "active" : ""}
+              onClick={() => setActiveTab("facturacion")}
+            >
+              <Settings size={17} />
+              Facturación
+            </button>
+          )}
         </aside>
 
         <form className="config-grid" onSubmit={handleSubmit}>
@@ -604,6 +750,213 @@ export default function Configuracion() {
             </>
           )}
 
+          {activeTab === "facturacion" && userIsAdmin && (
+            <section className="config-panel">
+              <h3>Configuración de facturación</h3>
+              <p>
+                Parámetros fiscales y visuales usados para emitir comprobantes y
+                generar PDF. No se guardan tokens, contraseñas ni claves privadas.
+              </p>
+
+              {loadingArcaSettings ? (
+                <p>Cargando configuración de facturación...</p>
+              ) : (
+                <>
+                  <div className="config-form-grid billing-settings-grid">
+                    <label>
+                      Nombre emisor
+                      <input
+                        value={arcaSettingsForm.emisor_nombre}
+                        onChange={(e) =>
+                          updateArcaSettingsField(
+                            "emisor_nombre",
+                            e.target.value,
+                          )
+                        }
+                        placeholder="CEDIM"
+                      />
+                    </label>
+
+                    <label>
+                      CUIT emisor
+                      <input
+                        value={arcaSettingsForm.emisor_cuit}
+                        onChange={(e) =>
+                          updateArcaSettingsField("emisor_cuit", e.target.value)
+                        }
+                        placeholder="CUIT"
+                      />
+                    </label>
+
+                    <label>
+                      Domicilio fiscal
+                      <input
+                        value={arcaSettingsForm.emisor_domicilio}
+                        onChange={(e) =>
+                          updateArcaSettingsField(
+                            "emisor_domicilio",
+                            e.target.value,
+                          )
+                        }
+                        placeholder="Domicilio fiscal"
+                      />
+                    </label>
+
+                    <label>
+                      Condición IVA emisor
+                      <input
+                        value={arcaSettingsForm.emisor_iva}
+                        onChange={(e) =>
+                          updateArcaSettingsField("emisor_iva", e.target.value)
+                        }
+                        placeholder="Responsable Inscripto"
+                      />
+                    </label>
+
+                    <label>
+                      Punto de venta por defecto
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={arcaSettingsForm.punto_venta_default}
+                        onChange={(e) =>
+                          updateArcaSettingsField(
+                            "punto_venta_default",
+                            e.target.value,
+                          )
+                        }
+                      />
+                    </label>
+
+                    <label>
+                      Tipo comprobante por defecto
+                      <select
+                        value={arcaSettingsForm.tipo_comprobante_default}
+                        onChange={(e) =>
+                          updateArcaSettingsField(
+                            "tipo_comprobante_default",
+                            e.target.value,
+                          )
+                        }
+                      >
+                        <option value="6">Factura B</option>
+                        <option value="11">Factura C</option>
+                        <option value="1">Factura A</option>
+                        <option value="8">Nota de Credito B</option>
+                        <option value="13">Nota de Credito C</option>
+                        <option value="3">Nota de Credito A</option>
+                        <option value="7">Nota de Debito B</option>
+                        <option value="12">Nota de Debito C</option>
+                        <option value="2">Nota de Debito A</option>
+                      </select>
+                    </label>
+
+                    <label>
+                      Nombre remitente email
+                      <input
+                        value={arcaSettingsForm.email_from_name}
+                        onChange={(e) =>
+                          updateArcaSettingsField(
+                            "email_from_name",
+                            e.target.value,
+                          )
+                        }
+                        placeholder="CEDIM"
+                      />
+                    </label>
+
+                    <label>
+                      Email remitente
+                      <input
+                        type="email"
+                        value={arcaSettingsForm.email_from_address}
+                        onChange={(e) =>
+                          updateArcaSettingsField(
+                            "email_from_address",
+                            e.target.value,
+                          )
+                        }
+                        placeholder="facturacion@cedim.com"
+                      />
+                    </label>
+
+                    <label className="full">
+                      Leyenda PDF
+                      <textarea
+                        value={arcaSettingsForm.pdf_leyenda}
+                        onChange={(e) =>
+                          updateArcaSettingsField("pdf_leyenda", e.target.value)
+                        }
+                        placeholder="Comprobante emitido electrónicamente"
+                      />
+                    </label>
+
+                    <label className="full">
+                      Footer PDF
+                      <textarea
+                        value={arcaSettingsForm.pdf_footer}
+                        onChange={(e) =>
+                          updateArcaSettingsField("pdf_footer", e.target.value)
+                        }
+                        placeholder="Generado desde CEDIM"
+                      />
+                    </label>
+
+                    <label>
+                      Ambiente ARCA
+                      <select
+                        value={arcaSettingsForm.arca_environment}
+                        onChange={(e) =>
+                          updateArcaSettingsField(
+                            "arca_environment",
+                            e.target.value,
+                          )
+                        }
+                      >
+                        <option value="dev">Desarrollo / homologación</option>
+                        <option value="prod">Producción</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="billing-settings-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() =>
+                        setArcaSettingsForm(buildArcaSettingsForm(arcaSettings))
+                      }
+                      disabled={savingArcaSettings}
+                    >
+                      Descartar cambios
+                    </button>
+
+                    <button
+                      type="button"
+                      className="primary-button"
+                      onClick={handleSaveArcaSettings}
+                      disabled={savingArcaSettings}
+                    >
+                      <Save size={16} />
+                      {savingArcaSettings
+                        ? "Guardando..."
+                        : "Guardar configuración de facturación"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </section>
+          )}
+
+          {activeTab === "facturacion" && !userIsAdmin && (
+            <section className="config-panel">
+              <h3>No tenés permisos</h3>
+              <p>La configuración de facturación solo está disponible para administradores.</p>
+            </section>
+          )}
+
+          {activeTab !== "facturacion" && (
           <div className="config-sticky-actions">
             <button
               type="button"
@@ -623,6 +976,7 @@ export default function Configuracion() {
               {savingConfig ? "Guardando..." : "Guardar configuración"}
             </button>
           </div>
+          )}
         </form>
       </div>
     </section>

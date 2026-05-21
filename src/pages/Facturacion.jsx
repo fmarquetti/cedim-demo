@@ -7,7 +7,6 @@ import {
   getArcaSettings,
   listArcaInvoices,
   sendArcaInvoiceEmail,
-  updateArcaSettings,
 } from "../services/arcaInvoices";
 
 const INITIAL_FORM = {
@@ -31,20 +30,6 @@ const INITIAL_FORM = {
 
 const INVOICES_PER_PAGE = 10;
 
-const DEFAULT_ARCA_SETTINGS_FORM = {
-  emisor_nombre: "",
-  emisor_cuit: "",
-  emisor_domicilio: "",
-  emisor_iva: "",
-  punto_venta_default: "1",
-  tipo_comprobante_default: "6",
-  email_from_name: "",
-  email_from_address: "",
-  pdf_leyenda: "",
-  pdf_footer: "",
-  arca_environment: "dev",
-};
-
 function buildInitialForm(settings = null) {
   return {
     ...INITIAL_FORM,
@@ -52,21 +37,6 @@ function buildInitialForm(settings = null) {
     tipo_comprobante: String(
       settings?.tipo_comprobante_default || INITIAL_FORM.tipo_comprobante,
     ),
-  };
-}
-
-function buildSettingsForm(settings = null) {
-  return {
-    ...DEFAULT_ARCA_SETTINGS_FORM,
-    ...Object.fromEntries(
-      Object.entries(settings || {}).map(([key, value]) => [
-        key,
-        value === null || value === undefined ? "" : String(value),
-      ]),
-    ),
-    punto_venta_default: String(settings?.punto_venta_default || "1"),
-    tipo_comprobante_default: String(settings?.tipo_comprobante_default || "6"),
-    arca_environment: settings?.arca_environment || "dev",
   };
 }
 
@@ -347,11 +317,6 @@ export default function Facturacion() {
 
   const [message, setMessage] = useState("");
   const [arcaSettings, setArcaSettings] = useState(null);
-  const [settingsForm, setSettingsForm] = useState(
-    buildSettingsForm(DEFAULT_ARCA_SETTINGS_FORM),
-  );
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsSaving, setSettingsSaving] = useState(false);
 
   const formIsInternalVoucher = isInternalVoucher(form.tipo_comprobante);
   const emitterName = arcaSettings?.emisor_nombre || "CEDIM";
@@ -484,7 +449,6 @@ export default function Facturacion() {
     try {
       const settings = await getArcaSettings();
       setArcaSettings(settings);
-      setSettingsForm(buildSettingsForm(settings));
 
       if (settings) {
         setForm((prev) => ({
@@ -576,56 +540,6 @@ export default function Facturacion() {
         prev.field === field && prev.direction === "asc" ? "desc" : "asc",
     }));
     setInvoicePage(1);
-  }
-
-  function handleSettingsChange(event) {
-    const { name, value } = event.target;
-    setSettingsForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  }
-
-  async function handleSaveSettings(event) {
-    event.preventDefault();
-    setSettingsSaving(true);
-
-    try {
-      const saved = await updateArcaSettings({
-        emisor_nombre: settingsForm.emisor_nombre.trim() || null,
-        emisor_cuit: settingsForm.emisor_cuit.trim() || null,
-        emisor_domicilio: settingsForm.emisor_domicilio.trim() || null,
-        emisor_iva: settingsForm.emisor_iva.trim() || null,
-        punto_venta_default: Number(settingsForm.punto_venta_default || 1),
-        tipo_comprobante_default: Number(
-          settingsForm.tipo_comprobante_default || 6,
-        ),
-        email_from_name: settingsForm.email_from_name.trim() || null,
-        email_from_address: settingsForm.email_from_address.trim() || null,
-        pdf_leyenda: settingsForm.pdf_leyenda.trim() || null,
-        pdf_footer: settingsForm.pdf_footer.trim() || null,
-        arca_environment: settingsForm.arca_environment || "dev",
-      });
-
-      setArcaSettings(saved);
-      setSettingsForm(buildSettingsForm(saved));
-      setForm((prev) => ({
-        ...prev,
-        punto_venta: String(saved.punto_venta_default || prev.punto_venta || "1"),
-        tipo_comprobante: String(
-          saved.tipo_comprobante_default || prev.tipo_comprobante || "6",
-        ),
-      }));
-      setSettingsOpen(false);
-      setMessage("Configuracion de facturacion guardada correctamente.");
-    } catch (error) {
-      console.error(error);
-      setMessage(
-        error.message || "No se pudo guardar la configuracion de facturacion.",
-      );
-    } finally {
-      setSettingsSaving(false);
-    }
   }
 
   useEffect(() => {
@@ -1154,161 +1068,8 @@ export default function Facturacion() {
           >
             {loadingInvoices ? "Actualizando..." : "Actualizar"}
           </button>
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => setSettingsOpen((prev) => !prev)}
-          >
-            Configuración de facturación
-          </button>
         </div>
       </div>
-
-      {settingsOpen && (
-        <section className="card settings-panel">
-          <h2>Configuración de facturación</h2>
-          <form onSubmit={handleSaveSettings}>
-            <div className="settings-grid">
-              <label>
-                Nombre emisor
-                <input
-                  name="emisor_nombre"
-                  value={settingsForm.emisor_nombre}
-                  onChange={handleSettingsChange}
-                  placeholder="CEDIM"
-                />
-              </label>
-              <label>
-                CUIT emisor
-                <input
-                  name="emisor_cuit"
-                  value={settingsForm.emisor_cuit}
-                  onChange={handleSettingsChange}
-                  placeholder="CUIT"
-                />
-              </label>
-              <label>
-                Domicilio fiscal
-                <input
-                  name="emisor_domicilio"
-                  value={settingsForm.emisor_domicilio}
-                  onChange={handleSettingsChange}
-                  placeholder="Domicilio fiscal"
-                />
-              </label>
-              <label>
-                Condición IVA emisor
-                <input
-                  name="emisor_iva"
-                  value={settingsForm.emisor_iva}
-                  onChange={handleSettingsChange}
-                  placeholder="Responsable Inscripto"
-                />
-              </label>
-              <label>
-                Punto de venta default
-                <input
-                  name="punto_venta_default"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={settingsForm.punto_venta_default}
-                  onChange={handleSettingsChange}
-                />
-              </label>
-              <label>
-                Tipo comprobante default
-                <select
-                  name="tipo_comprobante_default"
-                  value={settingsForm.tipo_comprobante_default}
-                  onChange={handleSettingsChange}
-                >
-                  <option value="6">Factura B</option>
-                  <option value="11">Factura C</option>
-                  <option value="1">Factura A</option>
-                  <option value="8">Nota de Credito B</option>
-                  <option value="13">Nota de Credito C</option>
-                  <option value="3">Nota de Credito A</option>
-                  <option value="7">Nota de Debito B</option>
-                  <option value="12">Nota de Debito C</option>
-                  <option value="2">Nota de Debito A</option>
-                </select>
-              </label>
-              <label>
-                Nombre remitente email
-                <input
-                  name="email_from_name"
-                  value={settingsForm.email_from_name}
-                  onChange={handleSettingsChange}
-                  placeholder="CEDIM"
-                />
-              </label>
-              <label>
-                Email remitente
-                <input
-                  name="email_from_address"
-                  type="email"
-                  value={settingsForm.email_from_address}
-                  onChange={handleSettingsChange}
-                  placeholder="facturacion@cedim.com"
-                />
-              </label>
-              <label>
-                Leyenda PDF
-                <textarea
-                  name="pdf_leyenda"
-                  value={settingsForm.pdf_leyenda}
-                  onChange={handleSettingsChange}
-                  placeholder="Comprobante emitido electrónicamente"
-                />
-              </label>
-              <label>
-                Footer PDF
-                <textarea
-                  name="pdf_footer"
-                  value={settingsForm.pdf_footer}
-                  onChange={handleSettingsChange}
-                  placeholder="Generado desde CEDIM"
-                />
-              </label>
-              <label>
-                Ambiente ARCA
-                <select
-                  name="arca_environment"
-                  value={settingsForm.arca_environment}
-                  onChange={handleSettingsChange}
-                >
-                  <option value="dev">Desarrollo / homologación</option>
-                  <option value="prod">Producción</option>
-                </select>
-              </label>
-            </div>
-            <p className="muted">
-              Los tokens de AFIP SDK, SMTP y Supabase se mantienen en server/.env.
-            </p>
-            <div className="settings-actions">
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => {
-                  setSettingsForm(buildSettingsForm(arcaSettings));
-                  setSettingsOpen(false);
-                }}
-                disabled={settingsSaving}
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="btn-primary"
-                disabled={settingsSaving}
-              >
-                {settingsSaving ? "Guardando..." : "Guardar configuración"}
-              </button>
-            </div>
-          </form>
-        </section>
-      )}
 
       <div className="dashboard-grid">
         <section className="card">
