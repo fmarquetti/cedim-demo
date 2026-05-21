@@ -45,6 +45,59 @@ export async function emitArcaInvoice(payload) {
   return data.invoice;
 }
 
+async function getAuthHeaders() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Usuario no autenticado.");
+  }
+
+  return {
+    Authorization: `Bearer ${session.access_token}`,
+  };
+}
+
+export async function getArcaInvoicePdfUrl(invoiceId) {
+  const response = await fetch(
+    `${arcaApiUrl}/api/arca/invoices/${invoiceId}/pdf-url`,
+    {
+      headers: await getAuthHeaders(),
+    },
+  );
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.error || "No se pudo obtener el PDF de la factura.");
+  }
+
+  return data.pdf_url;
+}
+
+export async function sendArcaInvoiceEmail(invoiceId, email) {
+  const response = await fetch(
+    `${arcaApiUrl}/api/arca/invoices/${invoiceId}/send-email`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(await getAuthHeaders()),
+      },
+      body: JSON.stringify({ email }),
+    },
+  );
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.error || "No se pudo enviar la factura por mail.");
+  }
+
+  return data.invoice;
+}
+
 export async function listArcaInvoices() {
   const { data, error } = await supabase
     .from("arca_invoices")

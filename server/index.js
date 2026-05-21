@@ -4,6 +4,8 @@ const dotenv = require("dotenv");
 const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
 const AfipModule = require("@afipsdk/afip.js");
+const PDFDocument = require("pdfkit");
+const nodemailer = require("nodemailer");
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 dotenv.config({ path: path.resolve(__dirname, ".env"), override: true });
@@ -18,6 +20,7 @@ app.use(express.json({ limit: "1mb" }));
 
 let supabaseServerClient = null;
 let cachedAfipDate = null;
+const ARCA_INVOICES_BUCKET = "arca-invoices";
 
 function envFlag(name, defaultValue = false) {
   const value = process.env[name];
@@ -64,6 +67,10 @@ function payloadNumber(value, fallback) {
   }
 
   return fallback;
+}
+
+function isTipoC(tipoComprobante) {
+  return [11, 12, 13].includes(Number(tipoComprobante));
 }
 
 function getTodayAfipDate() {
@@ -213,9 +220,25 @@ function validatePayload(payload) {
   const total = toMoney(payload.importe_total);
   const neto = toMoney(payload.importe_neto);
   const iva = toMoney(payload.importe_iva);
+  const tipoComprobante = Number(payloadNumber(payload.tipo_comprobante, 6));
 
   if (!Number.isFinite(total) || total <= 0) {
     throw new Error("El importe_total debe ser mayor a 0.");
+  }
+
+  if (isTipoC(tipoComprobante)) {
+    if (iva !== 0) {
+      throw new Error(
+        "Factura C no discrimina IVA. Cargá IVA 0 y Total igual a Neto.",
+      );
+    }
+
+    if (!Number.isFinite(neto) || neto <= 0) {
+      throw new Error("El importe_neto debe ser mayor a 0.");
+    }
+
+    assertMoneyClose("importe_neto", neto, total);
+    return;
   }
 
   assertMoneyClose("importe_neto + importe_iva", toMoney(neto + iva), total);
@@ -227,6 +250,7 @@ function buildVoucherData(payload, voucherNumber = null, options = {}) {
   const total = toMoney(payload.importe_total);
   const neto = toMoney(payload.importe_neto);
   const iva = toMoney(payload.importe_iva);
+  const tipoC = isTipoC(tipoComprobante);
   const hasIva = iva > 0;
   const { DocTipo, DocNro } = getDocumentType(payload.cliente_documento);
 
@@ -239,16 +263,16 @@ function buildVoucherData(payload, voucherNumber = null, options = {}) {
     DocNro,
     ImpTotal: total,
     ImpTotConc: 0,
-    ImpNeto: hasIva ? neto : 0,
-    ImpOpEx: hasIva ? 0 : total,
-    ImpIVA: iva,
+    ImpNeto: tipoC ? total : hasIva ? neto : 0,
+    ImpOpEx: tipoC ? 0 : hasIva ? 0 : total,
+    ImpIVA: tipoC ? 0 : iva,
     ImpTrib: 0,
     MonId: "PES",
     MonCotiz: 1,
     CondicionIVAReceptorId: getCondicionIVAReceptorId(payload.cliente_iva),
   };
 
-  if (hasIva) {
+  if (!tipoC && hasIva) {
     data.Iva = [
       {
         Id: 5,
@@ -285,6 +309,47 @@ function serializeError(error) {
   return {
     message: String(error),
   };
+}
+
+function getVoucherLetter(tipoComprobante) {
+  const labels = {
+    1: "A",
+    6: "B",
+    11: "C",
+  };
+
+  return labels[Number(tipoComprobante)] || "B";
+}
+
+function formatDisplayDate(value) {
+  if (!value) return "-";
+
+  const raw = String(value);
+  if (/^\d{8}$/.test(raw)) {
+    return `${raw.slice(6, 8)}/${raw.slice(4, 6)}/${raw.slice(0, 4)}`;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return raw;
+
+  return date.toLocaleDateString("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+  });
+}
+
+function formatMoney(value) {
+  return Number(value || 0).toLocaleString("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    minimumFractionDigits: 2,
+  });
+}
+
+function voucherLabel(invoice) {
+  const puntoVenta = String(invoice?.punto_venta || 0).padStart(4, "0");
+  const numero = String(invoice?.numero_comprobante || 0).padStart(8, "0");
+
+  return `${puntoVenta}-${numero}`;
 }
 
 function isAfipErrorCode(error, code) {
@@ -526,6 +591,251 @@ async function updateInvoiceError(invoiceId, message, response = null) {
       error_message: String(message || "").slice(0, 2000),
     })
     .eq("id", invoiceId);
+}
+
+function buildInvoicePdfBuffer(invoice, payloadOrResponse = {}) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({
+      size: "A4",
+      margin: 48,
+      info: {
+        Title: `Factura ${voucherLabel(invoice)}`,
+        Author: "CEDIM",
+      },
+    });
+    const chunks = [];
+
+    doc.on("data", (chunk) => chunks.push(chunk));
+    doc.on("error", reject);
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+
+    const typeLetter = getVoucherLetter(invoice.tipo_comprobante);
+    const caeVencimiento =
+      invoice.cae_vencimiento ||
+      payloadOrResponse.CAEFchVto ||
+      payloadOrResponse.cae_vencimiento ||
+      "-";
+
+    doc
+      .fontSize(22)
+      .font("Helvetica-Bold")
+      .text("CEDIM", 48, 46)
+      .fontSize(9)
+      .font("Helvetica")
+      .text("Comprobante emitido electronicamente", 48, 76);
+
+    doc
+      .roundedRect(270, 44, 58, 58, 4)
+      .stroke("#1f2937")
+      .fontSize(30)
+      .font("Helvetica-Bold")
+      .text(typeLetter, 270, 58, { width: 58, align: "center" });
+
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .text(`Punto de venta: ${invoice.punto_venta || "-"}`, 360, 50)
+      .text(`Numero comprobante: ${voucherLabel(invoice)}`, 360, 68)
+      .text(
+        `Fecha emision: ${formatDisplayDate(invoice.emitted_at || invoice.created_at)}`,
+        360,
+        86,
+      );
+
+    doc.moveTo(48, 122).lineTo(547, 122).stroke("#d1d5db");
+
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .text("Cliente", 48, 142)
+      .fontSize(10)
+      .font("Helvetica")
+      .text(`Cliente: ${invoice.cliente_nombre || "-"}`, 48, 166)
+      .text(`Documento: ${invoice.cliente_documento || "-"}`, 48, 184)
+      .text(`Condicion IVA: ${invoice.cliente_iva || "Consumidor Final"}`, 48, 202)
+      .text(`Domicilio: ${invoice.domicilio || "-"}`, 48, 220);
+
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .text("Detalle", 48, 260);
+
+    const tableTop = 286;
+    doc.rect(48, tableTop, 499, 28).fill("#f3f6fa");
+    doc
+      .fillColor("#111827")
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .text("Concepto", 58, tableTop + 10, { width: 90 })
+      .text("Descripcion", 150, tableTop + 10, { width: 190 })
+      .text("Neto", 348, tableTop + 10, { width: 58, align: "right" })
+      .text("IVA", 414, tableTop + 10, { width: 48, align: "right" })
+      .text("Total", 470, tableTop + 10, { width: 66, align: "right" });
+
+    doc.rect(48, tableTop + 28, 499, 52).stroke("#e5e7eb");
+    doc
+      .font("Helvetica")
+      .fontSize(9)
+      .text(invoice.concepto || "-", 58, tableTop + 44, { width: 90 })
+      .text(invoice.descripcion || "-", 150, tableTop + 44, { width: 190 })
+      .text(formatMoney(invoice.importe_neto), 348, tableTop + 44, {
+        width: 58,
+        align: "right",
+      })
+      .text(formatMoney(invoice.importe_iva), 414, tableTop + 44, {
+        width: 48,
+        align: "right",
+      })
+      .text(formatMoney(invoice.importe_total), 470, tableTop + 44, {
+        width: 66,
+        align: "right",
+      });
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(14)
+      .text("Total", 360, tableTop + 110, { width: 80, align: "right" })
+      .text(formatMoney(invoice.importe_total), 448, tableTop + 110, {
+        width: 99,
+        align: "right",
+      });
+
+    doc
+      .font("Helvetica")
+      .fontSize(10)
+      .text(`CAE: ${invoice.cae || "-"}`, 48, tableTop + 150)
+      .text(`Vencimiento CAE: ${formatDisplayDate(caeVencimiento)}`, 48, tableTop + 168);
+
+    // TODO: agregar QR fiscal ARCA/AFIP cuando se defina el payload homologado.
+    doc
+      .fontSize(9)
+      .fillColor("#6b7280")
+      .text("Generado desde CEDIM", 48, 770, { align: "center", width: 499 });
+
+    doc.end();
+  });
+}
+
+async function uploadInvoicePdfToSupabase(invoice, pdfBuffer) {
+  const supabase = getSupabaseServerClient();
+
+  if (!supabase) {
+    throw new Error("Supabase no configurado para guardar PDF.");
+  }
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY requerido para guardar PDF.");
+  }
+
+  const storagePath = `cedim/${invoice.id}/factura-${invoice.punto_venta}-${invoice.numero_comprobante}.pdf`;
+  const { error: uploadError } = await supabase.storage
+    .from(ARCA_INVOICES_BUCKET)
+    .upload(storagePath, pdfBuffer, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+
+  if (uploadError) {
+    throw uploadError;
+  }
+
+  const { data: signedData, error: signedError } = await supabase.storage
+    .from(ARCA_INVOICES_BUCKET)
+    .createSignedUrl(storagePath, 60 * 60 * 24 * 7);
+
+  let pdfUrl = signedData?.signedUrl || "";
+
+  if (signedError || !pdfUrl) {
+    const { data: publicData } = supabase.storage
+      .from(ARCA_INVOICES_BUCKET)
+      .getPublicUrl(storagePath);
+    pdfUrl = publicData?.publicUrl || "";
+  }
+
+  const { data, error } = await supabase
+    .from("arca_invoices")
+    .update({
+      pdf_storage_path: storagePath,
+      pdf_url: pdfUrl,
+      pdf_generated_at: new Date().toISOString(),
+    })
+    .eq("id", invoice.id)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+async function getInvoiceById(invoiceId) {
+  const supabase = getSupabaseServerClient();
+
+  if (!supabase) {
+    throw new Error("Supabase no configurado.");
+  }
+
+  const { data, error } = await supabase
+    .from("arca_invoices")
+    .select("*")
+    .eq("id", invoiceId)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+async function createInvoiceSignedUrl(invoice) {
+  if (!invoice?.pdf_storage_path) {
+    throw new Error("PDF pendiente.");
+  }
+
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase no configurado.");
+  }
+
+  const { data, error } = await supabase.storage
+    .from(ARCA_INVOICES_BUCKET)
+    .createSignedUrl(invoice.pdf_storage_path, 60 * 60 * 24 * 7);
+
+  if (error) {
+    throw error;
+  }
+
+  return data.signedUrl;
+}
+
+function getSmtpTransporter() {
+  const required = [
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_USER",
+    "SMTP_PASS",
+    "SMTP_FROM",
+  ];
+  const missing = required.filter((name) => !process.env[name]);
+
+  if (missing.length > 0) {
+    throw new Error(
+      "SMTP no configurado. Configure SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS y SMTP_FROM.",
+    );
+  }
+
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT),
+    secure: Number(process.env.SMTP_PORT) === 465,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
 }
 
 function extractInvoiceResult(response) {
@@ -797,11 +1107,14 @@ app.post("/api/arca/emitir", async (req, res) => {
       );
     }
 
-    const invoiceResponse = updatedInvoice || {
+    let invoiceResponse = updatedInvoice || {
       ...invoice,
       cliente_nombre: payload.cliente_nombre,
       cliente_documento: payload.cliente_documento,
       cliente_iva: payload.cliente_iva || "Consumidor Final",
+      domicilio: payload.domicilio || "",
+      concepto: payload.concepto || "Servicios medicos",
+      descripcion: payload.descripcion || "",
       tipo_comprobante: Number(payloadNumber(payload.tipo_comprobante, 6)),
       punto_venta: Number(payloadNumber(payload.punto_venta, 1)),
       importe_neto: toMoney(payload.importe_neto || 0),
@@ -813,10 +1126,38 @@ app.post("/api/arca/emitir", async (req, res) => {
       estado: "emitida",
       proveedor_response: providerResponse,
     };
+    let warningPdf = null;
+
+    try {
+      if (!invoiceResponse?.id) {
+        throw new Error("No hay id de factura para asociar el PDF.");
+      }
+
+      const pdfBuffer = await buildInvoicePdfBuffer(
+        invoiceResponse,
+        providerResponse,
+      );
+      invoiceResponse = await uploadInvoicePdfToSupabase(
+        invoiceResponse,
+        pdfBuffer,
+      );
+    } catch (pdfError) {
+      warningPdf =
+        pdfError instanceof Error ? pdfError.message : String(pdfError);
+      invoiceResponse = {
+        ...invoiceResponse,
+        warning_pdf: warningPdf,
+      };
+      console.warn(
+        "Factura emitida, pero no se pudo generar/subir PDF",
+        JSON.stringify(serializeError(pdfError)),
+      );
+    }
 
     return res.json({
       ok: true,
       invoice: invoiceResponse,
+      warning_pdf: warningPdf,
       cae: parsed.cae,
       cae_vencimiento: parsed.cae_vencimiento,
       numero_comprobante: parsed.numero_comprobante,
@@ -841,6 +1182,93 @@ app.post("/api/arca/emitir", async (req, res) => {
       ok: false,
       error: message,
       debug: error?.arcaDebug || null,
+    });
+  }
+});
+
+app.get("/api/arca/invoices/:id/pdf-url", async (req, res) => {
+  try {
+    await getAuthenticatedUser(req);
+    const invoice = await getInvoiceById(req.params.id);
+    const pdfUrl = await createInvoiceSignedUrl(invoice);
+
+    res.json({
+      ok: true,
+      pdf_url: pdfUrl,
+    });
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+app.post("/api/arca/invoices/:id/send-email", async (req, res) => {
+  try {
+    await getAuthenticatedUser(req);
+    const email = String(req.body?.email || "").trim();
+
+    if (!email || !email.includes("@")) {
+      throw new Error("Email de destino invalido.");
+    }
+
+    const invoice = await getInvoiceById(req.params.id);
+
+    if (!invoice?.pdf_storage_path) {
+      throw new Error("PDF pendiente.");
+    }
+
+    const transporter = getSmtpTransporter();
+    const supabase = getSupabaseServerClient();
+    const { data: pdfData, error: downloadError } = await supabase.storage
+      .from(ARCA_INVOICES_BUCKET)
+      .download(invoice.pdf_storage_path);
+
+    if (downloadError) {
+      throw downloadError;
+    }
+
+    const pdfBuffer = Buffer.from(await pdfData.arrayBuffer());
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM,
+      to: email,
+      subject: `Factura CEDIM ${voucherLabel(invoice)}`,
+      text: `Adjuntamos la factura CEDIM ${voucherLabel(invoice)}. CAE: ${
+        invoice.cae || "-"
+      }.`,
+      attachments: [
+        {
+          filename: `factura-${invoice.punto_venta}-${invoice.numero_comprobante}.pdf`,
+          content: pdfBuffer,
+          contentType: "application/pdf",
+        },
+      ],
+    });
+
+    const { data: updatedInvoice, error: updateError } = await supabase
+      .from("arca_invoices")
+      .update({
+        email_sent_at: new Date().toISOString(),
+        email_sent_to: email,
+      })
+      .eq("id", invoice.id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    res.json({
+      ok: true,
+      invoice: updatedInvoice,
+    });
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 });

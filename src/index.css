@@ -3888,6 +3888,182 @@ td {
   font-weight: 800;
 }
 
+.invoice-preview {
+  margin-top: 16px;
+  background: #fff;
+  border: 1px solid #d9e1eb;
+  border-radius: 8px;
+  padding: 18px;
+  color: #172033;
+  box-shadow: 0 10px 28px rgba(20, 35, 60, 0.06);
+}
+
+.invoice-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid #172033;
+}
+
+.invoice-preview-header strong {
+  display: block;
+  font-size: 23px;
+  letter-spacing: 0;
+}
+
+.invoice-preview-header span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.invoice-preview-type {
+  width: 54px;
+  height: 54px;
+  border: 2px solid #172033;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.invoice-preview-meta {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 7px 12px;
+  margin-top: 14px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e5ebf2;
+  border-radius: 8px;
+}
+
+.invoice-preview-meta span,
+.invoice-preview-client span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.invoice-preview-meta strong,
+.invoice-preview-client strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.invoice-preview-client {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.invoice-preview-client div {
+  border: 1px solid #e5ebf2;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+}
+
+.invoice-preview-client strong {
+  display: block;
+  margin-top: 4px;
+}
+
+.invoice-preview-table {
+  margin-top: 16px;
+  border: 1px solid #d9e1eb;
+  border-radius: 8px;
+  overflow: hidden;
+  display: table;
+  table-layout: fixed;
+}
+
+.invoice-preview-table th {
+  background: #eef3f8;
+  color: #526173;
+  padding: 10px 8px;
+  font-size: 11px;
+}
+
+.invoice-preview-table td {
+  padding: 12px 8px;
+  font-size: 12px;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.invoice-preview-table th:nth-child(3),
+.invoice-preview-table th:nth-child(4),
+.invoice-preview-table th:nth-child(5),
+.invoice-preview-table td:nth-child(3),
+.invoice-preview-table td:nth-child(4),
+.invoice-preview-table td:nth-child(5) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.invoice-preview-total {
+  width: min(240px, 100%);
+  margin: 16px 0 0 auto;
+  border-top: 2px solid #172033;
+  padding-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: baseline;
+}
+
+.invoice-preview-total span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.invoice-preview-total strong {
+  font-size: 19px;
+  color: var(--text);
+}
+
+.invoice-preview-note {
+  margin: 12px 0 0;
+  border: 1px solid rgba(1, 156, 197, 0.18);
+  background: rgba(1, 156, 197, 0.08);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.invoice-actions {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.invoice-actions span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  margin-right: auto;
+}
+
+.invoice-actions button {
+  min-width: 128px;
+}
+
 @media (max-width: 1050px) {
   .dashboard-grid {
     grid-template-columns: 1fr;
@@ -3909,6 +4085,38 @@ td {
   }
 
   .form-actions button {
+    width: 100%;
+  }
+
+  .invoice-preview {
+    padding: 14px;
+  }
+
+  .invoice-preview-header {
+    align-items: center;
+  }
+
+  .invoice-preview-meta,
+  .invoice-preview-client {
+    grid-template-columns: 1fr;
+  }
+
+  .invoice-preview-table {
+    display: block;
+    overflow-x: auto;
+  }
+
+  .invoice-preview-table table,
+  .invoice-preview-table {
+    min-width: 560px;
+  }
+
+  .invoice-actions,
+  .invoice-actions button {
+    width: 100%;
+  }
+
+  .invoice-actions span {
     width: 100%;
   }
 }
