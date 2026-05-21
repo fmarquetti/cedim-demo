@@ -1,5 +1,7 @@
 import { useMemo } from "react";
-import { Joyride } from "react-joyride";
+import { Joyride as JoyrideComponent } from "react-joyride";
+
+const Joyride = JoyrideComponent;
 
 const DEMO_EMAIL = "user@mail.com";
 
@@ -49,7 +51,7 @@ const pageIntro = {
   contabilidad: {
     title: "Contabilidad",
     content:
-      "Esta pantalla reune la informacion contable formal del sistema: plan de cuentas, libro diario, mayores y balance de sumas y saldos.",
+      "Esta pantalla reúne la información contable formal del sistema: plan de cuentas, libro diario, mayores y balance de sumas y saldos.",
   },
   periodosContables: {
     title: "Períodos Contables",
@@ -272,15 +274,15 @@ const tourStepsByPage = {
     },
     {
       target: '[data-tour="egresos-actualizar"]',
-      title: "Actualizar informaciÃ³n",
+      title: "Actualizar información",
       content:
-        "Este botÃ³n vuelve a consultar los egresos guardados y refresca los datos que ves en pantalla.",
+        "Este botón vuelve a consultar los egresos guardados y refresca los datos que ves en pantalla.",
     },
     {
       target: '[data-tour="egresos-importar-factura"]',
       title: "Importar factura PDF",
       content:
-        "Permite subir una factura en PDF para que el sistema intente leer sus datos y ayude a cargar el egreso mÃ¡s rÃ¡pido.",
+        "Permite subir una factura en PDF para que el sistema intente leer sus datos y ayude a cargar el egreso más rápido.",
     },
     {
       target: '[data-tour="egresos-nuevo"]',
@@ -434,7 +436,7 @@ const tourStepsByPage = {
       target: '[data-tour="ordenes-pago-pdf"]',
       title: "PDF de orden de pago",
       content:
-        "Desde esta accion se descarga la orden de pago formal en PDF, con detalle, totales y espacios de firma.",
+        "Desde esta acción se descarga la orden de pago formal en PDF, con detalle, totales y espacios de firma.",
     },
   ],
 
@@ -659,16 +661,16 @@ const tourStepsByPage = {
   contabilidad: [
     {
       target: '[data-tour="contabilidad-header"]',
-      title: "Modulo de contabilidad",
+      title: "Módulo de contabilidad",
       content:
-        "Desde aca se consulta la informacion contable generada por el sistema.",
+        "Desde acá se consulta la información contable generada por el sistema.",
       placement: "bottom",
     },
     {
       target: '[data-tour="contabilidad-filtros"]',
       title: "Filtros contables",
       content:
-        "Estos filtros permiten consultar la informacion por periodo y actualizar los datos visibles.",
+        "Estos filtros permiten consultar la información por período y actualizar los datos visibles.",
     },
     {
       target: '[data-tour="contabilidad-vista"]',
@@ -680,7 +682,7 @@ const tourStepsByPage = {
       target: '[data-tour="contabilidad-contenido"]',
       title: "Resultado contable",
       content:
-        "En esta seccion se muestra la informacion contable segun la vista seleccionada.",
+        "En esta sección se muestra la información contable según la vista seleccionada.",
     },
   ],
 
