@@ -18,29 +18,65 @@ import {
     Settings,
     PanelLeftClose,
     PanelLeftOpen,
+    ChevronRight,
+    Home,
+    Calculator,
+    FileSpreadsheet,
+    Stethoscope,
+    ShieldCheck,
 } from "lucide-react";
 
 import logo from "../assets/logo-cedim.png";
 import { useAppConfig } from "../context/AppConfigContext";
 
-const menu = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "ingresos", label: "Ingresos", icon: ArrowDownCircle },
-    { id: "egresos", label: "Egresos", icon: ArrowUpCircle },
-    { id: "ordenesPago", label: "Órdenes de Pago", icon: ClipboardCheck },
-    { id: "cuentas", label: "Cuentas corrientes", icon: Wallet },
-    { id: "bancos", label: "Bancos", icon: Landmark },
-    { id: "reportes", label: "Reportes", icon: FileBarChart },
-    { id: "contabilidad", label: "Contabilidad", icon: BookOpenCheck },
-    { id: "periodosContables", label: "Períodos Contables", icon: CalendarCheck },
-    { id: "iva", label: "IVA", icon: Percent },
-    { id: "documentos", label: "Documentos", icon: FileText },
-    { id: "facturacion", label: "Facturación", icon: ReceiptText },
-    { id: "pacientes", label: "Pacientes y estudios", icon: Users },
-    { id: "turnos", label: "Turnos", icon: CalendarClock },
-    { id: "sedes", label: "Sociedades / Sedes", icon: Building2 },
-    { id: "usuarios", label: "Usuarios", icon: UserCog },
-    { id: "configuracion", label: "Configuración", icon: Settings },
+const menuGroups = [
+    {
+        title: "Principal",
+        icon: Home,
+        items: [
+            { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+        ],
+    },
+    {
+        title: "Gestión contable",
+        icon: Calculator,
+        items: [
+            { id: "ingresos", label: "Ingresos", icon: ArrowDownCircle },
+            { id: "egresos", label: "Egresos", icon: ArrowUpCircle },
+            { id: "ordenesPago", label: "Órdenes de Pago", icon: ClipboardCheck },
+            { id: "cuentas", label: "Cuentas corrientes", icon: Wallet },
+            { id: "bancos", label: "Bancos", icon: Landmark },
+            { id: "reportes", label: "Reportes", icon: FileBarChart },
+        ],
+    },
+    {
+        title: "Contabilidad fiscal",
+        icon: FileSpreadsheet,
+        items: [
+            { id: "contabilidad", label: "Contabilidad", icon: BookOpenCheck },
+            { id: "periodosContables", label: "Períodos Contables", icon: CalendarCheck },
+            { id: "iva", label: "IVA", icon: Percent },
+            { id: "documentos", label: "Documentos", icon: FileText },
+            { id: "facturacion", label: "Facturación", icon: ReceiptText },
+        ],
+    },
+    {
+        title: "Operación médica",
+        icon: Stethoscope,
+        items: [
+            { id: "pacientes", label: "Pacientes y estudios", icon: Users },
+            { id: "turnos", label: "Turnos", icon: CalendarClock },
+        ],
+    },
+    {
+        title: "Administración",
+        icon: ShieldCheck,
+        items: [
+            { id: "sedes", label: "Sociedades / Sedes", icon: Building2 },
+            { id: "usuarios", label: "Usuarios", icon: UserCog },
+            { id: "configuracion", label: "Configuración", icon: Settings },
+        ],
+    },
 ];
 
 export default function Sidebar({
@@ -56,26 +92,49 @@ export default function Sidebar({
         ? config.hiddenMenuItems
         : [];
 
-    const visibleMenu = menu.filter((item) => {
+    const userPermissions = Array.isArray(currentUser?.permissions)
+        ? currentUser.permissions
+        : [];
+
+    const canSeeItem = (item) => {
         if (!currentUser) return false;
 
         if (hiddenMenuItems.includes(item.id)) {
             return false;
         }
 
-        if (currentUser.permissions.includes("all")) return true;
+        if (userPermissions.includes("all")) {
+            return true;
+        }
 
-        return currentUser.permissions.includes(item.id);
-    });
+        return userPermissions.includes(item.id);
+    };
+
+    const visibleMenuGroups = menuGroups
+        .map((group) => ({
+            ...group,
+            items: group.items.filter(canSeeItem),
+        }))
+        .filter((group) => group.items.length > 0);
 
     const brandLogo = config.platformIconUrl || logo;
+
+    const userInitials = currentUser?.name
+        ? currentUser.name
+              .split(" ")
+              .filter(Boolean)
+              .map((n) => n[0])
+              .join("")
+              .slice(0, 2)
+              .toUpperCase()
+        : "US";
 
     return (
         <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
             <div className="brand">
                 <img src={brandLogo} alt={config.platformName || "CEDIM"} />
 
-                <div>
+                <div className="brand-text">
                     <strong>{config.platformName || "CEDIM"}</strong>
                     <span>{config.platformSubtitle || "Laboratorio clínico"}</span>
                 </div>
@@ -91,36 +150,64 @@ export default function Sidebar({
             </div>
 
             <nav className="sidebar-nav">
-                {visibleMenu.map((item) => {
-                    const Icon = item.icon;
+                {visibleMenuGroups.map((group) => {
+                    const GroupIcon = group.icon;
+                    const groupIsActive = group.items.some((item) => item.id === activePage);
 
                     return (
-                        <button
-                            key={item.id}
-                            className={`nav-item ${activePage === item.id ? "active" : ""}`}
-                            onClick={() => setActivePage(item.id)}
+                        <div
+                            className={`nav-group ${groupIsActive ? "active" : ""}`}
+                            key={group.title}
                         >
-                            <Icon size={18} />
-                            <span>{item.label}</span>
-                        </button>
+                            <button
+                                type="button"
+                                className="nav-group-trigger"
+                                title={collapsed ? group.title : undefined}
+                            >
+                                <div className="nav-group-trigger-left">
+                                    <GroupIcon size={18} />
+                                    <span>{group.title}</span>
+                                </div>
+
+                                <ChevronRight size={16} className="nav-group-chevron" />
+                            </button>
+
+                            <div className="nav-group-menu">
+                                {group.items.map((item) => {
+                                    const Icon = item.icon;
+
+                                    return (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            className={`nav-item ${
+                                                activePage === item.id ? "active" : ""
+                                            }`}
+                                            onClick={() => setActivePage(item.id)}
+                                        >
+                                            <Icon size={17} />
+                                            <span>{item.label}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
                     );
                 })}
             </nav>
 
-            <div className="sidebar-user">
-                <div className="avatar">
-                    {currentUser.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")
-                        .slice(0, 2)}
-                </div>
+            {currentUser && (
+                <div className="sidebar-user">
+                    <div className="avatar">
+                        {userInitials}
+                    </div>
 
-                <div>
-                    <strong>{currentUser.name}</strong>
-                    <span>{currentUser.role}</span>
+                    <div className="sidebar-user-info">
+                        <strong>{currentUser.name}</strong>
+                        <span>{currentUser.role}</span>
+                    </div>
                 </div>
-            </div>
+            )}
         </aside>
     );
 }
