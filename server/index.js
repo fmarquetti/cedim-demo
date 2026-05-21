@@ -104,6 +104,79 @@ function requiresAssociatedVoucher(tipoComprobante) {
   return isNotaCredito(tipoComprobante) || isNotaDebito(tipoComprobante);
 }
 
+function isInternalVoucherType(value) {
+  return ["remito_interno", "recibo_interno"].includes(String(value));
+}
+
+function getInternalVoucherTitle(category) {
+  if (category === "remito_interno") return "Remito Interno";
+  if (category === "recibo_interno") return "Recibo Interno";
+  return "Comprobante Interno";
+}
+
+async function getArcaSettings() {
+  try {
+    const supabase = getSupabaseServerClient();
+    if (!supabase) return null;
+
+    const { data, error } = await supabase
+      .from("arca_settings")
+      .select("*")
+      .eq("origen", "CEDIM")
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return data || null;
+  } catch (error) {
+    console.warn(
+      "No se pudo leer configuracion de facturacion ARCA",
+      JSON.stringify(serializeError(error)),
+    );
+    return null;
+  }
+}
+
+function getExpectedAssociatedTypes(tipoComprobante) {
+  const map = {
+    2: [1],
+    3: [1],
+    7: [6],
+    8: [6],
+    12: [11],
+    13: [11],
+  };
+
+  return map[Number(tipoComprobante)] || [];
+}
+
+function getAssociatedVoucherFromPayload(payload) {
+  const associatedType = Number(payload.comprobante_asociado_tipo);
+  const associatedSalesPoint = Number(payload.comprobante_asociado_punto_venta);
+  const associatedNumber = Number(payload.comprobante_asociado_numero);
+
+  if (
+    !Number.isFinite(associatedType) ||
+    associatedType <= 0 ||
+    !Number.isFinite(associatedSalesPoint) ||
+    associatedSalesPoint <= 0 ||
+    !Number.isFinite(associatedNumber) ||
+    associatedNumber <= 0
+  ) {
+    throw new Error(
+      "Las notas de credito/debito requieren un comprobante asociado.",
+    );
+  }
+
+  return {
+    Tipo: associatedType,
+    PtoVta: associatedSalesPoint,
+    Nro: associatedNumber,
+  };
+}
+
 function getTodayAfipDate() {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Argentina/Buenos_Aires",
@@ -257,14 +330,21 @@ function validatePayload(payload) {
     throw new Error("El importe_total debe ser mayor a 0.");
   }
 
+  if (!Number.isFinite(neto) || neto < 0) {
+    throw new Error("El importe_neto no puede ser negativo.");
+  }
+
+  if (!Number.isFinite(iva) || iva < 0) {
+    throw new Error("El importe_iva no puede ser negativo.");
+  }
+
   if (requiresAssociatedVoucher(tipoComprobante)) {
-    if (
-      !payload.comprobante_asociado_tipo ||
-      !payload.comprobante_asociado_punto_venta ||
-      !payload.comprobante_asociado_numero
-    ) {
+    const associatedVoucher = getAssociatedVoucherFromPayload(payload);
+    const expectedAssociatedTypes = getExpectedAssociatedTypes(tipoComprobante);
+
+    if (!expectedAssociatedTypes.includes(associatedVoucher.Tipo)) {
       throw new Error(
-        "Las notas de credito/debito requieren un comprobante asociado.",
+        "El tipo de comprobante asociado no corresponde con la nota seleccionada.",
       );
     }
   }
@@ -326,13 +406,7 @@ function buildVoucherData(payload, voucherNumber = null, options = {}) {
   }
 
   if (requiresAssociatedVoucher(tipoComprobante)) {
-    data.CbtesAsoc = [
-      {
-        Tipo: Number(payload.comprobante_asociado_tipo),
-        PtoVta: Number(payload.comprobante_asociado_punto_venta),
-        Nro: Number(payload.comprobante_asociado_numero),
-      },
-    ];
+    data.CbtesAsoc = [getAssociatedVoucherFromPayload(payload)];
   }
 
   if (voucherNumber !== null && voucherNumber !== undefined) {
@@ -405,6 +479,13 @@ function formatMoney(value) {
 }
 
 function voucherLabel(invoice) {
+  if (invoice?.es_fiscal === false || isInternalVoucherType(invoice?.comprobante_categoria)) {
+    return `INT-${String(invoice?.comprobante_interno_numero || 0).padStart(
+      8,
+      "0",
+    )}`;
+  }
+
   const puntoVenta = String(invoice?.punto_venta || 0).padStart(4, "0");
   const numero = String(invoice?.numero_comprobante || 0).padStart(8, "0");
 
@@ -664,14 +745,18 @@ async function updateInvoiceError(invoiceId, message, response = null) {
     .eq("id", invoiceId);
 }
 
-function buildInvoicePdfBuffer(invoice, payloadOrResponse = {}) {
+function buildInvoicePdfBuffer(invoice, payloadOrResponse = {}, settings = null) {
   return new Promise((resolve, reject) => {
+    const emitterName = settings?.emisor_nombre || "CEDIM";
+    const emitterLegend =
+      settings?.pdf_leyenda || `${getVoucherTitle(invoice.tipo_comprobante)} emitido electronicamente`;
+    const emitterFooter = settings?.pdf_footer || "Generado desde CEDIM";
     const doc = new PDFDocument({
       size: "A4",
       margin: 48,
       info: {
-        Title: `Factura ${voucherLabel(invoice)}`,
-        Author: "CEDIM",
+        Title: `${getVoucherTitle(invoice.tipo_comprobante)} ${voucherLabel(invoice)}`,
+        Author: emitterName,
       },
     });
     const chunks = [];
@@ -687,14 +772,56 @@ function buildInvoicePdfBuffer(invoice, payloadOrResponse = {}) {
       payloadOrResponse.CAEFchVto ||
       payloadOrResponse.cae_vencimiento ||
       "-";
+    const associatedFromProvider = Array.isArray(payloadOrResponse.CbtesAsoc)
+      ? payloadOrResponse.CbtesAsoc[0]
+      : null;
+    const associatedVoucher = {
+      tipo:
+        invoice.comprobante_asociado_tipo ||
+        associatedFromProvider?.Tipo ||
+        payloadOrResponse.comprobante_asociado_tipo,
+      puntoVenta:
+        invoice.comprobante_asociado_punto_venta ||
+        associatedFromProvider?.PtoVta ||
+        payloadOrResponse.comprobante_asociado_punto_venta,
+      numero:
+        invoice.comprobante_asociado_numero ||
+        associatedFromProvider?.Nro ||
+        payloadOrResponse.comprobante_asociado_numero,
+    };
+    const hasAssociatedVoucher = Boolean(
+      associatedVoucher.tipo ||
+        associatedVoucher.puntoVenta ||
+        associatedVoucher.numero,
+    );
+    const voucherReason = invoice.motivo || payloadOrResponse.motivo || "";
 
     doc
       .fontSize(22)
       .font("Helvetica-Bold")
-      .text("CEDIM", 48, 46)
+      .text(emitterName, 48, 46)
       .fontSize(9)
       .font("Helvetica")
-      .text(`${voucherTitle} emitido electronicamente`, 48, 76);
+      .text(emitterLegend, 48, 76);
+
+    if (settings?.emisor_cuit || settings?.emisor_domicilio || settings?.emisor_iva) {
+      doc
+        .fontSize(8)
+        .fillColor("#4b5563")
+        .text(
+          [
+            settings?.emisor_cuit ? `CUIT: ${settings.emisor_cuit}` : "",
+            settings?.emisor_iva ? `IVA: ${settings.emisor_iva}` : "",
+            settings?.emisor_domicilio ? `Domicilio: ${settings.emisor_domicilio}` : "",
+          ]
+            .filter(Boolean)
+            .join(" | "),
+          48,
+          92,
+          { width: 200 },
+        )
+        .fillColor("#111827");
+    }
 
     doc
       .roundedRect(270, 44, 58, 58, 4)
@@ -728,23 +855,27 @@ function buildInvoicePdfBuffer(invoice, payloadOrResponse = {}) {
       .text(`Condicion IVA: ${invoice.cliente_iva || "Consumidor Final"}`, 48, 202)
       .text(`Domicilio: ${invoice.domicilio || "-"}`, 48, 220);
 
-    if (
-      invoice.comprobante_asociado_tipo ||
-      invoice.comprobante_asociado_punto_venta ||
-      invoice.comprobante_asociado_numero
-    ) {
+    if (hasAssociatedVoucher) {
       doc
         .fontSize(9)
         .fillColor("#4b5563")
         .text(
-          `Comprobante asociado: Tipo ${invoice.comprobante_asociado_tipo || "-"} - PV ${String(
-            invoice.comprobante_asociado_punto_venta || 0,
+          `Comprobante asociado: Tipo ${associatedVoucher.tipo || "-"} - PV ${String(
+            associatedVoucher.puntoVenta || 0,
           ).padStart(4, "0")} - Nro ${String(
-            invoice.comprobante_asociado_numero || 0,
+            associatedVoucher.numero || 0,
           ).padStart(8, "0")}`,
           48,
           238,
         )
+        .fillColor("#111827");
+    }
+
+    if (voucherReason) {
+      doc
+        .fontSize(9)
+        .fillColor("#4b5563")
+        .text(`Motivo: ${voucherReason}`, 48, 252)
         .fillColor("#111827");
     }
 
@@ -803,13 +934,147 @@ function buildInvoicePdfBuffer(invoice, payloadOrResponse = {}) {
     doc
       .fontSize(9)
       .fillColor("#6b7280")
-      .text("Generado desde CEDIM", 48, 770, { align: "center", width: 499 });
+      .text(emitterFooter, 48, 770, { align: "center", width: 499 });
 
     doc.end();
   });
 }
 
-async function uploadInvoicePdfToSupabase(invoice, pdfBuffer) {
+function buildInternalVoucherPdfBuffer(invoice, settings = null) {
+  return new Promise((resolve, reject) => {
+    const emitterName = settings?.emisor_nombre || "CEDIM";
+    const emitterLegend =
+      settings?.pdf_leyenda || "Comprobante interno no fiscal";
+    const emitterFooter = settings?.pdf_footer || "Generado desde CEDIM";
+    const doc = new PDFDocument({
+      size: "A4",
+      margin: 48,
+      info: {
+        Title: `${getInternalVoucherTitle(invoice.comprobante_categoria)} ${voucherLabel(invoice)}`,
+        Author: emitterName,
+      },
+    });
+    const chunks = [];
+    const title = getInternalVoucherTitle(invoice.comprobante_categoria);
+
+    doc.on("data", (chunk) => chunks.push(chunk));
+    doc.on("error", reject);
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+
+    doc
+      .fontSize(22)
+      .font("Helvetica-Bold")
+      .text(emitterName, 48, 46)
+      .fontSize(9)
+      .font("Helvetica")
+      .text(emitterLegend, 48, 76);
+
+    if (settings?.emisor_cuit || settings?.emisor_domicilio || settings?.emisor_iva) {
+      doc
+        .fontSize(8)
+        .fillColor("#4b5563")
+        .text(
+          [
+            settings?.emisor_cuit ? `CUIT: ${settings.emisor_cuit}` : "",
+            settings?.emisor_iva ? `IVA: ${settings.emisor_iva}` : "",
+            settings?.emisor_domicilio ? `Domicilio: ${settings.emisor_domicilio}` : "",
+          ]
+            .filter(Boolean)
+            .join(" | "),
+          48,
+          92,
+          { width: 200 },
+        )
+        .fillColor("#111827");
+    }
+
+    doc
+      .roundedRect(270, 44, 58, 58, 4)
+      .stroke("#1f2937")
+      .fontSize(30)
+      .font("Helvetica-Bold")
+      .text("I", 270, 58, { width: 58, align: "center" });
+
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .text(`Comprobante: ${title}`, 360, 32)
+      .text(`Numero interno: ${voucherLabel(invoice)}`, 360, 50)
+      .text(
+        `Fecha: ${formatDisplayDate(invoice.emitted_at || invoice.created_at)}`,
+        360,
+        68,
+      );
+
+    doc.moveTo(48, 122).lineTo(547, 122).stroke("#d1d5db");
+
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .text("Cliente", 48, 142)
+      .fontSize(10)
+      .font("Helvetica")
+      .text(`Cliente: ${invoice.cliente_nombre || "-"}`, 48, 166)
+      .text(`Documento: ${invoice.cliente_documento || "-"}`, 48, 184)
+      .text(`Domicilio: ${invoice.domicilio || "-"}`, 48, 202);
+
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .text("Detalle", 48, 250);
+
+    const tableTop = 276;
+    doc.rect(48, tableTop, 499, 28).fill("#f3f6fa");
+    doc
+      .fillColor("#111827")
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .text("Concepto", 58, tableTop + 10, { width: 120 })
+      .text("Descripcion", 190, tableTop + 10, { width: 220 })
+      .text("Total", 470, tableTop + 10, { width: 66, align: "right" });
+
+    doc.rect(48, tableTop + 28, 499, 52).stroke("#e5e7eb");
+    doc
+      .font("Helvetica")
+      .fontSize(9)
+      .text(invoice.concepto || "-", 58, tableTop + 44, { width: 120 })
+      .text(invoice.descripcion || "-", 190, tableTop + 44, { width: 220 })
+      .text(formatMoney(invoice.importe_total), 470, tableTop + 44, {
+        width: 66,
+        align: "right",
+      });
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(14)
+      .text("Total", 360, tableTop + 110, { width: 80, align: "right" })
+      .text(formatMoney(invoice.importe_total), 448, tableTop + 110, {
+        width: 99,
+        align: "right",
+      });
+
+    doc
+      .font("Helvetica")
+      .fontSize(10)
+      .fillColor("#4b5563")
+      .text(
+        "Comprobante interno no fiscal. No valido como factura.",
+        48,
+        tableTop + 154,
+        { width: 499 },
+      )
+      .fillColor("#111827");
+
+    doc
+      .fontSize(9)
+      .fillColor("#6b7280")
+      .text(emitterFooter, 48, 770, { align: "center", width: 499 });
+
+    doc.end();
+  });
+}
+
+async function uploadInvoicePdfToSupabase(invoice, pdfBuffer, storagePathOverride = "") {
   const supabase = getSupabaseServerClient();
 
   if (!supabase) {
@@ -820,7 +1085,9 @@ async function uploadInvoicePdfToSupabase(invoice, pdfBuffer) {
     throw new Error("SUPABASE_SERVICE_ROLE_KEY requerido para guardar PDF.");
   }
 
-  const storagePath = `cedim/${invoice.id}/factura-${invoice.punto_venta}-${invoice.numero_comprobante}.pdf`;
+  const storagePath =
+    storagePathOverride ||
+    `cedim/${invoice.id}/factura-${invoice.punto_venta}-${invoice.numero_comprobante}.pdf`;
   const { error: uploadError } = await supabase.storage
     .from(ARCA_INVOICES_BUCKET)
     .upload(storagePath, pdfBuffer, {
@@ -861,6 +1128,141 @@ async function uploadInvoicePdfToSupabase(invoice, pdfBuffer) {
   }
 
   return data;
+}
+
+async function getNextInternalVoucherNumber(category) {
+  const supabase = getSupabaseServerClient();
+
+  if (!supabase) {
+    throw new Error("Supabase no configurado.");
+  }
+
+  const { data, error } = await supabase
+    .from("arca_invoices")
+    .select("comprobante_interno_numero")
+    .eq("comprobante_categoria", category)
+    .order("comprobante_interno_numero", {
+      ascending: false,
+      nullsFirst: false,
+    })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return Number(data?.comprobante_interno_numero || 0) + 1;
+}
+
+async function emitInternalVoucher(payload, user) {
+  const supabase = getSupabaseServerClient();
+
+  if (!supabase) {
+    throw new Error("Supabase no configurado.");
+  }
+
+  const category = String(payload?.tipo_comprobante || "");
+  const total = toMoney(payload?.importe_total || payload?.importe_neto || 0);
+  const neto = toMoney(payload?.importe_neto || total);
+
+  if (!isInternalVoucherType(category)) {
+    throw new Error("Tipo de comprobante interno invalido.");
+  }
+
+  if (!payload?.cliente_nombre?.trim()) {
+    throw new Error("Falta cliente_nombre.");
+  }
+
+  if (!payload?.cliente_documento?.trim()) {
+    throw new Error("Falta cliente_documento.");
+  }
+
+  if (!Number.isFinite(total) || total <= 0) {
+    throw new Error("El importe_total debe ser mayor a 0.");
+  }
+
+  const nextNumber = await getNextInternalVoucherNumber(category);
+  const now = new Date().toISOString();
+  const { data: invoice, error } = await supabase
+    .from("arca_invoices")
+    .insert({
+      origen: "CEDIM",
+      cliente_nombre: payload.cliente_nombre,
+      cliente_documento: payload.cliente_documento,
+      cliente_iva: payload.cliente_iva || "Consumidor Final",
+      domicilio: payload.domicilio || "",
+      concepto: payload.concepto || "Servicios medicos",
+      descripcion: payload.descripcion || "",
+      tipo_comprobante: 0,
+      punto_venta: 0,
+      importe_neto: neto,
+      importe_iva: 0,
+      importe_total: total,
+      estado: "emitida",
+      proveedor: "interno",
+      created_by: user?.id || null,
+      comprobante_categoria: category,
+      comprobante_interno_numero: nextNumber,
+      es_fiscal: false,
+      emitted_at: now,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  let invoiceResponse = invoice;
+  let warningPdf = null;
+
+  try {
+    const settings = await getArcaSettings();
+    const pdfBuffer = await buildInternalVoucherPdfBuffer(
+      invoiceResponse,
+      settings,
+    );
+    const storagePath = `cedim/internos/${category}/${invoiceResponse.id}/comprobante-${nextNumber}.pdf`;
+    invoiceResponse = await uploadInvoicePdfToSupabase(
+      invoiceResponse,
+      pdfBuffer,
+      storagePath,
+    );
+  } catch (pdfError) {
+    warningPdf = pdfError instanceof Error ? pdfError.message : String(pdfError);
+    invoiceResponse = {
+      ...invoiceResponse,
+      warning_pdf: warningPdf,
+    };
+    console.warn(
+      "Comprobante interno emitido, pero no se pudo generar/subir PDF",
+      JSON.stringify(serializeError(pdfError)),
+    );
+  }
+
+  await logInvoiceEvent({
+    invoiceId: invoiceResponse?.id,
+    eventType: "internal_voucher_generated",
+    userId: user?.id,
+    userEmail: user?.email,
+    metadata: {
+      comprobante_categoria: category,
+      comprobante_interno_numero: nextNumber,
+      warning_pdf: warningPdf,
+    },
+  });
+  await touchInvoiceLastAction(
+    invoiceResponse?.id,
+    "internal_voucher_generated",
+    user?.id,
+  );
+
+  return {
+    ok: true,
+    invoice: invoiceResponse,
+    warning_pdf: warningPdf,
+  };
 }
 
 async function getInvoiceById(invoiceId) {
@@ -1097,6 +1499,7 @@ async function createVoucherWithRetry(afip, payload) {
       lastVoucher,
       voucherNumber,
       CbteFch: data.CbteFch,
+      CbtesAsoc: data.CbtesAsoc || null,
       cbteFchSource: effectiveCbteFchSource,
       lastVoucherDate,
       ImpTotal: data.ImpTotal,
@@ -1204,9 +1607,13 @@ app.post("/api/arca/emitir", async (req, res) => {
 
   try {
     const payload = req.body;
-    validatePayload(payload);
-
     const user = await getAuthenticatedUser(req);
+
+    if (isInternalVoucherType(payload?.tipo_comprobante)) {
+      return res.json(await emitInternalVoucher(payload, user));
+    }
+
+    validatePayload(payload);
 
     try {
       invoice = await insertPendingInvoice(payload, user?.id);
@@ -1335,6 +1742,7 @@ app.post("/api/arca/emitir", async (req, res) => {
       const pdfBuffer = await buildInvoicePdfBuffer(
         invoiceResponse,
         providerResponse,
+        await getArcaSettings(),
       );
       invoiceResponse = await uploadInvoicePdfToSupabase(
         invoiceResponse,
@@ -1457,10 +1865,16 @@ app.get("/api/arca/invoices/:id/download", async (req, res) => {
       userEmail: user?.email,
     });
 
-    const filename = `factura-${String(invoice.punto_venta || 0).padStart(
-      4,
-      "0",
-    )}-${String(invoice.numero_comprobante || 0).padStart(8, "0")}.pdf`;
+    const filename =
+      invoice.es_fiscal === false ||
+      isInternalVoucherType(invoice.comprobante_categoria)
+        ? `${invoice.comprobante_categoria || "comprobante-interno"}-${String(
+            invoice.comprobante_interno_numero || 0,
+          ).padStart(8, "0")}.pdf`
+        : `factura-${String(invoice.punto_venta || 0).padStart(
+            4,
+            "0",
+          )}-${String(invoice.numero_comprobante || 0).padStart(8, "0")}.pdf`;
 
     res.set({
       "Content-Type": "application/pdf",
@@ -1499,17 +1913,38 @@ app.post("/api/arca/invoices/:id/send-email", async (req, res) => {
     const supabase = getSupabaseServerClient();
     const pdfBuffer = await downloadInvoicePdfBuffer(invoice);
     const now = new Date().toISOString();
+    const settings = await getArcaSettings();
+
+    const isInternalVoucher =
+      invoice.es_fiscal === false ||
+      isInternalVoucherType(invoice.comprobante_categoria);
+    const mailTitle = isInternalVoucher
+      ? getInternalVoucherTitle(invoice.comprobante_categoria)
+      : "Factura CEDIM";
+    const attachmentFilename = isInternalVoucher
+      ? `${invoice.comprobante_categoria || "comprobante-interno"}-${String(
+          invoice.comprobante_interno_numero || 0,
+        ).padStart(8, "0")}.pdf`
+      : `factura-${invoice.punto_venta}-${invoice.numero_comprobante}.pdf`;
 
     await transporter.sendMail({
-      from: process.env.SMTP_FROM,
+      from: settings?.email_from_address
+        ? settings.email_from_name
+          ? `"${settings.email_from_name}" <${settings.email_from_address}>`
+          : settings.email_from_address
+        : process.env.SMTP_FROM,
       to: email,
-      subject: `Factura CEDIM ${voucherLabel(invoice)}`,
-      text: `Adjuntamos la factura CEDIM ${voucherLabel(invoice)}. CAE: ${
-        invoice.cae || "-"
-      }.`,
+      subject: `${mailTitle} ${voucherLabel(invoice)}`,
+      text: isInternalVoucher
+        ? `Adjuntamos el ${mailTitle} ${voucherLabel(
+            invoice,
+          )}. Comprobante interno no fiscal.`
+        : `Adjuntamos la factura CEDIM ${voucherLabel(invoice)}. CAE: ${
+            invoice.cae || "-"
+          }.`,
       attachments: [
         {
-          filename: `factura-${invoice.punto_venta}-${invoice.numero_comprobante}.pdf`,
+          filename: attachmentFilename,
           content: pdfBuffer,
           contentType: "application/pdf",
         },

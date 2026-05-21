@@ -3793,6 +3793,39 @@ td {
   flex-wrap: wrap;
 }
 
+.settings-panel {
+  margin-bottom: 18px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.settings-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-grid textarea {
+  width: 100%;
+  min-height: 86px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  resize: vertical;
+  font: inherit;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
 .btn-primary,
 .btn-secondary {
   min-height: 42px;
@@ -4080,6 +4113,109 @@ td {
   margin: 0;
   color: var(--text, #0f172a);
   font-size: 16px;
+}
+
+.associated-search {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+.associated-search label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted, #64748b);
+}
+
+.associated-search input {
+  height: 42px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+  padding: 0 12px;
+  font: inherit;
+  background: var(--surface, #fff);
+  color: var(--text, #0f172a);
+}
+
+.associated-search input:focus {
+  outline: none;
+  border-color: var(--primary, #019cc5);
+  box-shadow: 0 0 0 3px rgba(1, 156, 197, 0.12);
+}
+
+.associated-search-results {
+  position: absolute;
+  top: 68px;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.16);
+  padding: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.associated-search-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--text, #0f172a);
+}
+
+.associated-search-item:hover {
+  background: rgba(1, 156, 197, 0.08);
+}
+
+.associated-search-item strong {
+  font-size: 14px;
+}
+
+.associated-search-item span {
+  font-size: 13px;
+  color: var(--muted, #64748b);
+}
+
+.associated-search-empty {
+  padding: 12px;
+  color: var(--muted, #64748b);
+  font-size: 14px;
+}
+
+.associated-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(1, 156, 197, 0.08);
+  color: var(--text, #0f172a);
+  font-size: 13px;
+  font-weight: 700;
+  flex-wrap: wrap;
+}
+
+.inline-link-button {
+  border: 0;
+  background: transparent;
+  color: var(--primary, #019cc5);
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+}
+
+.inline-link-button:hover {
+  text-decoration: underline;
 }
 
 .invoice-list-toolbar {
@@ -4416,6 +4552,15 @@ td {
   }
 
   .form-actions button {
+    width: 100%;
+  }
+
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-actions,
+  .settings-actions button {
     width: 100%;
   }
 

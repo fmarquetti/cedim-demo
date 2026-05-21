@@ -95,12 +95,23 @@ export async function downloadArcaInvoicePdf(invoice) {
 
   const blob = await response.blob();
   const objectUrl = window.URL.createObjectURL(blob);
-  const puntoVenta = String(invoice.punto_venta || 0).padStart(4, "0");
-  const numero = String(invoice.numero_comprobante || 0).padStart(8, "0");
+  const isInternal =
+    invoice.es_fiscal === false ||
+    ["remito_interno", "recibo_interno"].includes(
+      String(invoice.comprobante_categoria || invoice.tipo_comprobante),
+    );
   const link = document.createElement("a");
 
   link.href = objectUrl;
-  link.download = `factura-${puntoVenta}-${numero}.pdf`;
+  if (isInternal) {
+    link.download = `${invoice.comprobante_categoria || "comprobante-interno"}-${String(
+      invoice.comprobante_interno_numero || 0,
+    ).padStart(8, "0")}.pdf`;
+  } else {
+    const puntoVenta = String(invoice.punto_venta || 0).padStart(4, "0");
+    const numero = String(invoice.numero_comprobante || 0).padStart(8, "0");
+    link.download = `factura-${puntoVenta}-${numero}.pdf`;
+  }
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -146,6 +157,51 @@ export async function getArcaInvoiceEvents(invoiceId) {
   }
 
   return data.events || [];
+}
+
+export async function getArcaSettings() {
+  const { data, error } = await supabase
+    .from("arca_settings")
+    .select("*")
+    .eq("origen", "CEDIM")
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data || null;
+}
+
+export async function updateArcaSettings(settings) {
+  const payload = {
+    ...settings,
+    origen: "CEDIM",
+    updated_at: new Date().toISOString(),
+  };
+
+  const current = await getArcaSettings();
+
+  if (current?.id) {
+    const { data, error } = await supabase
+      .from("arca_settings")
+      .update(payload)
+      .eq("id", current.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return data;
+  }
+
+  const { data, error } = await supabase
+    .from("arca_settings")
+    .insert(payload)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return data;
 }
 
 export async function listArcaInvoices() {

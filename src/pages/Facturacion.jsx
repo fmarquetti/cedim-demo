@@ -4,8 +4,10 @@ import {
   emitArcaInvoice,
   getArcaInvoiceEvents,
   getArcaInvoicePdfUrl,
+  getArcaSettings,
   listArcaInvoices,
   sendArcaInvoiceEmail,
+  updateArcaSettings,
 } from "../services/arcaInvoices";
 
 const INITIAL_FORM = {
@@ -28,6 +30,45 @@ const INITIAL_FORM = {
 };
 
 const INVOICES_PER_PAGE = 10;
+
+const DEFAULT_ARCA_SETTINGS_FORM = {
+  emisor_nombre: "",
+  emisor_cuit: "",
+  emisor_domicilio: "",
+  emisor_iva: "",
+  punto_venta_default: "1",
+  tipo_comprobante_default: "6",
+  email_from_name: "",
+  email_from_address: "",
+  pdf_leyenda: "",
+  pdf_footer: "",
+  arca_environment: "dev",
+};
+
+function buildInitialForm(settings = null) {
+  return {
+    ...INITIAL_FORM,
+    punto_venta: String(settings?.punto_venta_default || INITIAL_FORM.punto_venta),
+    tipo_comprobante: String(
+      settings?.tipo_comprobante_default || INITIAL_FORM.tipo_comprobante,
+    ),
+  };
+}
+
+function buildSettingsForm(settings = null) {
+  return {
+    ...DEFAULT_ARCA_SETTINGS_FORM,
+    ...Object.fromEntries(
+      Object.entries(settings || {}).map(([key, value]) => [
+        key,
+        value === null || value === undefined ? "" : String(value),
+      ]),
+    ),
+    punto_venta_default: String(settings?.punto_venta_default || "1"),
+    tipo_comprobante_default: String(settings?.tipo_comprobante_default || "6"),
+    arca_environment: settings?.arca_environment || "dev",
+  };
+}
 
 function formatCurrency(value) {
   return `$${Number(value || 0).toLocaleString("es-AR", {
@@ -57,6 +98,13 @@ function formatDateTime(value) {
 }
 
 function formatVoucher(invoice) {
+  if (isInternalVoucher(invoice?.tipo_comprobante || invoice?.comprobante_categoria)) {
+    return `INT-${String(invoice?.comprobante_interno_numero || 0).padStart(
+      8,
+      "0",
+    )}`;
+  }
+
   if (!invoice?.punto_venta || !invoice?.numero_comprobante) return "-";
 
   const puntoVenta = String(invoice.punto_venta).padStart(4, "0");
@@ -96,6 +144,8 @@ function compareValues(a, b, field) {
 }
 
 function getVoucherLetter(tipoComprobante) {
+  if (isInternalVoucher(tipoComprobante)) return "I";
+
   const labels = {
     1: "A",
     2: "A",
@@ -115,6 +165,10 @@ function isTipoC(tipoComprobante) {
   return [11, 12, 13].includes(Number(tipoComprobante));
 }
 
+function isInternalVoucher(tipoComprobante) {
+  return ["remito_interno", "recibo_interno"].includes(String(tipoComprobante));
+}
+
 function isFactura(tipoComprobante) {
   return [1, 6, 11].includes(Number(tipoComprobante));
 }
@@ -131,7 +185,14 @@ function requiresAssociatedVoucher(tipoComprobante) {
   return isNotaCredito(tipoComprobante) || isNotaDebito(tipoComprobante);
 }
 
-function getVoucherTypeLabel(tipoComprobante) {
+function getVoucherTypeLabel(tipoComprobante, comprobanteCategoria = "") {
+  const internalType = isInternalVoucher(tipoComprobante)
+    ? String(tipoComprobante)
+    : String(comprobanteCategoria || "");
+
+  if (internalType === "remito_interno") return "Remito interno";
+  if (internalType === "recibo_interno") return "Recibo interno";
+
   const labels = {
     1: "Factura A",
     2: "Nota de Debito A",
@@ -145,6 +206,39 @@ function getVoucherTypeLabel(tipoComprobante) {
   };
 
   return labels[Number(tipoComprobante)] || "Factura B";
+}
+
+function getCreditNoteTypeFromInvoice(tipoComprobante) {
+  const map = {
+    1: 3,
+    6: 8,
+    11: 13,
+  };
+
+  return map[Number(tipoComprobante)] || null;
+}
+
+function getDebitNoteTypeFromInvoice(tipoComprobante) {
+  const map = {
+    1: 2,
+    6: 7,
+    11: 12,
+  };
+
+  return map[Number(tipoComprobante)] || null;
+}
+
+function getExpectedAssociatedType(tipoComprobante) {
+  const map = {
+    2: 1,
+    3: 1,
+    7: 6,
+    8: 6,
+    12: 11,
+    13: 11,
+  };
+
+  return map[Number(tipoComprobante)] || null;
 }
 
 function getEstadoLabel(estado) {
@@ -168,6 +262,7 @@ function getLastActionLabel(action) {
     pdf_downloaded: "PDF descargado",
     email_sent: "Enviada por mail",
     pdf_opened: "PDF abierto",
+    internal_voucher_generated: "Comprobante interno generado",
   };
 
   return labels[action] || "-";
@@ -181,6 +276,7 @@ function getEventTypeLabel(eventType) {
     pdf_downloaded: "PDF descargado",
     email_sent: "Mail enviado",
     email_failed: "Mail fallido",
+    internal_voucher_generated: "Comprobante interno generado",
   };
 
   return labels[eventType] || eventType;
@@ -246,21 +342,50 @@ export default function Facturacion() {
     direction: "desc",
   });
   const [invoicePage, setInvoicePage] = useState(1);
+  const [associatedSearch, setAssociatedSearch] = useState("");
+  const [associatedDropdownOpen, setAssociatedDropdownOpen] = useState(false);
 
   const [message, setMessage] = useState("");
+  const [arcaSettings, setArcaSettings] = useState(null);
+  const [settingsForm, setSettingsForm] = useState(
+    buildSettingsForm(DEFAULT_ARCA_SETTINGS_FORM),
+  );
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
 
+  const formIsInternalVoucher = isInternalVoucher(form.tipo_comprobante);
+  const emitterName = arcaSettings?.emisor_nombre || "CEDIM";
+  const previewLegend =
+    arcaSettings?.pdf_leyenda ||
+    (formIsInternalVoucher
+      ? "Comprobante interno no fiscal."
+      : "Comprobante emitido electronicamente.");
   const previewInvoice = lastIssuedInvoice || {
     ...form,
-    tipo_comprobante: Number(form.tipo_comprobante || 6),
-    punto_venta: Number(form.punto_venta || 1),
+    tipo_comprobante: formIsInternalVoucher
+      ? form.tipo_comprobante
+      : Number(form.tipo_comprobante || 6),
+    comprobante_categoria: formIsInternalVoucher
+      ? form.tipo_comprobante
+      : form.comprobante_categoria,
+    es_fiscal: !formIsInternalVoucher,
+    punto_venta: formIsInternalVoucher ? 0 : Number(form.punto_venta || 1),
     importe_neto: Number(form.importe_neto || 0),
-    importe_iva: isTipoC(form.tipo_comprobante) ? 0 : Number(form.importe_iva || 0),
-    importe_total: isTipoC(form.tipo_comprobante)
+    importe_iva:
+      formIsInternalVoucher || isTipoC(form.tipo_comprobante)
+        ? 0
+        : Number(form.importe_iva || 0),
+    importe_total: formIsInternalVoucher
+      ? Number(form.importe_total || form.importe_neto || 0)
+      : isTipoC(form.tipo_comprobante)
       ? Number(form.importe_neto || 0)
       : Number(form.importe_total || 0),
   };
   const previewDate = previewInvoice.emitted_at || new Date().toISOString();
   const formIsTipoC = isTipoC(form.tipo_comprobante);
+  const previewIsInternalVoucher = isInternalVoucher(
+    previewInvoice.tipo_comprobante || previewInvoice.comprobante_categoria,
+  );
   const previewIsTipoC = isTipoC(previewInvoice.tipo_comprobante);
   const formRequiresAssociatedVoucher = requiresAssociatedVoucher(
     form.tipo_comprobante,
@@ -268,6 +393,35 @@ export default function Facturacion() {
   const emittedInvoices = invoices.filter(
     (invoice) => invoice.estado === "emitida" && isFactura(invoice.tipo_comprobante),
   );
+  const expectedAssociatedType = getExpectedAssociatedType(form.tipo_comprobante);
+  const compatibleAssociatedInvoices = emittedInvoices.filter((invoice) => {
+    if (!expectedAssociatedType) return false;
+
+    return (
+      Number(invoice.tipo_comprobante) === Number(expectedAssociatedType)
+    );
+  });
+  const filteredAssociatedInvoices = compatibleAssociatedInvoices
+    .filter((invoice) => {
+      const query = normalizeText(associatedSearch);
+
+      if (!query) return true;
+
+      const searchable = normalizeText(
+        [
+          invoice.cliente_nombre,
+          invoice.cliente_documento,
+          formatVoucher(invoice),
+          invoice.numero_comprobante,
+          invoice.cae,
+          getVoucherTypeLabel(invoice.tipo_comprobante),
+          invoice.importe_total,
+        ].join(" "),
+      );
+
+      return searchable.includes(query);
+    })
+    .slice(0, 8);
   const filteredInvoices = useMemo(() => {
     const query = normalizeText(invoiceSearch);
 
@@ -283,7 +437,10 @@ export default function Facturacion() {
           invoice.descripcion,
           invoice.numero_comprobante,
           invoice.cae,
-          getVoucherTypeLabel(invoice.tipo_comprobante),
+          getVoucherTypeLabel(
+            invoice.tipo_comprobante,
+            invoice.comprobante_categoria,
+          ),
           formatVoucher(invoice),
           getEstadoLabel(invoice.estado),
           getLastActionLabel(invoice.last_action),
@@ -320,6 +477,31 @@ export default function Facturacion() {
       setMessage(error.message || "No se pudieron cargar las facturas ARCA.");
     } finally {
       setLoadingInvoices(false);
+    }
+  }
+
+  async function loadSettings() {
+    try {
+      const settings = await getArcaSettings();
+      setArcaSettings(settings);
+      setSettingsForm(buildSettingsForm(settings));
+
+      if (settings) {
+        setForm((prev) => ({
+          ...prev,
+          punto_venta: String(
+            settings.punto_venta_default || prev.punto_venta || "1",
+          ),
+          tipo_comprobante: String(
+            settings.tipo_comprobante_default || prev.tipo_comprobante || "6",
+          ),
+        }));
+      }
+    } catch (error) {
+      console.error(error);
+      setMessage(
+        error.message || "No se pudo cargar la configuracion de facturacion.",
+      );
     }
   }
 
@@ -396,9 +578,60 @@ export default function Facturacion() {
     setInvoicePage(1);
   }
 
+  function handleSettingsChange(event) {
+    const { name, value } = event.target;
+    setSettingsForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  }
+
+  async function handleSaveSettings(event) {
+    event.preventDefault();
+    setSettingsSaving(true);
+
+    try {
+      const saved = await updateArcaSettings({
+        emisor_nombre: settingsForm.emisor_nombre.trim() || null,
+        emisor_cuit: settingsForm.emisor_cuit.trim() || null,
+        emisor_domicilio: settingsForm.emisor_domicilio.trim() || null,
+        emisor_iva: settingsForm.emisor_iva.trim() || null,
+        punto_venta_default: Number(settingsForm.punto_venta_default || 1),
+        tipo_comprobante_default: Number(
+          settingsForm.tipo_comprobante_default || 6,
+        ),
+        email_from_name: settingsForm.email_from_name.trim() || null,
+        email_from_address: settingsForm.email_from_address.trim() || null,
+        pdf_leyenda: settingsForm.pdf_leyenda.trim() || null,
+        pdf_footer: settingsForm.pdf_footer.trim() || null,
+        arca_environment: settingsForm.arca_environment || "dev",
+      });
+
+      setArcaSettings(saved);
+      setSettingsForm(buildSettingsForm(saved));
+      setForm((prev) => ({
+        ...prev,
+        punto_venta: String(saved.punto_venta_default || prev.punto_venta || "1"),
+        tipo_comprobante: String(
+          saved.tipo_comprobante_default || prev.tipo_comprobante || "6",
+        ),
+      }));
+      setSettingsOpen(false);
+      setMessage("Configuracion de facturacion guardada correctamente.");
+    } catch (error) {
+      console.error(error);
+      setMessage(
+        error.message || "No se pudo guardar la configuracion de facturacion.",
+      );
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadInvoices();
+    loadSettings();
   }, []);
 
   useEffect(() => {
@@ -417,6 +650,24 @@ export default function Facturacion() {
         [name]: value,
       };
 
+      if (name === "tipo_comprobante" && isInternalVoucher(value)) {
+        next.importe_iva = "0";
+        next.punto_venta = "0";
+        next.comprobante_asociado_id = "";
+        next.comprobante_asociado_tipo = "";
+        next.comprobante_asociado_punto_venta = "";
+        next.comprobante_asociado_numero = "";
+        next.motivo = "";
+      }
+
+      if (
+        name === "tipo_comprobante" &&
+        !isInternalVoucher(value) &&
+        isInternalVoucher(prev.tipo_comprobante)
+      ) {
+        next.punto_venta = "1";
+      }
+
       if (name === "tipo_comprobante" && isTipoC(value)) {
         next.importe_iva = "0";
 
@@ -433,6 +684,21 @@ export default function Facturacion() {
         next.motivo = "";
       }
 
+      if (name === "tipo_comprobante" && requiresAssociatedVoucher(value)) {
+        const expectedAssociatedType = getExpectedAssociatedType(value);
+
+        if (
+          expectedAssociatedType &&
+          next.comprobante_asociado_tipo &&
+          Number(next.comprobante_asociado_tipo) !== expectedAssociatedType
+        ) {
+          next.comprobante_asociado_id = "";
+          next.comprobante_asociado_tipo = "";
+          next.comprobante_asociado_punto_venta = "";
+          next.comprobante_asociado_numero = "";
+        }
+      }
+
       if (name === "importe_neto" && isTipoC(next.tipo_comprobante)) {
         next.importe_iva = "0";
         next.importe_total = value;
@@ -440,63 +706,139 @@ export default function Facturacion() {
 
       return next;
     });
+
+    if (name === "tipo_comprobante") {
+      setAssociatedSearch("");
+      setAssociatedDropdownOpen(false);
+    }
+
     setLastIssuedInvoice(null);
   }
 
-  function handleAssociatedInvoiceChange(event) {
-    const invoiceId = event.target.value;
-    const associatedInvoice = invoices.find((invoice) => invoice.id === invoiceId);
+  function selectAssociatedInvoice(invoice) {
+    setForm((prev) => ({
+      ...prev,
+      comprobante_asociado_id: invoice.id,
+      comprobante_asociado_tipo: String(invoice.tipo_comprobante || ""),
+      comprobante_asociado_punto_venta: String(invoice.punto_venta || ""),
+      comprobante_asociado_numero: String(invoice.numero_comprobante || ""),
+      cliente_nombre: invoice.cliente_nombre || prev.cliente_nombre,
+      cliente_documento: invoice.cliente_documento || prev.cliente_documento,
+      cliente_iva: invoice.cliente_iva || prev.cliente_iva,
+      domicilio: invoice.domicilio || prev.domicilio,
+      concepto: invoice.concepto || prev.concepto,
+      descripcion: invoice.descripcion || prev.descripcion,
+      importe_neto: String(invoice.importe_neto || prev.importe_neto),
+      importe_iva: isTipoC(prev.tipo_comprobante)
+        ? "0"
+        : String(invoice.importe_iva || prev.importe_iva),
+      importe_total: String(
+        isTipoC(prev.tipo_comprobante)
+          ? invoice.importe_neto || invoice.importe_total || ""
+          : invoice.importe_total || prev.importe_total,
+      ),
+    }));
 
-    setForm((prev) => {
-      if (!associatedInvoice) {
-        return {
-          ...prev,
-          comprobante_asociado_id: "",
-          comprobante_asociado_tipo: "",
-          comprobante_asociado_punto_venta: "",
-          comprobante_asociado_numero: "",
-        };
-      }
-
-      const next = {
-        ...prev,
-        comprobante_asociado_id: associatedInvoice.id,
-        comprobante_asociado_tipo: String(associatedInvoice.tipo_comprobante || ""),
-        comprobante_asociado_punto_venta: String(associatedInvoice.punto_venta || ""),
-        comprobante_asociado_numero: String(
-          associatedInvoice.numero_comprobante || "",
-        ),
-        cliente_nombre: associatedInvoice.cliente_nombre || prev.cliente_nombre,
-        cliente_documento:
-          associatedInvoice.cliente_documento || prev.cliente_documento,
-        cliente_iva: associatedInvoice.cliente_iva || prev.cliente_iva,
-        domicilio: associatedInvoice.domicilio || prev.domicilio,
-        concepto: associatedInvoice.concepto || prev.concepto,
-        descripcion: associatedInvoice.descripcion || prev.descripcion,
-        importe_neto: String(associatedInvoice.importe_neto || prev.importe_neto),
-        importe_iva: isTipoC(prev.tipo_comprobante)
-          ? "0"
-          : String(associatedInvoice.importe_iva || prev.importe_iva),
-        importe_total: String(
-          isTipoC(prev.tipo_comprobante)
-            ? associatedInvoice.importe_neto || associatedInvoice.importe_total || ""
-            : associatedInvoice.importe_total || prev.importe_total,
-        ),
-      };
-
-      return next;
-    });
+    setAssociatedSearch(
+      `${getVoucherTypeLabel(invoice.tipo_comprobante)} ${formatVoucher(
+        invoice,
+      )} - ${invoice.cliente_nombre}`,
+    );
+    setAssociatedDropdownOpen(false);
     setLastIssuedInvoice(null);
+  }
+
+  function prepareCreditNoteFromInvoice(invoice) {
+    const creditNoteType = getCreditNoteTypeFromInvoice(invoice.tipo_comprobante);
+
+    if (!creditNoteType || !isFactura(invoice.tipo_comprobante)) {
+      setMessage("Solo se puede generar nota de crédito desde facturas A, B o C.");
+      return;
+    }
+
+    const invoiceIsTipoC = isTipoC(invoice.tipo_comprobante);
+    const invoiceNet = Math.abs(
+      Number(invoice.importe_neto || invoice.importe_total || 0),
+    );
+    const invoiceIva = Math.abs(Number(invoice.importe_iva || 0));
+    const invoiceTotal = Math.abs(Number(invoice.importe_total || 0));
+
+    setForm({
+      cliente_nombre: invoice.cliente_nombre || "",
+      cliente_documento: invoice.cliente_documento || "0",
+      cliente_iva: invoice.cliente_iva || "Consumidor Final",
+      domicilio: invoice.domicilio || "",
+      concepto: invoice.concepto || "Servicios medicos",
+      descripcion: invoice.descripcion || "Anulación de comprobante",
+      importe_neto: String(invoiceNet || ""),
+      importe_iva: invoiceIsTipoC ? "0" : String(invoiceIva),
+      importe_total: String(invoiceTotal || ""),
+      tipo_comprobante: String(creditNoteType),
+      punto_venta: String(invoice.punto_venta || 1),
+      comprobante_asociado_id: invoice.id || "",
+      comprobante_asociado_tipo: String(invoice.tipo_comprobante || ""),
+      comprobante_asociado_punto_venta: String(invoice.punto_venta || ""),
+      comprobante_asociado_numero: String(invoice.numero_comprobante || ""),
+      motivo: "Anulación de comprobante",
+    });
+
+    setLastIssuedInvoice(null);
+    setMessage(
+      "Nota de crédito preparada. Revisá los datos y emití el comprobante.",
+    );
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function prepareDebitNoteFromInvoice(invoice) {
+    const debitNoteType = getDebitNoteTypeFromInvoice(invoice.tipo_comprobante);
+
+    if (!debitNoteType || !isFactura(invoice.tipo_comprobante)) {
+      setMessage("Solo se puede generar nota de debito desde facturas A, B o C.");
+      return;
+    }
+
+    const invoiceIsTipoC = isTipoC(invoice.tipo_comprobante);
+    const invoiceNet = Math.abs(
+      Number(invoice.importe_neto || invoice.importe_total || 0),
+    );
+    const invoiceIva = Math.abs(Number(invoice.importe_iva || 0));
+    const invoiceTotal = Math.abs(Number(invoice.importe_total || 0));
+
+    setForm({
+      cliente_nombre: invoice.cliente_nombre || "",
+      cliente_documento: invoice.cliente_documento || "0",
+      cliente_iva: invoice.cliente_iva || "Consumidor Final",
+      domicilio: invoice.domicilio || "",
+      concepto: invoice.concepto || "Servicios medicos",
+      descripcion: invoice.descripcion || "Ajuste de debito",
+      importe_neto: String(invoiceNet || ""),
+      importe_iva: invoiceIsTipoC ? "0" : String(invoiceIva),
+      importe_total: String(invoiceTotal || ""),
+      tipo_comprobante: String(debitNoteType),
+      punto_venta: String(invoice.punto_venta || 1),
+      comprobante_asociado_id: invoice.id || "",
+      comprobante_asociado_tipo: String(invoice.tipo_comprobante || ""),
+      comprobante_asociado_punto_venta: String(invoice.punto_venta || ""),
+      comprobante_asociado_numero: String(invoice.numero_comprobante || ""),
+      motivo: "Ajuste de debito",
+    });
+
+    setLastIssuedInvoice(null);
+    setMessage(
+      "Nota de debito preparada. Revisa los datos y emiti el comprobante.",
+    );
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function calcularTotalDesdeNeto() {
     const neto = Number(form.importe_neto || 0);
-    const iva = formIsTipoC ? 0 : Number(form.importe_iva || 0);
+    const iva =
+      formIsTipoC || formIsInternalVoucher ? 0 : Number(form.importe_iva || 0);
     const total = neto + iva;
 
     setForm((prev) => ({
       ...prev,
-      importe_iva: formIsTipoC ? "0" : prev.importe_iva,
+      importe_iva: formIsTipoC || formIsInternalVoucher ? "0" : prev.importe_iva,
       importe_total: total.toFixed(2),
     }));
     setLastIssuedInvoice(null);
@@ -529,13 +871,39 @@ export default function Facturacion() {
           "Las notas de credito/debito requieren un comprobante asociado.",
         );
       }
+
+      const expectedAssociatedType = getExpectedAssociatedType(
+        form.tipo_comprobante,
+      );
+
+      if (
+        expectedAssociatedType &&
+        Number(form.comprobante_asociado_tipo) !== expectedAssociatedType
+      ) {
+        throw new Error(
+          "El tipo de comprobante asociado no corresponde con la nota seleccionada.",
+        );
+      }
+
+      if (
+        Number(form.comprobante_asociado_punto_venta) <= 0 ||
+        Number(form.comprobante_asociado_numero) <= 0
+      ) {
+        throw new Error(
+          "El punto de venta y numero del comprobante asociado deben ser mayores a cero.",
+        );
+      }
     }
   }
 
   function buildPayload() {
     validarFormulario();
-    const tipoComprobante = Number(form.tipo_comprobante || 6);
+    const formIsInternal = isInternalVoucher(form.tipo_comprobante);
+    const tipoComprobante = formIsInternal
+      ? form.tipo_comprobante
+      : Number(form.tipo_comprobante || 6);
     const neto = Number(form.importe_neto || 0);
+    const internalTotal = Number(form.importe_total || form.importe_neto || 0);
 
     return {
       cliente_nombre: form.cliente_nombre.trim(),
@@ -545,12 +913,17 @@ export default function Facturacion() {
       concepto: form.concepto.trim(),
       descripcion: form.descripcion.trim(),
       importe_neto: neto,
-      importe_iva: isTipoC(tipoComprobante) ? 0 : Number(form.importe_iva || 0),
-      importe_total: isTipoC(tipoComprobante)
+      importe_iva:
+        formIsInternal || isTipoC(tipoComprobante)
+          ? 0
+          : Number(form.importe_iva || 0),
+      importe_total: formIsInternal
+        ? internalTotal
+        : isTipoC(tipoComprobante)
         ? neto
         : Number(form.importe_total || 0),
       tipo_comprobante: tipoComprobante,
-      punto_venta: Number(form.punto_venta || 1),
+      punto_venta: formIsInternal ? 0 : Number(form.punto_venta || 1),
       comprobante_asociado_id: form.comprobante_asociado_id || null,
       comprobante_asociado_tipo: form.comprobante_asociado_tipo
         ? Number(form.comprobante_asociado_tipo)
@@ -574,21 +947,34 @@ export default function Facturacion() {
 
     try {
       const payload = buildPayload();
+      const payloadIsInternal = isInternalVoucher(payload.tipo_comprobante);
       showOperation({
         type: "emit",
-        title: "Generando factura",
-        message: "Estamos emitiendo el comprobante en ARCA y generando el PDF.",
+        title: payloadIsInternal
+          ? "Generando comprobante interno"
+          : "Generando factura",
+        message: payloadIsInternal
+          ? "Estamos generando el comprobante interno y su PDF."
+          : "Estamos emitiendo el comprobante en ARCA y generando el PDF.",
       });
       operationStarted = true;
       const invoice = await emitArcaInvoice(payload);
       setLastIssuedInvoice(invoice);
-      finishOperationSuccess("Factura generada correctamente.");
+      finishOperationSuccess(
+        payloadIsInternal
+          ? "Comprobante interno generado correctamente."
+          : "Factura generada correctamente.",
+      );
 
       setMessage(
         [
-          `Factura emitida correctamente. Comprobante ${formatVoucher(
-            invoice,
-          )}. CAE: ${invoice.cae || "-"}`,
+          payloadIsInternal
+            ? `Comprobante interno generado correctamente. Numero ${formatVoucher(
+                invoice,
+              )}.`
+            : `Factura emitida correctamente. Comprobante ${formatVoucher(
+                invoice,
+              )}. CAE: ${invoice.cae || "-"}`,
           invoice.warning_pdf ? `PDF pendiente: ${invoice.warning_pdf}` : "",
         ]
           .filter(Boolean)
@@ -610,7 +996,9 @@ export default function Facturacion() {
   }
 
   function limpiarFormulario() {
-    setForm(INITIAL_FORM);
+    setForm(buildInitialForm(arcaSettings));
+    setAssociatedSearch("");
+    setAssociatedDropdownOpen(false);
     setLastIssuedInvoice(null);
     setMessage("");
   }
@@ -766,8 +1154,161 @@ export default function Facturacion() {
           >
             {loadingInvoices ? "Actualizando..." : "Actualizar"}
           </button>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => setSettingsOpen((prev) => !prev)}
+          >
+            Configuración de facturación
+          </button>
         </div>
       </div>
+
+      {settingsOpen && (
+        <section className="card settings-panel">
+          <h2>Configuración de facturación</h2>
+          <form onSubmit={handleSaveSettings}>
+            <div className="settings-grid">
+              <label>
+                Nombre emisor
+                <input
+                  name="emisor_nombre"
+                  value={settingsForm.emisor_nombre}
+                  onChange={handleSettingsChange}
+                  placeholder="CEDIM"
+                />
+              </label>
+              <label>
+                CUIT emisor
+                <input
+                  name="emisor_cuit"
+                  value={settingsForm.emisor_cuit}
+                  onChange={handleSettingsChange}
+                  placeholder="CUIT"
+                />
+              </label>
+              <label>
+                Domicilio fiscal
+                <input
+                  name="emisor_domicilio"
+                  value={settingsForm.emisor_domicilio}
+                  onChange={handleSettingsChange}
+                  placeholder="Domicilio fiscal"
+                />
+              </label>
+              <label>
+                Condición IVA emisor
+                <input
+                  name="emisor_iva"
+                  value={settingsForm.emisor_iva}
+                  onChange={handleSettingsChange}
+                  placeholder="Responsable Inscripto"
+                />
+              </label>
+              <label>
+                Punto de venta default
+                <input
+                  name="punto_venta_default"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={settingsForm.punto_venta_default}
+                  onChange={handleSettingsChange}
+                />
+              </label>
+              <label>
+                Tipo comprobante default
+                <select
+                  name="tipo_comprobante_default"
+                  value={settingsForm.tipo_comprobante_default}
+                  onChange={handleSettingsChange}
+                >
+                  <option value="6">Factura B</option>
+                  <option value="11">Factura C</option>
+                  <option value="1">Factura A</option>
+                  <option value="8">Nota de Credito B</option>
+                  <option value="13">Nota de Credito C</option>
+                  <option value="3">Nota de Credito A</option>
+                  <option value="7">Nota de Debito B</option>
+                  <option value="12">Nota de Debito C</option>
+                  <option value="2">Nota de Debito A</option>
+                </select>
+              </label>
+              <label>
+                Nombre remitente email
+                <input
+                  name="email_from_name"
+                  value={settingsForm.email_from_name}
+                  onChange={handleSettingsChange}
+                  placeholder="CEDIM"
+                />
+              </label>
+              <label>
+                Email remitente
+                <input
+                  name="email_from_address"
+                  type="email"
+                  value={settingsForm.email_from_address}
+                  onChange={handleSettingsChange}
+                  placeholder="facturacion@cedim.com"
+                />
+              </label>
+              <label>
+                Leyenda PDF
+                <textarea
+                  name="pdf_leyenda"
+                  value={settingsForm.pdf_leyenda}
+                  onChange={handleSettingsChange}
+                  placeholder="Comprobante emitido electrónicamente"
+                />
+              </label>
+              <label>
+                Footer PDF
+                <textarea
+                  name="pdf_footer"
+                  value={settingsForm.pdf_footer}
+                  onChange={handleSettingsChange}
+                  placeholder="Generado desde CEDIM"
+                />
+              </label>
+              <label>
+                Ambiente ARCA
+                <select
+                  name="arca_environment"
+                  value={settingsForm.arca_environment}
+                  onChange={handleSettingsChange}
+                >
+                  <option value="dev">Desarrollo / homologación</option>
+                  <option value="prod">Producción</option>
+                </select>
+              </label>
+            </div>
+            <p className="muted">
+              Los tokens de AFIP SDK, SMTP y Supabase se mantienen en server/.env.
+            </p>
+            <div className="settings-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  setSettingsForm(buildSettingsForm(arcaSettings));
+                  setSettingsOpen(false);
+                }}
+                disabled={settingsSaving}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={settingsSaving}
+              >
+                {settingsSaving ? "Guardando..." : "Guardar configuración"}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
 
       <div className="dashboard-grid">
         <section className="card">
@@ -843,6 +1384,8 @@ export default function Facturacion() {
                 <option value="1">Factura A</option>
                 <option value="3">Nota de Credito A</option>
                 <option value="2">Nota de Debito A</option>
+                <option value="remito_interno">Remito interno</option>
+                <option value="recibo_interno">Recibo interno</option>
               </select>
             </label>
 
@@ -855,7 +1398,8 @@ export default function Facturacion() {
                 step="1"
                 value={form.punto_venta}
                 onChange={handleChange}
-                required
+                disabled={formIsInternalVoucher}
+                required={!formIsInternalVoucher}
               />
             </label>
 
@@ -883,21 +1427,84 @@ export default function Facturacion() {
               <div className="associated-voucher-box">
                 <h3>Comprobante asociado</h3>
 
-                <label>
-                  Seleccionar del historial
-                  <select
-                    value={form.comprobante_asociado_id}
-                    onChange={handleAssociatedInvoiceChange}
-                  >
-                    <option value="">Cargar manualmente</option>
-                    {emittedInvoices.map((invoice) => (
-                      <option key={invoice.id} value={invoice.id}>
-                        {getVoucherTypeLabel(invoice.tipo_comprobante)}{" "}
-                        {formatVoucher(invoice)} - {invoice.cliente_nombre}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="associated-search">
+                  <label htmlFor="associated-invoice-search">
+                    Buscar comprobante asociado
+                  </label>
+
+                  <input
+                    id="associated-invoice-search"
+                    type="search"
+                    value={associatedSearch}
+                    onFocus={() => setAssociatedDropdownOpen(true)}
+                    onChange={(event) => {
+                      setAssociatedSearch(event.target.value);
+                      setAssociatedDropdownOpen(true);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        setAssociatedDropdownOpen(false);
+                      }
+                    }}
+                    placeholder="Buscar por cliente, documento, número o CAE..."
+                    autoComplete="off"
+                  />
+
+                  {associatedDropdownOpen && (
+                    <div className="associated-search-results">
+                      {filteredAssociatedInvoices.length === 0 ? (
+                        <div className="associated-search-empty">
+                          No hay facturas compatibles con ese criterio.
+                        </div>
+                      ) : (
+                        filteredAssociatedInvoices.map((invoice) => (
+                          <button
+                            type="button"
+                            key={invoice.id}
+                            className="associated-search-item"
+                            onClick={() => selectAssociatedInvoice(invoice)}
+                          >
+                            <strong>
+                              {getVoucherTypeLabel(invoice.tipo_comprobante)}{" "}
+                              {formatVoucher(invoice)}
+                            </strong>
+                            <span>{invoice.cliente_nombre}</span>
+                            <span>
+                              Doc. {invoice.cliente_documento} ·{" "}
+                              {formatCurrency(invoice.importe_total)}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+
+                  {form.comprobante_asociado_numero && (
+                    <div className="associated-selected">
+                      Asociado seleccionado: Tipo{" "}
+                      {form.comprobante_asociado_tipo} · PV{" "}
+                      {form.comprobante_asociado_punto_venta} · Nro{" "}
+                      {form.comprobante_asociado_numero}
+                      <button
+                        type="button"
+                        className="inline-link-button"
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            comprobante_asociado_id: "",
+                            comprobante_asociado_tipo: "",
+                            comprobante_asociado_punto_venta: "",
+                            comprobante_asociado_numero: "",
+                          }));
+                          setAssociatedSearch("");
+                          setAssociatedDropdownOpen(false);
+                        }}
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 <label>
                   Tipo asociado
@@ -973,7 +1580,7 @@ export default function Facturacion() {
                 value={form.importe_iva}
                 onChange={handleChange}
                 placeholder="0.00"
-                disabled={formIsTipoC}
+                disabled={formIsTipoC || formIsInternalVoucher}
               />
             </label>
 
@@ -1014,7 +1621,11 @@ export default function Facturacion() {
                 className="btn-primary"
                 disabled={emitting}
               >
-                {emitting ? "Emitiendo..." : "Emitir con Afip SDK"}
+                {emitting
+                  ? "Emitiendo..."
+                  : formIsInternalVoucher
+                    ? "Generar comprobante interno"
+                    : "Emitir con Afip SDK"}
               </button>
             </div>
           </form>
@@ -1028,21 +1639,70 @@ export default function Facturacion() {
           <div className="invoice-preview">
             <div className="invoice-preview-header">
               <div>
-                <strong>CEDIM</strong>
-                <span>{getVoucherTypeLabel(previewInvoice.tipo_comprobante)}</span>
+                <strong>{emitterName}</strong>
+                <span>
+                  {getVoucherTypeLabel(
+                    previewInvoice.tipo_comprobante,
+                    previewInvoice.comprobante_categoria,
+                  )}
+                </span>
               </div>
 
               <div className="invoice-preview-type">
-                {getVoucherLetter(previewInvoice.tipo_comprobante)}
+                {previewIsInternalVoucher
+                  ? "I"
+                  : getVoucherLetter(previewInvoice.tipo_comprobante)}
               </div>
             </div>
 
+            <p className="invoice-preview-note">{previewLegend}</p>
+
+            {(arcaSettings?.emisor_cuit ||
+              arcaSettings?.emisor_domicilio ||
+              arcaSettings?.emisor_iva ||
+              arcaSettings?.email_from_address) && (
+              <div className="invoice-preview-meta">
+                {arcaSettings?.emisor_cuit && (
+                  <>
+                    <span>CUIT emisor</span>
+                    <strong>{arcaSettings.emisor_cuit}</strong>
+                  </>
+                )}
+                {arcaSettings?.emisor_iva && (
+                  <>
+                    <span>IVA emisor</span>
+                    <strong>{arcaSettings.emisor_iva}</strong>
+                  </>
+                )}
+                {arcaSettings?.emisor_domicilio && (
+                  <>
+                    <span>Domicilio fiscal</span>
+                    <strong>{arcaSettings.emisor_domicilio}</strong>
+                  </>
+                )}
+                {arcaSettings?.email_from_address && (
+                  <>
+                    <span>Email remitente</span>
+                    <strong>{arcaSettings.email_from_address}</strong>
+                  </>
+                )}
+              </div>
+            )}
+
             <div className="invoice-preview-meta">
-              <span>Punto de venta</span>
-              <strong>{previewInvoice.punto_venta || "1"}</strong>
+              {!previewIsInternalVoucher && (
+                <>
+                  <span>Punto de venta</span>
+                  <strong>{previewInvoice.punto_venta || "1"}</strong>
+                </>
+              )}
               <span>Numero</span>
               <strong>
-                {previewInvoice.numero_comprobante
+                {previewIsInternalVoucher
+                  ? previewInvoice.comprobante_interno_numero
+                    ? formatVoucher(previewInvoice)
+                    : "se asigna al generar"
+                  : previewInvoice.numero_comprobante
                   ? formatVoucher(previewInvoice)
                   : "se asigna al emitir"}
               </strong>
@@ -1101,7 +1761,14 @@ export default function Facturacion() {
               </p>
             )}
 
-            {requiresAssociatedVoucher(previewInvoice.tipo_comprobante) && (
+            {previewIsInternalVoucher && (
+              <p className="invoice-preview-note">
+                Comprobante interno no fiscal.
+              </p>
+            )}
+
+            {!previewIsInternalVoucher &&
+              requiresAssociatedVoucher(previewInvoice.tipo_comprobante) && (
               <p className="invoice-preview-note">
                 Asociado: Tipo{" "}
                 {previewInvoice.comprobante_asociado_tipo || "-"} - PV{" "}
@@ -1110,14 +1777,16 @@ export default function Facturacion() {
               </p>
             )}
 
-            <div className="invoice-preview-meta">
-              <span>CAE</span>
-              <strong>{previewInvoice.cae || "se asigna al emitir"}</strong>
-              <span>Vencimiento CAE</span>
-              <strong>
-                {previewInvoice.cae_vencimiento || "se asigna al emitir"}
-              </strong>
-            </div>
+            {!previewIsInternalVoucher && (
+              <div className="invoice-preview-meta">
+                <span>CAE</span>
+                <strong>{previewInvoice.cae || "se asigna al emitir"}</strong>
+                <span>Vencimiento CAE</span>
+                <strong>
+                  {previewInvoice.cae_vencimiento || "se asigna al emitir"}
+                </strong>
+              </div>
+            )}
           </div>
 
           <div className="invoice-actions">
@@ -1273,12 +1942,21 @@ export default function Facturacion() {
                       {paginatedInvoices.map((invoice) => {
                         const invoiceHasPdf = hasInvoicePdf(invoice);
                         const isIssued = invoice.estado === "emitida";
+                        const canPrepareInvoiceNote =
+                          isIssued &&
+                          isFactura(invoice.tipo_comprobante) &&
+                          Boolean(invoice.numero_comprobante);
 
                         return (
                           <Fragment key={invoice.id}>
                             <tr>
                               <td>{formatDate(invoice.created_at)}</td>
-                              <td>{getVoucherTypeLabel(invoice.tipo_comprobante)}</td>
+                              <td>
+                                {getVoucherTypeLabel(
+                                  invoice.tipo_comprobante,
+                                  invoice.comprobante_categoria,
+                                )}
+                              </td>
                               <td>{invoice.cliente_nombre}</td>
                               <td>{invoice.cliente_documento}</td>
                               <td>{formatVoucher(invoice)}</td>
@@ -1291,38 +1969,68 @@ export default function Facturacion() {
                               </td>
                               <td>{getLastActionLabel(invoice.last_action)}</td>
                               <td>
-                                {isIssued && invoiceHasPdf ? (
+                                {isIssued ? (
                                   <div className="invoice-row-actions">
-                                    <button
-                                      type="button"
-                                      className="invoice-action-button"
-                                      onClick={() => handleOpenPdf(invoice)}
-                                      disabled={Boolean(pdfActionLoading)}
-                                    >
-                                      {pdfActionLoading === `open-${invoice.id}`
-                                        ? "Abriendo..."
-                                        : "Abrir PDF"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="invoice-action-button"
-                                      onClick={() => handleDownloadPdf(invoice)}
-                                      disabled={Boolean(pdfActionLoading)}
-                                    >
-                                      {pdfActionLoading === `download-${invoice.id}`
-                                        ? "Descargando..."
-                                        : "Descargar"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="invoice-action-button"
-                                      onClick={() => openEmailModal(invoice)}
-                                      disabled={Boolean(pdfActionLoading)}
-                                    >
-                                      {pdfActionLoading === `email-${invoice.id}`
-                                        ? "Enviando..."
-                                        : "Enviar mail"}
-                                    </button>
+                                    {invoiceHasPdf ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          className="invoice-action-button"
+                                          onClick={() => handleOpenPdf(invoice)}
+                                          disabled={Boolean(pdfActionLoading)}
+                                        >
+                                          {pdfActionLoading === `open-${invoice.id}`
+                                            ? "Abriendo..."
+                                            : "Abrir PDF"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="invoice-action-button"
+                                          onClick={() => handleDownloadPdf(invoice)}
+                                          disabled={Boolean(pdfActionLoading)}
+                                        >
+                                          {pdfActionLoading === `download-${invoice.id}`
+                                            ? "Descargando..."
+                                            : "Descargar"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="invoice-action-button"
+                                          onClick={() => openEmailModal(invoice)}
+                                          disabled={Boolean(pdfActionLoading)}
+                                        >
+                                          {pdfActionLoading === `email-${invoice.id}`
+                                            ? "Enviando..."
+                                            : "Enviar mail"}
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <span className="muted">PDF pendiente</span>
+                                    )}
+                                    {canPrepareInvoiceNote && (
+                                      <button
+                                        type="button"
+                                        className="invoice-action-button"
+                                        onClick={() =>
+                                          prepareCreditNoteFromInvoice(invoice)
+                                        }
+                                        disabled={Boolean(pdfActionLoading)}
+                                      >
+                                        Nota crédito
+                                      </button>
+                                    )}
+                                    {canPrepareInvoiceNote && (
+                                      <button
+                                        type="button"
+                                        className="invoice-action-button"
+                                        onClick={() =>
+                                          prepareDebitNoteFromInvoice(invoice)
+                                        }
+                                        disabled={Boolean(pdfActionLoading)}
+                                      >
+                                        Nota débito
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       className="invoice-action-button"
