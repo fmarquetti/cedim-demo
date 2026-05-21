@@ -99,7 +99,7 @@ function AppContent() {
 
   const pathname = window.location.pathname;
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   if (pathname.includes("/set-password")) {
     return <SetPassword />;
