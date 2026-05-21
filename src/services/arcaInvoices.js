@@ -76,6 +76,37 @@ export async function getArcaInvoicePdfUrl(invoiceId) {
   return data.pdf_url;
 }
 
+export async function downloadArcaInvoicePdf(invoice) {
+  if (!invoice?.id) {
+    throw new Error("Factura invalida.");
+  }
+
+  const response = await fetch(
+    `${arcaApiUrl}/api/arca/invoices/${invoice.id}/download`,
+    {
+      headers: await getAuthHeaders(),
+    },
+  );
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.error || "No se pudo descargar el PDF.");
+  }
+
+  const blob = await response.blob();
+  const objectUrl = window.URL.createObjectURL(blob);
+  const puntoVenta = String(invoice.punto_venta || 0).padStart(4, "0");
+  const numero = String(invoice.numero_comprobante || 0).padStart(8, "0");
+  const link = document.createElement("a");
+
+  link.href = objectUrl;
+  link.download = `factura-${puntoVenta}-${numero}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(objectUrl);
+}
+
 export async function sendArcaInvoiceEmail(invoiceId, email) {
   const response = await fetch(
     `${arcaApiUrl}/api/arca/invoices/${invoiceId}/send-email`,
@@ -96,6 +127,25 @@ export async function sendArcaInvoiceEmail(invoiceId, email) {
   }
 
   return data.invoice;
+}
+
+export async function getArcaInvoiceEvents(invoiceId) {
+  const response = await fetch(
+    `${arcaApiUrl}/api/arca/invoices/${invoiceId}/events`,
+    {
+      headers: await getAuthHeaders(),
+    },
+  );
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok || !data?.ok) {
+    throw new Error(
+      data?.error || "No se pudo obtener la actividad de la factura.",
+    );
+  }
+
+  return data.events || [];
 }
 
 export async function listArcaInvoices() {

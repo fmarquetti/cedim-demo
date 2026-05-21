@@ -73,6 +73,37 @@ function isTipoC(tipoComprobante) {
   return [11, 12, 13].includes(Number(tipoComprobante));
 }
 
+function isFactura(tipoComprobante) {
+  return [1, 6, 11].includes(Number(tipoComprobante));
+}
+
+function isNotaDebito(tipoComprobante) {
+  return [2, 7, 12].includes(Number(tipoComprobante));
+}
+
+function isNotaCredito(tipoComprobante) {
+  return [3, 8, 13].includes(Number(tipoComprobante));
+}
+
+function getVoucherCategory(tipoComprobante) {
+  if (isNotaCredito(tipoComprobante)) return "nota_credito";
+  if (isNotaDebito(tipoComprobante)) return "nota_debito";
+  if (isFactura(tipoComprobante)) return "factura";
+  return "factura";
+}
+
+function getVoucherTitle(tipoComprobante) {
+  const category = getVoucherCategory(tipoComprobante);
+
+  if (category === "nota_credito") return "Nota de Credito";
+  if (category === "nota_debito") return "Nota de Debito";
+  return "Factura";
+}
+
+function requiresAssociatedVoucher(tipoComprobante) {
+  return isNotaCredito(tipoComprobante) || isNotaDebito(tipoComprobante);
+}
+
 function getTodayAfipDate() {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Argentina/Buenos_Aires",
@@ -226,6 +257,18 @@ function validatePayload(payload) {
     throw new Error("El importe_total debe ser mayor a 0.");
   }
 
+  if (requiresAssociatedVoucher(tipoComprobante)) {
+    if (
+      !payload.comprobante_asociado_tipo ||
+      !payload.comprobante_asociado_punto_venta ||
+      !payload.comprobante_asociado_numero
+    ) {
+      throw new Error(
+        "Las notas de credito/debito requieren un comprobante asociado.",
+      );
+    }
+  }
+
   if (isTipoC(tipoComprobante)) {
     if (iva !== 0) {
       throw new Error(
@@ -282,6 +325,16 @@ function buildVoucherData(payload, voucherNumber = null, options = {}) {
     ];
   }
 
+  if (requiresAssociatedVoucher(tipoComprobante)) {
+    data.CbtesAsoc = [
+      {
+        Tipo: Number(payload.comprobante_asociado_tipo),
+        PtoVta: Number(payload.comprobante_asociado_punto_venta),
+        Nro: Number(payload.comprobante_asociado_numero),
+      },
+    ];
+  }
+
   if (voucherNumber !== null && voucherNumber !== undefined) {
     data.CbteDesde = Number(voucherNumber);
     data.CbteHasta = Number(voucherNumber);
@@ -314,8 +367,14 @@ function serializeError(error) {
 function getVoucherLetter(tipoComprobante) {
   const labels = {
     1: "A",
+    2: "A",
+    3: "A",
     6: "B",
+    7: "B",
+    8: "B",
     11: "C",
+    12: "C",
+    13: "C",
   };
 
   return labels[Number(tipoComprobante)] || "B";
@@ -523,6 +582,18 @@ async function insertPendingInvoice(payload, userId) {
       domicilio: payload.domicilio || "",
       concepto: payload.concepto || "Servicios médicos",
       descripcion: payload.descripcion || "",
+      comprobante_categoria: getVoucherCategory(tipoComprobante),
+      comprobante_asociado_id: payload.comprobante_asociado_id || null,
+      comprobante_asociado_tipo: payload.comprobante_asociado_tipo
+        ? Number(payload.comprobante_asociado_tipo)
+        : null,
+      comprobante_asociado_punto_venta: payload.comprobante_asociado_punto_venta
+        ? Number(payload.comprobante_asociado_punto_venta)
+        : null,
+      comprobante_asociado_numero: payload.comprobante_asociado_numero
+        ? Number(payload.comprobante_asociado_numero)
+        : null,
+      motivo: payload.motivo || null,
       tipo_comprobante: tipoComprobante,
       punto_venta: puntoVenta,
       importe_neto: toMoney(payload.importe_neto || 0),
@@ -609,6 +680,7 @@ function buildInvoicePdfBuffer(invoice, payloadOrResponse = {}) {
     doc.on("error", reject);
     doc.on("end", () => resolve(Buffer.concat(chunks)));
 
+    const voucherTitle = getVoucherTitle(invoice.tipo_comprobante);
     const typeLetter = getVoucherLetter(invoice.tipo_comprobante);
     const caeVencimiento =
       invoice.cae_vencimiento ||
@@ -622,7 +694,7 @@ function buildInvoicePdfBuffer(invoice, payloadOrResponse = {}) {
       .text("CEDIM", 48, 46)
       .fontSize(9)
       .font("Helvetica")
-      .text("Comprobante emitido electronicamente", 48, 76);
+      .text(`${voucherTitle} emitido electronicamente`, 48, 76);
 
     doc
       .roundedRect(270, 44, 58, 58, 4)
@@ -634,6 +706,7 @@ function buildInvoicePdfBuffer(invoice, payloadOrResponse = {}) {
     doc
       .fontSize(10)
       .font("Helvetica")
+      .text(`Comprobante: ${voucherTitle}`, 360, 32)
       .text(`Punto de venta: ${invoice.punto_venta || "-"}`, 360, 50)
       .text(`Numero comprobante: ${voucherLabel(invoice)}`, 360, 68)
       .text(
@@ -654,6 +727,26 @@ function buildInvoicePdfBuffer(invoice, payloadOrResponse = {}) {
       .text(`Documento: ${invoice.cliente_documento || "-"}`, 48, 184)
       .text(`Condicion IVA: ${invoice.cliente_iva || "Consumidor Final"}`, 48, 202)
       .text(`Domicilio: ${invoice.domicilio || "-"}`, 48, 220);
+
+    if (
+      invoice.comprobante_asociado_tipo ||
+      invoice.comprobante_asociado_punto_venta ||
+      invoice.comprobante_asociado_numero
+    ) {
+      doc
+        .fontSize(9)
+        .fillColor("#4b5563")
+        .text(
+          `Comprobante asociado: Tipo ${invoice.comprobante_asociado_tipo || "-"} - PV ${String(
+            invoice.comprobante_asociado_punto_venta || 0,
+          ).padStart(4, "0")} - Nro ${String(
+            invoice.comprobante_asociado_numero || 0,
+          ).padStart(8, "0")}`,
+          48,
+          238,
+        )
+        .fillColor("#111827");
+    }
 
     doc
       .fontSize(12)
@@ -809,6 +902,88 @@ async function createInvoiceSignedUrl(invoice) {
   }
 
   return data.signedUrl;
+}
+
+async function logInvoiceEvent({
+  invoiceId,
+  eventType,
+  userId,
+  userEmail,
+  targetEmail,
+  metadata,
+}) {
+  if (!invoiceId || !eventType) return;
+
+  try {
+    const supabase = getSupabaseServerClient();
+    if (!supabase) return;
+
+    const { error } = await supabase.from("arca_invoice_events").insert({
+      invoice_id: invoiceId,
+      event_type: eventType,
+      user_id: userId || null,
+      user_email: userEmail || null,
+      target_email: targetEmail || null,
+      metadata: metadata || null,
+    });
+
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    console.warn(
+      "No se pudo registrar evento de factura ARCA",
+      JSON.stringify(serializeError(error)),
+    );
+  }
+}
+
+async function touchInvoiceLastAction(invoiceId, action, userId) {
+  if (!invoiceId || !action) return;
+
+  try {
+    const supabase = getSupabaseServerClient();
+    if (!supabase) return;
+
+    const { error } = await supabase
+      .from("arca_invoices")
+      .update({
+        last_action: action,
+        last_action_at: new Date().toISOString(),
+        last_action_by: userId || null,
+      })
+      .eq("id", invoiceId);
+
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    console.warn(
+      "No se pudo actualizar ultima accion de factura ARCA",
+      JSON.stringify(serializeError(error)),
+    );
+  }
+}
+
+async function downloadInvoicePdfBuffer(invoice) {
+  if (!invoice?.pdf_storage_path) {
+    throw new Error("PDF pendiente.");
+  }
+
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase no configurado.");
+  }
+
+  const { data: pdfData, error } = await supabase.storage
+    .from(ARCA_INVOICES_BUCKET)
+    .download(invoice.pdf_storage_path);
+
+  if (error) {
+    throw error;
+  }
+
+  return Buffer.from(await pdfData.arrayBuffer());
 }
 
 function getSmtpTransporter() {
@@ -1115,6 +1290,18 @@ app.post("/api/arca/emitir", async (req, res) => {
       domicilio: payload.domicilio || "",
       concepto: payload.concepto || "Servicios medicos",
       descripcion: payload.descripcion || "",
+      comprobante_categoria: getVoucherCategory(payload.tipo_comprobante),
+      comprobante_asociado_id: payload.comprobante_asociado_id || null,
+      comprobante_asociado_tipo: payload.comprobante_asociado_tipo
+        ? Number(payload.comprobante_asociado_tipo)
+        : null,
+      comprobante_asociado_punto_venta: payload.comprobante_asociado_punto_venta
+        ? Number(payload.comprobante_asociado_punto_venta)
+        : null,
+      comprobante_asociado_numero: payload.comprobante_asociado_numero
+        ? Number(payload.comprobante_asociado_numero)
+        : null,
+      motivo: payload.motivo || null,
       tipo_comprobante: Number(payloadNumber(payload.tipo_comprobante, 6)),
       punto_venta: Number(payloadNumber(payload.punto_venta, 1)),
       importe_neto: toMoney(payload.importe_neto || 0),
@@ -1127,6 +1314,18 @@ app.post("/api/arca/emitir", async (req, res) => {
       proveedor_response: providerResponse,
     };
     let warningPdf = null;
+
+    await logInvoiceEvent({
+      invoiceId: invoiceResponse?.id,
+      eventType: "emitted",
+      userId: user?.id,
+      userEmail: user?.email,
+      metadata: {
+        cae: parsed.cae,
+        numero_comprobante: parsed.numero_comprobante,
+      },
+    });
+    await touchInvoiceLastAction(invoiceResponse?.id, "emitted", user?.id);
 
     try {
       if (!invoiceResponse?.id) {
@@ -1141,6 +1340,15 @@ app.post("/api/arca/emitir", async (req, res) => {
         invoiceResponse,
         pdfBuffer,
       );
+      await logInvoiceEvent({
+        invoiceId: invoiceResponse?.id,
+        eventType: "pdf_generated",
+        userId: user?.id,
+        userEmail: user?.email,
+        metadata: {
+          pdf_storage_path: invoiceResponse?.pdf_storage_path,
+        },
+      });
     } catch (pdfError) {
       warningPdf =
         pdfError instanceof Error ? pdfError.message : String(pdfError);
@@ -1188,9 +1396,17 @@ app.post("/api/arca/emitir", async (req, res) => {
 
 app.get("/api/arca/invoices/:id/pdf-url", async (req, res) => {
   try {
-    await getAuthenticatedUser(req);
+    const user = await getAuthenticatedUser(req);
     const invoice = await getInvoiceById(req.params.id);
     const pdfUrl = await createInvoiceSignedUrl(invoice);
+
+    await logInvoiceEvent({
+      invoiceId: invoice.id,
+      eventType: "pdf_opened",
+      userId: user?.id,
+      userEmail: user?.email,
+    });
+    await touchInvoiceLastAction(invoice.id, "pdf_opened", user?.id);
 
     res.json({
       ok: true,
@@ -1204,16 +1420,76 @@ app.get("/api/arca/invoices/:id/pdf-url", async (req, res) => {
   }
 });
 
-app.post("/api/arca/invoices/:id/send-email", async (req, res) => {
+app.get("/api/arca/invoices/:id/download", async (req, res) => {
   try {
-    await getAuthenticatedUser(req);
-    const email = String(req.body?.email || "").trim();
+    const user = await getAuthenticatedUser(req);
+    const invoice = await getInvoiceById(req.params.id);
+    const pdfBuffer = await downloadInvoicePdfBuffer(invoice);
+    const now = new Date().toISOString();
+    const supabase = getSupabaseServerClient();
 
-    if (!email || !email.includes("@")) {
+    try {
+      const { error } = await supabase
+        .from("arca_invoices")
+        .update({
+          pdf_downloaded_at: now,
+          pdf_downloaded_by: user?.id || null,
+          last_action: "pdf_downloaded",
+          last_action_at: now,
+          last_action_by: user?.id || null,
+        })
+        .eq("id", invoice.id);
+
+      if (error) {
+        throw error;
+      }
+    } catch (updateError) {
+      console.warn(
+        "No se pudo actualizar descarga de PDF ARCA",
+        JSON.stringify(serializeError(updateError)),
+      );
+    }
+
+    await logInvoiceEvent({
+      invoiceId: invoice.id,
+      eventType: "pdf_downloaded",
+      userId: user?.id,
+      userEmail: user?.email,
+    });
+
+    const filename = `factura-${String(invoice.punto_venta || 0).padStart(
+      4,
+      "0",
+    )}-${String(invoice.numero_comprobante || 0).padStart(8, "0")}.pdf`;
+
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": pdfBuffer.length,
+    });
+    res.send(pdfBuffer);
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+app.post("/api/arca/invoices/:id/send-email", async (req, res) => {
+  let invoice = null;
+  let user = null;
+  let email = "";
+
+  try {
+    user = await getAuthenticatedUser(req);
+    email = String(req.body?.email || "").trim();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new Error("Email de destino invalido.");
     }
 
-    const invoice = await getInvoiceById(req.params.id);
+    invoice = await getInvoiceById(req.params.id);
 
     if (!invoice?.pdf_storage_path) {
       throw new Error("PDF pendiente.");
@@ -1221,15 +1497,8 @@ app.post("/api/arca/invoices/:id/send-email", async (req, res) => {
 
     const transporter = getSmtpTransporter();
     const supabase = getSupabaseServerClient();
-    const { data: pdfData, error: downloadError } = await supabase.storage
-      .from(ARCA_INVOICES_BUCKET)
-      .download(invoice.pdf_storage_path);
-
-    if (downloadError) {
-      throw downloadError;
-    }
-
-    const pdfBuffer = Buffer.from(await pdfData.arrayBuffer());
+    const pdfBuffer = await downloadInvoicePdfBuffer(invoice);
+    const now = new Date().toISOString();
 
     await transporter.sendMail({
       from: process.env.SMTP_FROM,
@@ -1247,23 +1516,90 @@ app.post("/api/arca/invoices/:id/send-email", async (req, res) => {
       ],
     });
 
-    const { data: updatedInvoice, error: updateError } = await supabase
-      .from("arca_invoices")
-      .update({
-        email_sent_at: new Date().toISOString(),
-        email_sent_to: email,
-      })
-      .eq("id", invoice.id)
-      .select()
-      .single();
+    let updatedInvoice = invoice;
 
-    if (updateError) {
-      throw updateError;
+    try {
+      const { data, error: updateError } = await supabase
+        .from("arca_invoices")
+        .update({
+          email_sent_at: now,
+          email_sent_to: email,
+          last_action: "email_sent",
+          last_action_at: now,
+          last_action_by: user?.id || null,
+        })
+        .eq("id", invoice.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      updatedInvoice = data;
+    } catch (updateError) {
+      console.warn(
+        "No se pudo actualizar envio por mail ARCA",
+        JSON.stringify(serializeError(updateError)),
+      );
     }
+
+    await logInvoiceEvent({
+      invoiceId: invoice.id,
+      eventType: "email_sent",
+      userId: user?.id,
+      userEmail: user?.email,
+      targetEmail: email,
+    });
 
     res.json({
       ok: true,
       invoice: updatedInvoice,
+    });
+  } catch (error) {
+    await logInvoiceEvent({
+      invoiceId: invoice?.id || req.params.id,
+      eventType: "email_failed",
+      userId: user?.id,
+      userEmail: user?.email,
+      targetEmail: email || null,
+      metadata: {
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+
+    res.status(400).json({
+      ok: false,
+      error:
+        error instanceof Error
+          ? `No se pudo enviar la factura por mail. ${error.message}`
+          : `No se pudo enviar la factura por mail. ${String(error)}`,
+    });
+  }
+});
+
+app.get("/api/arca/invoices/:id/events", async (req, res) => {
+  try {
+    await getAuthenticatedUser(req);
+
+    const supabase = getSupabaseServerClient();
+    if (!supabase) {
+      throw new Error("Supabase no configurado.");
+    }
+
+    const { data, error } = await supabase
+      .from("arca_invoice_events")
+      .select("*")
+      .eq("invoice_id", req.params.id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({
+      ok: true,
+      events: data || [],
     });
   } catch (error) {
     res.status(400).json({
