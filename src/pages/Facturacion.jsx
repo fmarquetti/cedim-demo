@@ -1051,7 +1051,7 @@ export default function Facturacion() {
 
   return (
     <div className="page facturacion-page">
-      <div className="page-header">
+      <div className="page-header" data-tour="facturacion-header">
         <div>
           <h1>Facturacion</h1>
           <p>
@@ -1065,6 +1065,7 @@ export default function Facturacion() {
             className="btn-secondary"
             onClick={loadInvoices}
             disabled={loadingInvoices}
+            data-tour="facturacion-actualizar"
           >
             {loadingInvoices ? "Actualizando..." : "Actualizar"}
           </button>
@@ -1072,7 +1073,7 @@ export default function Facturacion() {
       </div>
 
       <div className="dashboard-grid">
-        <section className="card">
+        <section className="card" data-tour="facturacion-formulario">
           <h2>Nueva factura</h2>
           <p className="muted">
             Carga los datos fiscales y emiti el comprobante mediante Afip SDK.
@@ -1129,7 +1130,7 @@ export default function Facturacion() {
               />
             </label>
 
-            <label>
+            <label data-tour="facturacion-asociado">
               Tipo comprobante
               <select
                 name="tipo_comprobante"
@@ -1394,7 +1395,7 @@ export default function Facturacion() {
           {message && <div className="notice">{message}</div>}
         </section>
 
-        <section className="card">
+        <section className="card" data-tour="facturacion-vista-previa">
           <h2>Vista previa</h2>
 
           <div className="invoice-preview">
@@ -1550,7 +1551,7 @@ export default function Facturacion() {
             )}
           </div>
 
-          <div className="invoice-actions">
+          <div className="invoice-actions" data-tour="facturacion-acciones-pdf">
             {hasInvoicePdf(lastIssuedInvoice) ? (
               <span>PDF disponible</span>
             ) : (
@@ -1590,9 +1591,14 @@ export default function Facturacion() {
         </section>
       </div>
 
-      <section className="card" style={{ marginTop: 18 }}>
+      <section
+        className="card"
+        style={{ marginTop: 18 }}
+        data-tour="facturacion-historial"
+      >
         <div
           className="page-header"
+          data-tour="facturacion-busqueda"
           style={{
             marginBottom: 12,
             padding: 0,

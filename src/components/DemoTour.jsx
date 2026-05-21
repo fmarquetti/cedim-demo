@@ -21,6 +21,11 @@ const pageIntro = {
     content:
       "En esta pantalla se cargan y consultan los gastos o salidas de dinero. Sirve para registrar pagos a proveedores, servicios, compras, sueldos u otros egresos administrativos.",
   },
+  facturacion: {
+    title: "Facturación",
+    content:
+      "Esta pantalla permite emitir comprobantes fiscales ARCA/AFIP y comprobantes internos desde CEDIM. Desde acá se cargan los datos del cliente, se genera el comprobante, se consulta su PDF y se revisa el historial de facturas emitidas.",
+  },
   cuentas: {
     title: "Cuentas corrientes",
     content:
@@ -370,6 +375,65 @@ const tourStepsByPage = {
       title: "Acciones de egresos",
       content:
         "Desde esta columna se pueden realizar operaciones sobre cada egreso, como editar, marcar como pagado o eliminar.",
+    },
+  ],
+
+  facturacion: [
+    {
+      target: '[data-tour="facturacion-header"]',
+      title: "Pantalla de facturación",
+      content:
+        "Desde acá se emiten facturas, notas de crédito, notas de débito y comprobantes internos. También podés consultar PDFs, enviar comprobantes por mail y revisar actividad.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="facturacion-actualizar"]',
+      title: "Actualizar información",
+      content:
+        "Este botón vuelve a cargar los comprobantes guardados para ver el estado más reciente de facturas, PDFs y acciones registradas.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="facturacion-formulario"]',
+      title: "Nuevo comprobante",
+      content:
+        "En este formulario se cargan los datos del cliente, el tipo de comprobante, importes y detalle antes de emitir con ARCA o generar un comprobante interno.",
+      placement: "right",
+    },
+    {
+      target: '[data-tour="facturacion-asociado"]',
+      title: "Comprobante asociado",
+      content:
+        "Cuando emitís una nota de crédito o débito, este bloque permite buscar y asociar la factura original compatible.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="facturacion-vista-previa"]',
+      title: "Vista previa",
+      content:
+        "La vista previa muestra cómo quedará el comprobante: emisor, cliente, tipo, importes, asociación y datos fiscales cuando correspondan.",
+      placement: "left",
+    },
+    {
+      target: '[data-tour="facturacion-acciones-pdf"]',
+      title: "Acciones del comprobante",
+      content:
+        "Después de emitir, desde acá se puede descargar, abrir o enviar por mail el PDF generado.",
+      placement: "top",
+    },
+    {
+      target: '[data-tour="facturacion-historial"]',
+      title: "Historial de comprobantes",
+      content:
+        "Este listado muestra los comprobantes emitidos, su estado, CAE si corresponde, última acción y accesos rápidos para PDF, mail, notas y actividad.",
+      placement: "top",
+    },
+    {
+      target: '[data-tour="facturacion-busqueda"]',
+      title: "Búsqueda en historial",
+      content:
+        "Permite encontrar comprobantes por cliente, documento, tipo, número, CAE, estado o acción registrada.",
+      placement: "bottom",
     },
   ],
 
