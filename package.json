@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "arca": "npm start --prefix server",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"

@@ -84,17 +84,14 @@ function payloadNumber(value: unknown, fallback: number) {
 }
 
 function getTodayAfipDate() {
-  const parts = new Intl.DateTimeFormat("es-AR", {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Argentina/Buenos_Aires",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).formatToParts(new Date());
+  });
 
-  const day = parts.find((p) => p.type === "day")?.value || "01";
-  const month = parts.find((p) => p.type === "month")?.value || "01";
-  const year = parts.find((p) => p.type === "year")?.value || "2026";
-
+  const [year, month, day] = formatter.format(new Date()).split("-");
   return Number(`${year}${month}${day}`);
 }
 
@@ -257,6 +254,8 @@ function sanitizeAfipRequestParams(params: Record<string, unknown>) {
 }
 
 function buildVoucherDetail(payload: InvoicePayload, nextNumber: number) {
+  const puntoVenta = Number(payloadNumber(payload.punto_venta, 1));
+  const tipoComprobante = Number(payloadNumber(payload.tipo_comprobante, 6));
   const total = toMoney(payload.importe_total);
   const iva = toMoney(payload.importe_iva || 0);
 
@@ -280,6 +279,7 @@ function buildVoucherDetail(payload: InvoicePayload, nextNumber: number) {
     DocNro,
     CbteDesde: Number(nextNumber),
     CbteHasta: Number(nextNumber),
+    CbteFch: Number(getTodayAfipDate()),
     ImpTotal: total,
     ImpTotConc: 0,
     ImpNeto: neto,
@@ -527,6 +527,47 @@ async function getLastVoucher(params: {
   };
 }
 
+async function consultVoucher(params: {
+  accessToken: string;
+  environment: string;
+  token: string;
+  sign: string;
+  taxId: string;
+  puntoVenta: number;
+  tipoComprobante: number;
+  nextNumber: number;
+}) {
+  const requestParams = {
+    Auth: {
+      Token: params.token,
+      Sign: params.sign,
+      Cuit: String(params.taxId),
+    },
+    FeCompConsReq: {
+      CbteTipo: params.tipoComprobante,
+      CbteNro: params.nextNumber,
+      PtoVta: params.puntoVenta,
+    },
+  };
+
+  const response = await afipSdkRequest({
+    accessToken: params.accessToken,
+    environment: params.environment,
+    method: "FECompConsultar",
+    params: requestParams,
+  });
+
+  return {
+    response,
+    sent: {
+      puntoVenta: params.puntoVenta,
+      tipoComprobante: params.tipoComprobante,
+      nextNumber: params.nextNumber,
+      requestParams: sanitizeAfipRequestParams(requestParams),
+    },
+  };
+}
+
 async function createCAE(params: {
   accessToken: string;
   environment: string;
@@ -537,7 +578,9 @@ async function createCAE(params: {
   nextNumber: number;
 }) {
   const puntoVenta = Number(payloadNumber(params.payload.punto_venta, 1));
-  const tipoComprobante = Number(payloadNumber(params.payload.tipo_comprobante, 6));
+  const tipoComprobante = Number(
+    payloadNumber(params.payload.tipo_comprobante, 6),
+  );
   const requestParams = buildFECaeRequest(
     params,
     params.payload,
@@ -569,6 +612,7 @@ async function createCAE(params: {
       tipoComprobante,
       nextNumber: params.nextNumber,
       detail,
+      providerMethod: "FECAESolicitar",
       requestParams: sanitizeAfipRequestParams(requestParams),
     },
   };
@@ -629,18 +673,16 @@ serve(async (req) => {
       puntoVenta,
       tipoComprobante,
       payload,
-      cbteFch: getTodayAfipDate(),
+      cbteFch: Number(getTodayAfipDate()),
     };
 
     if (payload.debugOnly) {
       const auth = await afipSdkAuth();
-
       const lastVoucherResult = await getLastVoucher({
         ...auth,
         puntoVenta,
         tipoComprobante,
       });
-
       const lastVoucher = lastVoucherResult.lastVoucher;
       const nextNumber = lastVoucher + 1;
       const requestParams = buildFECaeRequest(auth, payload, nextNumber);
@@ -656,9 +698,9 @@ serve(async (req) => {
           ...debugData,
           environment: auth.environment,
           taxId: auth.taxId,
+          providerMethod: "FECAESolicitar",
           lastVoucher,
           nextNumber,
-          cbteFch: getTodayAfipDate(),
           lastVoucherRaw: lastVoucherResult.raw,
           sentToAfip: {
             puntoVenta,
@@ -711,7 +753,7 @@ serve(async (req) => {
     let lastVoucherResult: LastVoucherResult | null = null;
     let lastVoucher = 0;
     let nextNumber = 0;
-    let caeResponse: Record<string, unknown> | null = null;
+    let afipResponse: Record<string, unknown> | null = null;
 
     const maxAttempts = 5;
 
@@ -727,18 +769,9 @@ serve(async (req) => {
 
       if (!Number.isFinite(nextNumber) || nextNumber <= 0) {
         throw new Error(
-          `Número de comprobante inválido. lastVoucher=${lastVoucher}, nextNumber=${nextNumber}`,
+          `NÃºmero de comprobante invÃ¡lido. lastVoucher=${lastVoucher}, nextNumber=${nextNumber}`,
         );
       }
-
-      debugData = {
-        ...debugData,
-        attempt,
-        lastVoucher,
-        nextNumber,
-        cbteFch: getTodayAfipDate(),
-        lastVoucherRaw: lastVoucherResult.raw,
-      };
 
       console.log(
         "NEXT VOUCHER ATTEMPT",
@@ -748,7 +781,7 @@ serve(async (req) => {
           tipoComprobante,
           lastVoucher,
           nextNumber,
-          cbteFch: getTodayAfipDate(),
+          cbteFch: Number(getTodayAfipDate()),
           lastVoucherRaw: lastVoucherResult.raw,
         }),
       );
@@ -759,14 +792,20 @@ serve(async (req) => {
         nextNumber,
       });
 
-      caeResponse = caeResult.response as Record<string, unknown>;
-      parsed = extractCAE(caeResponse);
+      afipResponse = caeResult.response as Record<string, unknown>;
+      parsed = extractCAE(afipResponse);
 
       debugData = {
         ...debugData,
+        attempt,
+        providerMethod: "FECAESolicitar",
+        lastVoucher,
+        nextNumber,
+        cbteFch: Number(getTodayAfipDate()),
+        lastVoucherRaw: lastVoucherResult.raw,
         sentToAfip: caeResult.sent,
         parsed,
-        afipResponse: caeResponse,
+        afipResponse,
       };
 
       console.log("CAE PARSED", JSON.stringify(parsed));
@@ -775,7 +814,61 @@ serve(async (req) => {
         break;
       }
 
-      const hasNumberError = responseHasAfipErrorCode(caeResponse, 10016);
+      const hasNumberError = responseHasAfipErrorCode(afipResponse, 10016);
+
+      if (hasNumberError) {
+        try {
+          const consulted = await consultVoucher({
+            ...auth,
+            puntoVenta,
+            tipoComprobante,
+            nextNumber,
+          });
+
+          debugData = {
+            ...debugData,
+            voucherConsultedAfter10016: consulted,
+          };
+
+          console.log(
+            "FECompConsultar AFTER 10016",
+            JSON.stringify({
+              attempt,
+              puntoVenta,
+              tipoComprobante,
+              nextNumber,
+              response: consulted.response,
+            }),
+          );
+        } catch (consultError) {
+          const message = consultError instanceof Error
+            ? consultError.message
+            : String(consultError);
+
+          debugData = {
+            ...debugData,
+            voucherConsultedAfter10016: {
+              error: message,
+              sent: {
+                puntoVenta,
+                tipoComprobante,
+                nextNumber,
+              },
+            },
+          };
+
+          console.log(
+            "FECompConsultar AFTER 10016 ERROR",
+            JSON.stringify({
+              attempt,
+              puntoVenta,
+              tipoComprobante,
+              nextNumber,
+              error: message,
+            }),
+          );
+        }
+      }
 
       if (!hasNumberError || attempt === maxAttempts) {
         break;
@@ -796,14 +889,15 @@ serve(async (req) => {
 
     if (!parsed || !parsed.cae) {
       const afipErrorMessage =
-        JSON.stringify(parsed?.afip_errors || parsed?.raw || caeResponse) || "";
+        JSON.stringify(parsed?.afip_errors || parsed?.raw || afipResponse) ||
+        "";
 
       await supabase
         .from("arca_invoices")
         .update({
           numero_comprobante: nextNumber,
           estado: "error",
-          proveedor_response: parsed?.raw || caeResponse,
+          proveedor_response: parsed?.raw || afipResponse,
           error_message: afipErrorMessage.slice(0, 2000),
         })
         .eq("id", invoiceId);
@@ -815,7 +909,7 @@ serve(async (req) => {
             parsed?.resultado || "-"
           }. Detalle: ${afipErrorMessage}`,
           invoice_id: invoiceId,
-          afip_response: parsed?.raw || caeResponse,
+          afip_response: parsed?.raw || afipResponse,
           afip_errors: parsed?.afip_errors || null,
           debug: debugData,
         },

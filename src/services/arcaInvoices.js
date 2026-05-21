@@ -1,37 +1,45 @@
 import { supabase } from "../lib/supabaseClient";
 
+const arcaApiUrl =
+  import.meta.env.VITE_ARCA_API_URL || "http://localhost:3001";
+
 export async function emitArcaInvoice(payload) {
-  const { data, error } = await supabase.functions.invoke("arca-emit-invoice", {
-    body: payload,
-  });
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  if (error) {
-    console.error("Edge Function error completo:", error);
-
-    let detail = error.message || "La Edge Function devolvió un error.";
-
-    try {
-      const context = error.context;
-
-      if (context && typeof context.json === "function") {
-        const json = await context.json();
-        console.error("Respuesta JSON Edge Function:", json);
-        detail = json?.error || JSON.stringify(json);
-      } else if (context && typeof context.text === "function") {
-        const text = await context.text();
-        console.error("Respuesta texto Edge Function:", text);
-        detail = text || detail;
-      }
-    } catch (readError) {
-      console.error("No se pudo leer el cuerpo del error:", readError);
-    }
-
-    throw new Error(detail);
+  if (!session?.access_token) {
+    throw new Error("Usuario no autenticado.");
   }
 
-  if (!data?.ok) {
-    console.error("Respuesta no OK:", data);
-    throw new Error(data?.error || "ARCA rechazó la factura.");
+  const response = await fetch(`${arcaApiUrl}/api/arca/emitir`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok || !data?.ok) {
+    console.error("Respuesta no OK del servidor ARCA:", data);
+    const detail =
+      data?.details?.message ||
+      data?.details?.error_description ||
+      data?.debug?.message ||
+      data?.debug?.error?.message ||
+      "";
+    const message = [data?.error || "ARCA rechazó la factura.", detail]
+      .filter(Boolean)
+      .join(" Detalle: ");
+
+    throw new Error(message);
+  }
+
+  if (!data.invoice) {
+    throw new Error("El servidor ARCA no devolvió el registro de factura.");
   }
 
   return data.invoice;
