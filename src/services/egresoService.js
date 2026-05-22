@@ -3,7 +3,18 @@ import {
   registrarAsientoEgresoCargado,
   registrarAsientoEgresoPagado,
 } from "./contabilidadAutomationService";
+import {
+  generarCcDesdeEgreso,
+  generarCcDesdeOrdenPago,
+} from "./cuentaCorrienteAutomaticaService";
 import { validarPeriodoAbierto } from "./contabilidadService";
+import {
+  calcularTotalesFiscales,
+  extraerFiscalDesdeDatosFiscales,
+  guardarConceptosFiscalesComprobante,
+  guardarTributosComprobante,
+} from "./fiscalService";
+import { registrarAuditoria, registrarCambioSeguro } from "./auditoriaService";
 
 function formatFecha(fecha) {
   if (!fecha) return "";
@@ -96,6 +107,12 @@ function mapDistribuciones(distribuciones = []) {
 
 function mapEgreso(row) {
   const distribuciones = mapDistribuciones(row.egreso_distribuciones || []);
+  const conceptosFiscales = row.comprobante_conceptos_fiscales || [];
+  const tributos = row.comprobante_tributos || [];
+  const totalesFiscales =
+    conceptosFiscales.length || tributos.length
+      ? calcularTotalesFiscales({ conceptos: conceptosFiscales, tributos })
+      : null;
 
   return {
     id: row.id,
@@ -113,9 +130,50 @@ function mapEgreso(row) {
     archivo: row.archivo,
     comprobante: row.comprobante,
     datosFiscales: row.datos_fiscales,
+    conceptosFiscales,
+    tributos,
+    totalesFiscales,
     distribuciones,
     tieneDistribucion: distribuciones.length > 0,
   };
+}
+
+function buildFiscalDesdeDetalle(detalleFiscal = {}) {
+  const neto = Number(detalleFiscal.netoGravado || 0);
+  const iva = Number(detalleFiscal.iva || 0);
+  const exento = Number(detalleFiscal.exento || 0);
+  const noGravado = Number(detalleFiscal.noGravado || 0);
+  const conceptos = [];
+
+  if (neto + iva + exento + noGravado > 0) {
+    conceptos.push({
+      descripcion: "Detalle fiscal egreso",
+      tipo: neto > 0 && (exento > 0 || noGravado > 0) ? "mixto" : neto > 0 ? "gravado" : exento > 0 ? "exento" : "no_gravado",
+      neto,
+      iva,
+      exento,
+      noGravado,
+      total: neto + iva + exento + noGravado,
+    });
+  }
+
+  const tributos = [
+    { codigo: "PERC_IVA", descripcion: "Percepcion IVA", categoria: "percepcion", importe: detalleFiscal.percepcionIva },
+    { codigo: "PERC_IIBB", descripcion: "Percepcion Ingresos Brutos", categoria: "percepcion", importe: detalleFiscal.percepcionIibb },
+    { codigo: "RET_GANANCIAS", descripcion: "Retencion Ganancias", categoria: "retencion", importe: detalleFiscal.retencionGanancias },
+    { codigo: "RET_IVA", descripcion: "Retencion IVA", categoria: "retencion", importe: detalleFiscal.retencionIva },
+    { codigo: "RET_IIBB", descripcion: "Retencion Ingresos Brutos", categoria: "retencion", importe: detalleFiscal.retencionIibb },
+    { codigo: "OTRO_TRIBUTO", descripcion: "Otros tributos", categoria: "otro", importe: detalleFiscal.otrosTributos },
+  ].filter((item) => Number(item.importe || 0) > 0);
+
+  return { conceptos, tributos };
+}
+
+function buildFiscalPayload(form) {
+  const desdeDetalle = buildFiscalDesdeDetalle(form.detalleFiscal || {});
+  if (desdeDetalle.conceptos.length || desdeDetalle.tributos.length) return desdeDetalle;
+  if (!form.datosFiscales) return { conceptos: [], tributos: [] };
+  return extraerFiscalDesdeDatosFiscales(form.datosFiscales, form.importe);
 }
 
 function buildDistribuciones(form, egresoId) {
@@ -254,7 +312,9 @@ export async function createEgreso(form) {
       estado: form.estado || "Pendiente",
       archivo: form.archivo || null,
       comprobante: form.comprobante || null,
-      datos_fiscales: form.datosFiscales || null,
+      datos_fiscales: form.detalleFiscal
+        ? { ...(form.datosFiscales || {}), detalleFiscal: form.detalleFiscal }
+        : form.datosFiscales || null,
       factura_cuit: factura.factura_cuit,
       factura_tipo: factura.factura_tipo,
       factura_punto_venta: factura.factura_punto_venta,
@@ -284,27 +344,94 @@ export async function createEgreso(form) {
   }
 
   const egreso = mapEgreso({ ...data, egreso_distribuciones: [] });
+  const fiscalPayload = buildFiscalPayload(form);
+
+  if (fiscalPayload.conceptos.length || fiscalPayload.tributos.length) {
+    egreso.conceptosFiscales = await guardarConceptosFiscalesComprobante({
+      origen: "egreso",
+      origenId: egreso.id,
+      conceptos: fiscalPayload.conceptos,
+    });
+    egreso.tributos = await guardarTributosComprobante({
+      origen: "egreso",
+      origenId: egreso.id,
+      tributos: fiscalPayload.tributos,
+    });
+    egreso.totalesFiscales = calcularTotalesFiscales({
+      conceptos: egreso.conceptosFiscales,
+      tributos: egreso.tributos,
+    });
+  }
 
   await registrarAsientoEgresoCargado(egreso);
+
+  try {
+    await generarCcDesdeEgreso(egreso);
+  } catch (ccError) {
+    console.error("Egreso creado, pero no se pudo generar cuenta corriente:", ccError);
+  }
 
   if (egreso.estado === "Pagado") {
     await validarPeriodoAbierto(egreso.fechaDb || form.fecha);
     await registrarAsientoEgresoPagado(egreso);
+    try {
+      await generarCcDesdeOrdenPago({
+        id: egreso.id,
+        fecha: egreso.fechaDb || form.fecha,
+        numero: 0,
+        numeroFormateado: egreso.comprobante || `Egreso ${egreso.id}`,
+        proveedor: egreso.proveedor,
+        proveedorCuit: egreso.datosFiscales?.cuit,
+        sociedad: egreso.sociedad,
+        sedeId: egreso.sedeId,
+        importeTotal: egreso.importe,
+        medioPago: "Pago directo",
+      });
+    } catch (ccError) {
+      console.error("Egreso pagado, pero no se pudo generar pago en cuenta corriente:", ccError);
+    }
   }
+
+  await registrarAuditoria({
+    modulo: "Egresos",
+    accion: "crear",
+    entidad: "egreso",
+    entidadId: egreso.id,
+    descripcion: `Se creó el egreso ${egreso.comprobante || egreso.concepto || egreso.id}.`,
+    datosDespues: egreso,
+  });
 
   return egreso;
 }
 
 export async function deleteEgreso(id) {
+  const { data: antes, error: antesError } = await supabase
+    .from("egresos")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (antesError) throw antesError;
+
   const { error } = await supabase.from("egresos").delete().eq("id", id);
 
   if (error) throw error;
+
+  await registrarAuditoria({
+    modulo: "Egresos",
+    accion: "eliminar",
+    entidad: "egreso",
+    entidadId: id,
+    descripcion: `Se eliminó el egreso ${antes?.comprobante || antes?.concepto || id}.`,
+    severidad: "warning",
+    datosAntes: antes,
+  });
 }
 
 export async function marcarEgresoPagado(id) {
   const { data: egresoActual, error: actualError } = await supabase
     .from("egresos")
-    .select("fecha")
+    .select("*")
     .eq("id", id)
     .single();
 
@@ -339,4 +466,14 @@ export async function marcarEgresoPagado(id) {
   await registrarAsientoEgresoPagado(
     mapEgreso({ ...egresoData, egreso_distribuciones: [] })
   );
+
+  await registrarCambioSeguro({
+    modulo: "Egresos",
+    accion: "marcar_pagado",
+    entidad: "egreso",
+    entidadId: id,
+    descripcion: `Se marcó como pagado el egreso ${egresoData.comprobante || egresoData.concepto || id}.`,
+    antes: egresoActual,
+    despues: egresoData,
+  });
 }

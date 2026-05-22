@@ -33,6 +33,7 @@ import { toast } from "../components/ToastProvider";
 
 import ConceptoSelector from "../components/ConceptoSelector";
 import { getConceptoItems } from "../services/conceptoItemService";
+import { extraerFiscalDesdeDatosFiscales } from "../services/fiscalService";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -56,6 +57,18 @@ const emptyForm = {
   categoria: "Insumos",
   estado: "Pendiente",
   distribuciones: [],
+  detalleFiscal: {
+    netoGravado: "",
+    iva: "",
+    exento: "",
+    noGravado: "",
+    percepcionIva: "",
+    percepcionIibb: "",
+    retencionGanancias: "",
+    retencionIva: "",
+    retencionIibb: "",
+    otrosTributos: "",
+  },
 };
 
 const getFechaReal = (item) => item?.fechaDb || item?.fecha;
@@ -107,6 +120,28 @@ function formatFechaInput(fecha) {
 
   const [dd, mm, yyyy] = fecha.split("/");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function detalleFiscalDesdeDatos(datos, importe) {
+  const fiscal = extraerFiscalDesdeDatosFiscales(datos, importe);
+  const concepto = fiscal.conceptos?.[0] || {};
+  const suma = (categoria, codigo) =>
+    (fiscal.tributos || [])
+      .filter((item) => item.categoria === categoria && (!codigo || item.codigo === codigo))
+      .reduce((acc, item) => acc + Number(item.importe || 0), 0);
+
+  return {
+    netoGravado: concepto.neto || "",
+    iva: concepto.iva || "",
+    exento: concepto.exento || "",
+    noGravado: concepto.noGravado || "",
+    percepcionIva: suma("percepcion", "PERC_IVA") || "",
+    percepcionIibb: suma("percepcion", "PERC_IIBB") || "",
+    retencionGanancias: suma("retencion", "RET_GANANCIAS") || "",
+    retencionIva: suma("retencion", "RET_IVA") || "",
+    retencionIibb: suma("retencion", "RET_IIBB") || "",
+    otrosTributos: suma("otro") || "",
+  };
 }
 
 export default function Egresos({ selectedSede, sedeId }) {
@@ -809,6 +844,13 @@ export default function Egresos({ selectedSede, sedeId }) {
       const tipoComprobante = tipoComprobanteLabel(datos.tipoCmp);
       const puntoVenta = String(datos.ptoVta || "").padStart(4, "0");
       const numeroComprobante = String(datos.nroCmp || "").padStart(8, "0");
+      const datosFiscales = {
+        ...datos,
+        qrUrl: qrText,
+        tipoComprobante,
+        puntoVenta,
+        numeroComprobante,
+      };
 
       const sedeDefault =
         sedeBloqueada
@@ -827,13 +869,8 @@ export default function Egresos({ selectedSede, sedeId }) {
         estado: "Pendiente",
         archivo: file.name,
         comprobante: `${tipoComprobante} ${puntoVenta}-${numeroComprobante}`,
-        datosFiscales: {
-          ...datos,
-          qrUrl: qrText,
-          tipoComprobante,
-          puntoVenta,
-          numeroComprobante,
-        },
+        datosFiscales,
+        detalleFiscal: detalleFiscalDesdeDatos(datosFiscales, Number(datos.importe || 0)),
         distribuciones: [],
       });
       setModal("revisarFactura");
@@ -898,6 +935,49 @@ export default function Egresos({ selectedSede, sedeId }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  function renderDetalleFiscal(value, onChange) {
+    const detalle = value || {};
+    const update = (field, fieldValue) => onChange({ ...detalle, [field]: fieldValue });
+    const fields = [
+      ["netoGravado", "Neto gravado"],
+      ["iva", "IVA"],
+      ["exento", "Exento"],
+      ["noGravado", "No gravado"],
+      ["percepcionIva", "Percepcion IVA"],
+      ["percepcionIibb", "Percepcion IIBB"],
+      ["retencionGanancias", "Retencion Ganancias"],
+      ["retencionIva", "Retencion IVA"],
+      ["retencionIibb", "Retencion IIBB"],
+      ["otrosTributos", "Otros tributos"],
+    ];
+
+    return (
+      <div className="full split-box">
+        <div className="split-header">
+          <div>
+            <strong>Detalle fiscal avanzado</strong>
+            <small>Opcional. Permite discriminar IVA, conceptos no gravados y tributos.</small>
+          </div>
+        </div>
+
+        <div className="form-grid">
+          {fields.map(([field, label]) => (
+            <label key={field}>
+              {label}
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={detalle[field] || ""}
+                onChange={(event) => update(field, event.target.value)}
+              />
+            </label>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   function verAfip(qrUrl) {
@@ -1502,6 +1582,10 @@ export default function Egresos({ selectedSede, sedeId }) {
               />
             </label>
 
+            {renderDetalleFiscal(form.detalleFiscal, (detalleFiscal) =>
+              setForm({ ...form, detalleFiscal })
+            )}
+
             <div className="full split-box">
               <div className="split-header">
                 <div>
@@ -1695,6 +1779,10 @@ export default function Egresos({ selectedSede, sedeId }) {
                 }
               />
             </label>
+
+            {renderDetalleFiscal(egresoPendiente.detalleFiscal, (detalleFiscal) =>
+              setEgresoPendiente({ ...egresoPendiente, detalleFiscal })
+            )}
 
             <div className="full split-box">
               <div className="split-header">

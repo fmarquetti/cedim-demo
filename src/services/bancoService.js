@@ -5,6 +5,7 @@ import {
   registrarAsientoConciliacionIngreso,
 } from "./contabilidadAutomationService";
 import { validarPeriodoAbierto } from "./contabilidadService";
+import { registrarAuditoria, registrarCambioSeguro } from "./auditoriaService";
 
 function formatFecha(fecha) {
   if (!fecha) return "";
@@ -176,11 +177,20 @@ function buildMovimientoPayload(form) {
 }
 
 export async function createMovimientoBancario(form) {
+  await validarPeriodoAbierto(form.fecha);
   const payload = buildMovimientoPayload(form);
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("movimientos_bancarios")
-    .insert(payload);
+    .insert(payload)
+    .select(`
+      *,
+      sedes (
+        id,
+        nombre
+      )
+    `)
+    .single();
 
   if (error) {
     if (error.code === "23505") {
@@ -190,11 +200,25 @@ export async function createMovimientoBancario(form) {
     throw error;
   }
 
+  const movimiento = mapMovimiento(data);
+  await registrarAuditoria({
+    modulo: "Bancos",
+    accion: "crear_movimiento",
+    entidad: "movimiento_bancario",
+    entidadId: movimiento.id,
+    descripcion: `Se creó el movimiento bancario ${movimiento.descripcion || movimiento.id}.`,
+    datosDespues: movimiento,
+  });
+
   return true;
 }
 
 export async function createMovimientosBancariosBulk(movimientos = []) {
   if (!Array.isArray(movimientos) || movimientos.length === 0) return true;
+
+  for (const movimiento of movimientos) {
+    await validarPeriodoAbierto(movimiento.fecha);
+  }
 
   const payload = movimientos.map(buildMovimientoPayload);
   const chunkSize = 50;
@@ -219,12 +243,23 @@ export async function createMovimientosBancariosBulk(movimientos = []) {
 }
 
 export async function deleteMovimientoBancario(id) {
+  const antes = await getMovimientoById(id);
   const { error } = await supabase
     .from("movimientos_bancarios")
     .delete()
     .eq("id", id);
 
   if (error) throw error;
+
+  await registrarAuditoria({
+    modulo: "Bancos",
+    accion: "eliminar_movimiento",
+    entidad: "movimiento_bancario",
+    entidadId: id,
+    descripcion: `Se eliminó el movimiento bancario ${antes.descripcion || id}.`,
+    severidad: "warning",
+    datosAntes: antes,
+  });
 }
 
 /* =========================================================
@@ -263,6 +298,16 @@ export async function conciliarConIngreso(movimientoId, ingresoId) {
   ]);
 
   await registrarAsientoConciliacionIngreso(movimiento, ingreso);
+
+  await registrarCambioSeguro({
+    modulo: "Bancos",
+    accion: "conciliar_ingreso",
+    entidad: "movimiento_bancario",
+    entidadId: movimientoId,
+    descripcion: `Se concilió el movimiento bancario ${movimiento.descripcion || movimientoId} con un ingreso.`,
+    antes: movimientoActual,
+    despues: { movimiento, ingreso },
+  });
 }
 
 export async function conciliarConEgreso(movimientoId, egresoId) {
@@ -297,6 +342,16 @@ export async function conciliarConEgreso(movimientoId, egresoId) {
   ]);
 
   await registrarAsientoConciliacionEgreso(movimiento, egreso);
+
+  await registrarCambioSeguro({
+    modulo: "Bancos",
+    accion: "conciliar_egreso",
+    entidad: "movimiento_bancario",
+    entidadId: movimientoId,
+    descripcion: `Se concilió el movimiento bancario ${movimiento.descripcion || movimientoId} con un egreso.`,
+    antes: movimientoActual,
+    despues: { movimiento, egreso },
+  });
 }
 
 /* =========================================================
@@ -304,6 +359,9 @@ export async function conciliarConEgreso(movimientoId, egresoId) {
    ========================================================= */
 
 export async function desconciliarMovimiento(movimientoId) {
+  const movimientoActual = await getMovimientoById(movimientoId);
+  await validarPeriodoAbierto(movimientoActual.fechaDb || movimientoActual.fecha);
+
   const { error } = await supabase
     .from("movimientos_bancarios")
     .update({
@@ -315,9 +373,27 @@ export async function desconciliarMovimiento(movimientoId) {
     .eq("id", movimientoId);
 
   if (error) throw error;
+
+  const movimiento = await getMovimientoById(movimientoId);
+  await registrarAuditoria({
+    modulo: "Bancos",
+    accion: "desconciliar",
+    entidad: "movimiento_bancario",
+    entidadId: movimientoId,
+    descripcion: `Se desconcilió el movimiento bancario ${movimientoActual.descripcion || movimientoId}.`,
+    severidad: "warning",
+    datosAntes: movimientoActual,
+    datosDespues: movimiento,
+  });
 }
 
 export async function conciliarMovimientosPendientes() {
+  const movimientos = await getMovimientosBancarios();
+
+  for (const movimiento of movimientos.filter((item) => item.estado === "Pendiente")) {
+    await validarPeriodoAbierto(movimiento.fechaDb || movimiento.fecha);
+  }
+
   const { error } = await supabase
     .from("movimientos_bancarios")
     .update({

@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { registrarAuditoria, registrarCambioSeguro } from "./auditoriaService";
 
 const CUENTAS_POR_DEFECTO = {
   caja: "1.1.01",
@@ -7,9 +8,12 @@ const CUENTAS_POR_DEFECTO = {
   proveedores: "2.1.01",
   ivaDebito: "2.1.02",
   ivaCredito: "2.1.03",
+  retencionesSufridas: "1.1.05",
+  percepcionesSufridas: "1.1.06",
   ventasServicios: "4.1.01",
   compras: "5.1.01",
   gastosAdministrativos: "5.1.02",
+  impuestosNoRecuperables: "5.1.07",
   otrosIngresos: "4.1.02",
   otrosEgresos: "5.1.06",
 };
@@ -110,6 +114,22 @@ function mapPeriodo(row) {
     estado: row.estado,
     cerradoPor: row.cerrado_por,
     cerradoAt: row.cerrado_at,
+    observaciones: row.observaciones,
+  };
+}
+
+function mapEjercicio(row) {
+  return {
+    id: row.id,
+    anio: row.anio,
+    fechaDesde: row.fecha_desde,
+    fechaHasta: row.fecha_hasta,
+    estado: row.estado,
+    resultadoEjercicio: row.resultado_ejercicio === null ? null : toMoney(row.resultado_ejercicio),
+    asientoCierreId: row.asiento_cierre_id,
+    asientoAperturaId: row.asiento_apertura_id,
+    cerradoAt: row.cerrado_at,
+    reabiertoAt: row.reabierto_at,
     observaciones: row.observaciones,
   };
 }
@@ -505,10 +525,19 @@ export async function confirmarSaldosIniciales({ fechaApertura, sedeId } = {}) {
     throw updateError;
   }
 
-  return {
+  const resultado = {
     asiento,
     saldos: await getSaldosIniciales({ fechaApertura: fecha, sedeId }),
   };
+  await registrarAuditoria({
+    modulo: "Saldos Iniciales",
+    accion: "confirmar_saldos_iniciales",
+    entidad: "contabilidad_saldo_inicial",
+    descripcion: `Se confirmaron saldos iniciales con fecha ${fecha}.`,
+    datosAntes: borradores,
+    datosDespues: resultado,
+  });
+  return resultado;
 }
 
 export async function anularSaldosIniciales({ fechaApertura, sedeId, motivo } = {}) {
@@ -542,7 +571,18 @@ export async function anularSaldosIniciales({ fechaApertura, sedeId, motivo } = 
 
   if (error) throw error;
 
-  return getSaldosIniciales({ fechaApertura: fecha, sedeId });
+  const resultado = await getSaldosIniciales({ fechaApertura: fecha, sedeId });
+  await registrarAuditoria({
+    modulo: "Saldos Iniciales",
+    accion: "anular_saldos_iniciales",
+    entidad: "contabilidad_saldo_inicial",
+    descripcion: `Se anularon saldos iniciales con fecha ${fecha}.`,
+    severidad: "warning",
+    datosAntes: saldos,
+    datosDespues: resultado,
+    metadata: { motivo },
+  });
+  return resultado;
 }
 
 export async function getFechasAperturaDisponibles() {
@@ -568,7 +608,7 @@ function assertManualEditable(asiento) {
 
 function normalizeTipoAsiento(tipoAsiento) {
   const tipo = tipoAsiento || "manual";
-  const permitidos = ["manual", "ajuste", "apertura", "reclasificacion", "correccion"];
+  const permitidos = ["manual", "ajuste", "apertura", "cierre", "reclasificacion", "correccion"];
 
   if (!permitidos.includes(tipo)) {
     throw new Error("El tipo de asiento manual no es valido.");
@@ -631,7 +671,16 @@ export async function crearAsientoManual(payload) {
     throw error;
   }
 
-  return getAsientoContableById(asiento.id);
+  const creado = await getAsientoContableById(asiento.id);
+  await registrarAuditoria({
+    modulo: "Contabilidad",
+    accion: "crear_asiento_manual",
+    entidad: "contabilidad_asiento",
+    entidadId: creado.id,
+    descripcion: `Se creó el asiento manual ${creado.numero || creado.id}.`,
+    datosDespues: creado,
+  });
+  return creado;
 }
 
 export async function actualizarAsientoManual(id, payload) {
@@ -668,7 +717,17 @@ export async function actualizarAsientoManual(id, payload) {
   if (deleteError) throw deleteError;
 
   await insertarLineasAsiento(id, payload.lineas);
-  return getAsientoContableById(id);
+  const actualizado = await getAsientoContableById(id);
+  await registrarCambioSeguro({
+    modulo: "Contabilidad",
+    accion: "actualizar_asiento_manual",
+    entidad: "contabilidad_asiento",
+    entidadId: id,
+    descripcion: `Se actualizó el asiento manual ${actualizado.numero || id}.`,
+    antes: asiento,
+    despues: actualizado,
+  });
+  return actualizado;
 }
 
 export async function confirmarAsientoManual(id) {
@@ -698,7 +757,17 @@ export async function confirmarAsientoManual(id) {
 
   if (error) throw error;
 
-  return getAsientoContableById(id);
+  const confirmado = await getAsientoContableById(id);
+  await registrarCambioSeguro({
+    modulo: "Contabilidad",
+    accion: "confirmar_asiento",
+    entidad: "contabilidad_asiento",
+    entidadId: id,
+    descripcion: `Se confirmó el asiento ${confirmado.numero || id}.`,
+    antes: asiento,
+    despues: confirmado,
+  });
+  return confirmado;
 }
 
 export async function anularAsientoManual(id, motivo) {
@@ -728,7 +797,19 @@ export async function anularAsientoManual(id, motivo) {
 
   if (error) throw error;
 
-  return getAsientoContableById(id);
+  const anulado = await getAsientoContableById(id);
+  await registrarAuditoria({
+    modulo: "Contabilidad",
+    accion: "anular_asiento",
+    entidad: "contabilidad_asiento",
+    entidadId: id,
+    descripcion: `Se anuló el asiento ${anulado.numero || id}.`,
+    severidad: "warning",
+    datosAntes: asiento,
+    datosDespues: anulado,
+    metadata: { motivo },
+  });
+  return anulado;
 }
 
 export async function duplicarAsientoManual(id) {
@@ -754,6 +835,7 @@ export async function duplicarAsientoManual(id) {
 }
 
 export async function anularAsientoContable(id, motivo) {
+  const antes = await getAsientoContableById(id);
   const metadata = motivo
     ? {
         anulado_at: new Date().toISOString(),
@@ -775,7 +857,19 @@ export async function anularAsientoContable(id, motivo) {
 
   if (error) throw error;
 
-  return mapAsiento({ ...data, contabilidad_asiento_lineas: [] });
+  const anulado = mapAsiento({ ...data, contabilidad_asiento_lineas: [] });
+  await registrarAuditoria({
+    modulo: "Contabilidad",
+    accion: "anular_asiento",
+    entidad: "contabilidad_asiento",
+    entidadId: id,
+    descripcion: `Se anuló el asiento ${anulado.numero || id}.`,
+    severidad: "warning",
+    datosAntes: antes,
+    datosDespues: anulado,
+    metadata: { motivo },
+  });
+  return anulado;
 }
 
 export async function asientoContableExiste(origen, origenId) {
@@ -867,6 +961,14 @@ export async function crearPeriodosDelAnio(anio) {
 }
 
 export async function cerrarPeriodoContable(id, observaciones) {
+  const { data: antes, error: antesError } = await supabase
+    .from("contabilidad_periodos")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (antesError) throw antesError;
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -886,10 +988,29 @@ export async function cerrarPeriodoContable(id, observaciones) {
 
   if (error) throw error;
 
-  return mapPeriodo(data);
+  const periodo = mapPeriodo(data);
+  await registrarAuditoria({
+    modulo: "Períodos Contables",
+    accion: "cerrar_periodo",
+    entidad: "contabilidad_periodo",
+    entidadId: id,
+    descripcion: `Se cerró el período ${periodo.anio || data.anio}/${periodo.mes || data.mes}.`,
+    severidad: "warning",
+    datosAntes: antes,
+    datosDespues: periodo,
+  });
+  return periodo;
 }
 
 export async function reabrirPeriodoContable(id) {
+  const { data: antes, error: antesError } = await supabase
+    .from("contabilidad_periodos")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (antesError) throw antesError;
+
   const { data, error } = await supabase
     .from("contabilidad_periodos")
     .update({
@@ -904,7 +1025,18 @@ export async function reabrirPeriodoContable(id) {
 
   if (error) throw error;
 
-  return mapPeriodo(data);
+  const periodo = mapPeriodo(data);
+  await registrarAuditoria({
+    modulo: "Períodos Contables",
+    accion: "reabrir_periodo",
+    entidad: "contabilidad_periodo",
+    entidadId: id,
+    descripcion: `Se reabrió el período ${periodo.anio || data.anio}/${periodo.mes || data.mes}.`,
+    severidad: "warning",
+    datosAntes: antes,
+    datosDespues: periodo,
+  });
+  return periodo;
 }
 
 export async function getPeriodoPorFecha(fecha) {
@@ -922,6 +1054,8 @@ export async function getPeriodoPorFecha(fecha) {
 }
 
 export async function validarPeriodoAbierto(fecha) {
+  await validarEjercicioAbiertoPorFecha(fecha);
+
   const periodo = await getPeriodoPorFecha(fecha);
 
   if (!periodo) return true;
@@ -931,6 +1065,415 @@ export async function validarPeriodoAbierto(fecha) {
   }
 
   return true;
+}
+
+function validarAnioEjercicio(anio) {
+  const year = Number(anio);
+
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    throw new Error("El año del ejercicio no es válido.");
+  }
+
+  return year;
+}
+
+function getEjercicioFechas(anio) {
+  const year = validarAnioEjercicio(anio);
+
+  return {
+    year,
+    fechaDesde: `${year}-01-01`,
+    fechaHasta: `${year}-12-31`,
+  };
+}
+
+export async function getEjerciciosContables() {
+  const { data, error } = await supabase
+    .from("contabilidad_ejercicios")
+    .select("*")
+    .order("anio", { ascending: false });
+
+  if (error) throw error;
+
+  return (data || []).map(mapEjercicio);
+}
+
+export async function crearEjercicioContable({ anio, observaciones } = {}) {
+  const { year, fechaDesde, fechaHasta } = getEjercicioFechas(anio);
+
+  const { data, error } = await supabase
+    .from("contabilidad_ejercicios")
+    .insert({
+      anio: year,
+      fecha_desde: fechaDesde,
+      fecha_hasta: fechaHasta,
+      estado: "abierto",
+      observaciones: observaciones || null,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("El ejercicio ya existe.");
+    }
+
+    throw error;
+  }
+
+  return mapEjercicio(data);
+}
+
+export async function getEjercicioPorAnio(anio) {
+  const year = validarAnioEjercicio(anio);
+  const { data, error } = await supabase
+    .from("contabilidad_ejercicios")
+    .select("*")
+    .eq("anio", year)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data ? mapEjercicio(data) : null;
+}
+
+export async function validarEjercicioAbiertoPorFecha(fecha) {
+  const cleanFecha = dateOnly(fecha);
+  const { data, error } = await supabase
+    .from("contabilidad_ejercicios")
+    .select("*")
+    .lte("fecha_desde", cleanFecha)
+    .gte("fecha_hasta", cleanFecha)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return true;
+
+  if (data.estado === "cerrado") {
+    throw new Error("El ejercicio contable correspondiente a esta fecha está cerrado.");
+  }
+
+  return true;
+}
+
+export async function calcularResultadoEjercicio(anio, { sedeId } = {}) {
+  const { year, fechaDesde, fechaHasta } = getEjercicioFechas(anio);
+  const asientos = await getAsientosContables({
+    desde: fechaDesde,
+    hasta: fechaHasta,
+    sedeId,
+  });
+
+  let ingresos = 0;
+  let egresos = 0;
+
+  asientos
+    .filter((asiento) => asiento.estado !== "anulado")
+    .forEach((asiento) => {
+      asiento.lineas.forEach((linea) => {
+        if (linea.cuenta?.tipo === "INGRESO") {
+          ingresos = toMoney(ingresos + linea.haber - linea.debe);
+        }
+
+        if (linea.cuenta?.tipo === "EGRESO") {
+          egresos = toMoney(egresos + linea.debe - linea.haber);
+        }
+      });
+    });
+
+  const resultado = toMoney(ingresos - egresos);
+
+  return {
+    anio: year,
+    ingresos,
+    egresos,
+    resultado,
+    utilidad: resultado > 0,
+    perdida: resultado < 0,
+  };
+}
+
+export async function getBalanceAnualParaCierre(anio, { sedeId } = {}) {
+  const { fechaDesde, fechaHasta } = getEjercicioFechas(anio);
+  const balance = await generarBalanceSumasYSaldos({ desde: fechaDesde, hasta: fechaHasta, sedeId });
+  const patrimoniales = balance.filter((cuenta) => ["ACTIVO", "PASIVO", "PATRIMONIO_NETO"].includes(cuenta.tipo));
+  const resultado = balance.filter((cuenta) => ["INGRESO", "EGRESO"].includes(cuenta.tipo));
+  const sumarSaldo = (items, tipo) =>
+    toMoney(items.filter((item) => item.tipo === tipo).reduce((acc, item) => acc + item.saldoDeudor - item.saldoAcreedor, 0));
+  const totalIngresos = toMoney(resultado.filter((item) => item.tipo === "INGRESO").reduce((acc, item) => acc + item.saldoAcreedor - item.saldoDeudor, 0));
+  const totalEgresos = toMoney(resultado.filter((item) => item.tipo === "EGRESO").reduce((acc, item) => acc + item.saldoDeudor - item.saldoAcreedor, 0));
+
+  return {
+    patrimoniales,
+    resultado,
+    totalActivo: sumarSaldo(patrimoniales, "ACTIVO"),
+    totalPasivo: Math.abs(sumarSaldo(patrimoniales, "PASIVO")),
+    totalPatrimonio: Math.abs(sumarSaldo(patrimoniales, "PATRIMONIO_NETO")),
+    totalIngresos,
+    totalEgresos,
+    resultadoEjercicio: toMoney(totalIngresos - totalEgresos),
+  };
+}
+
+export async function validarEjercicioListoParaCierre(anio, { sedeId } = {}) {
+  const { year, fechaDesde, fechaHasta } = getEjercicioFechas(anio);
+  const errores = [];
+  const warnings = [];
+  const ejercicio = await getEjercicioPorAnio(year);
+
+  if (!ejercicio) errores.push("El ejercicio contable no existe.");
+  if (ejercicio?.estado === "cerrado") errores.push("El ejercicio ya está cerrado.");
+
+  const { data: periodos, error: periodosError } = await supabase
+    .from("contabilidad_periodos")
+    .select("*")
+    .eq("anio", year);
+
+  if (periodosError) throw periodosError;
+
+  if ((periodos || []).length !== 12) errores.push("Deben existir los 12 períodos mensuales del año.");
+  if ((periodos || []).some((periodo) => periodo.estado !== "cerrado")) {
+    errores.push("Todos los períodos mensuales del año deben estar cerrados.");
+  }
+
+  const [auditoria, desbalanceados, balance] = await Promise.all([
+    getAuditoriaContable({ desde: fechaDesde, hasta: fechaHasta, sedeId }),
+    getAsientosDesbalanceados({ desde: fechaDesde, hasta: fechaHasta, sedeId }),
+    generarBalanceSumasYSaldos({ desde: fechaDesde, hasta: fechaHasta, sedeId }),
+  ]);
+
+  if (auditoria.resumen.totalPendientes > 0) errores.push("Hay operaciones pendientes de asiento contable.");
+  if (desbalanceados.length > 0) errores.push("Hay asientos desbalanceados.");
+
+  const totalDebe = toMoney(balance.reduce((acc, item) => acc + item.sumaDebe, 0));
+  const totalHaber = toMoney(balance.reduce((acc, item) => acc + item.sumaHaber, 0));
+  if (Math.abs(toMoney(totalDebe - totalHaber)) > 0.01) {
+    errores.push("El balance anual tiene diferencias entre debe y haber.");
+  }
+
+  const { data: cierreActivo, error: cierreError } = await supabase
+    .from("contabilidad_asientos")
+    .select("id")
+    .gte("fecha", fechaDesde)
+    .lte("fecha", fechaHasta)
+    .eq("tipo_asiento", "cierre")
+    .neq("estado", "anulado")
+    .limit(1)
+    .maybeSingle();
+
+  if (cierreError) throw cierreError;
+  if (ejercicio?.asientoCierreId || cierreActivo?.id) errores.push("Ya existe un asiento de cierre activo para este ejercicio.");
+
+  if (!balance.length) warnings.push("No hay movimientos contables para el ejercicio.");
+
+  return {
+    listo: errores.length === 0,
+    errores,
+    warnings,
+  };
+}
+
+async function getCuentaResultadoEjercicio() {
+  const cuentas = await resolverCuentasPorCodigo(["3.1.03"]);
+  return cuentas["3.1.03"];
+}
+
+export async function generarAsientoCierreEjercicio(anio, { sedeId, observaciones } = {}) {
+  const { year, fechaHasta } = getEjercicioFechas(anio);
+  const validacion = await validarEjercicioListoParaCierre(year, { sedeId });
+
+  if (!validacion.listo) {
+    throw new Error(validacion.errores.join(" "));
+  }
+
+  const ejercicio = await getEjercicioPorAnio(year);
+  const balance = await getBalanceAnualParaCierre(year, { sedeId });
+  const cuentaResultado = await getCuentaResultadoEjercicio();
+  const lineas = [];
+
+  balance.resultado.forEach((cuenta) => {
+    const saldo = toMoney(cuenta.saldoAcreedor - cuenta.saldoDeudor);
+
+    if (cuenta.tipo === "INGRESO" && saldo > 0) {
+      lineas.push({ cuentaId: cuenta.cuentaId, descripcion: "Cierre de ingresos", debe: saldo, haber: 0 });
+    }
+
+    if (cuenta.tipo === "EGRESO" && saldo < 0) {
+      lineas.push({ cuentaId: cuenta.cuentaId, descripcion: "Cierre de egresos", debe: 0, haber: Math.abs(saldo) });
+    }
+  });
+
+  if (balance.resultadoEjercicio > 0) {
+    lineas.push({ cuentaId: cuentaResultado.id, descripcion: "Utilidad del ejercicio", debe: 0, haber: balance.resultadoEjercicio });
+  } else if (balance.resultadoEjercicio < 0) {
+    lineas.push({ cuentaId: cuentaResultado.id, descripcion: "Pérdida del ejercicio", debe: Math.abs(balance.resultadoEjercicio), haber: 0 });
+  }
+
+  validarLineasAsiento(lineas);
+
+  const asiento = await crearAsientoManual({
+    fecha: fechaHasta,
+    concepto: `Asiento de cierre ejercicio ${year}`,
+    tipoAsiento: "cierre",
+    estado: "confirmado",
+    sedeId,
+    observaciones,
+    lineas,
+  });
+
+  const userId = await getAuthUserId();
+  const { data, error } = await supabase
+    .from("contabilidad_ejercicios")
+    .update({
+      estado: "cerrado",
+      resultado_ejercicio: balance.resultadoEjercicio,
+      asiento_cierre_id: asiento.id,
+      cerrado_por: userId,
+      cerrado_at: new Date().toISOString(),
+      observaciones: observaciones || ejercicio?.observaciones || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", ejercicio.id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+
+  const resultado = {
+    ejercicio: mapEjercicio(data),
+    asiento,
+    resultado: {
+      anio: year,
+      ingresos: balance.totalIngresos,
+      egresos: balance.totalEgresos,
+      resultado: balance.resultadoEjercicio,
+      utilidad: balance.resultadoEjercicio > 0,
+      perdida: balance.resultadoEjercicio < 0,
+    },
+  };
+  await registrarAuditoria({
+    modulo: "Cierre de Ejercicio",
+    accion: "cerrar_ejercicio",
+    entidad: "contabilidad_ejercicio",
+    entidadId: ejercicio.id,
+    descripcion: `Se cerró el ejercicio contable ${year}.`,
+    severidad: "warning",
+    datosAntes: ejercicio,
+    datosDespues: resultado,
+  });
+  return resultado;
+}
+
+export async function generarAsientoAperturaNuevoEjercicio(anio, { sedeId } = {}) {
+  const { year, fechaHasta } = getEjercicioFechas(anio);
+  const nuevoAnio = year + 1;
+  const ejercicio = await getEjercicioPorAnio(year);
+
+  if (!ejercicio) throw new Error("El ejercicio contable no existe.");
+  if (ejercicio.estado !== "cerrado") throw new Error("El ejercicio debe estar cerrado para generar la apertura.");
+  if (ejercicio.asientoAperturaId) throw new Error("El ejercicio ya tiene asiento de apertura.");
+
+  const [balance, cuentasResultado] = await Promise.all([
+    generarBalanceSumasYSaldos({ desde: `${year}-01-01`, hasta: fechaHasta, sedeId }),
+    resolverCuentasPorCodigo(["3.1.04"]),
+  ]);
+  const lineas = balance
+    .filter((cuenta) => ["ACTIVO", "PASIVO", "PATRIMONIO_NETO"].includes(cuenta.tipo))
+    .map((cuenta) => ({
+      cuentaId: cuenta.cuentaCodigo === "3.1.03" ? cuentasResultado["3.1.04"].id : cuenta.cuentaId,
+      descripcion: cuenta.cuentaCodigo === "3.1.03"
+        ? "Traslado a resultado no asignado"
+        : "Apertura de saldos patrimoniales",
+      debe: cuenta.saldoDeudor,
+      haber: cuenta.saldoAcreedor,
+    }))
+    .filter((linea) => toMoney(linea.debe) > 0 || toMoney(linea.haber) > 0);
+
+  validarLineasAsiento(lineas);
+
+  const ejercicioNuevo = (await getEjercicioPorAnio(nuevoAnio)) ||
+    (await crearEjercicioContable({ anio: nuevoAnio }));
+  const asiento = await crearAsientoManual({
+    fecha: `${nuevoAnio}-01-01`,
+    concepto: `Asiento de apertura ejercicio ${nuevoAnio}`,
+    tipoAsiento: "apertura",
+    estado: "confirmado",
+    sedeId,
+    lineas,
+  });
+
+  const { error } = await supabase
+    .from("contabilidad_ejercicios")
+    .update({
+      asiento_apertura_id: asiento.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", ejercicio.id);
+
+  if (error) throw error;
+
+  const resultado = {
+    asiento,
+    ejercicio: ejercicioNuevo,
+  };
+  await registrarAuditoria({
+    modulo: "Cierre de Ejercicio",
+    accion: "generar_apertura_ejercicio",
+    entidad: "contabilidad_ejercicio",
+    entidadId: ejercicio.id,
+    descripcion: `Se generó la apertura del ejercicio ${nuevoAnio}.`,
+    datosAntes: ejercicio,
+    datosDespues: resultado,
+  });
+  return resultado;
+}
+
+export async function reabrirEjercicioContable(id, motivo) {
+  const { data: actual, error: actualError } = await supabase
+    .from("contabilidad_ejercicios")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (actualError) throw actualError;
+  if (actual.estado !== "cerrado") {
+    throw new Error("El ejercicio no está cerrado.");
+  }
+
+  const userId = await getAuthUserId();
+  const observaciones = [
+    actual.observaciones,
+    motivo ? `Reapertura: ${motivo}` : "Reapertura sin motivo informado.",
+  ].filter(Boolean).join("\n");
+
+  const { data, error } = await supabase
+    .from("contabilidad_ejercicios")
+    .update({
+      estado: "abierto",
+      reabierto_por: userId,
+      reabierto_at: new Date().toISOString(),
+      observaciones,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+
+  const reabierto = mapEjercicio(data);
+  await registrarAuditoria({
+    modulo: "Cierre de Ejercicio",
+    accion: "reabrir_ejercicio",
+    entidad: "contabilidad_ejercicio",
+    entidadId: id,
+    descripcion: `Se reabrió el ejercicio contable ${actual.anio}.`,
+    severidad: "warning",
+    datosAntes: actual,
+    datosDespues: reabierto,
+    metadata: { motivo },
+  });
+  return reabierto;
 }
 
 function applyDateAndSedeFilters(query, { desde, hasta, sedeId } = {}, fechaColumn = "fecha") {
@@ -1358,6 +1901,7 @@ export async function generarBalanceSumasYSaldos({ desde, hasta, sedeId } = {}) 
 
         if (!grupos.has(key)) {
           grupos.set(key, {
+            cuentaId: linea.cuentaId,
             cuentaCodigo: linea.cuenta?.codigo || "",
             cuentaNombre: linea.cuenta?.nombre || "",
             tipo: linea.cuenta?.tipo || "",

@@ -38,6 +38,11 @@ const pageIntro = {
     content:
       "Esta pantalla permite controlar deudas, saldos pendientes y movimientos vinculados a pacientes, entidades, proveedores o cuentas internas.",
   },
+  cuentasCorrientesEntidades: {
+    title: "Cuentas Corrientes",
+    content:
+      "Esta pantalla permite consultar saldos por cliente y proveedor, revisar facturas pendientes, cobros y pagos aplicados.",
+  },
   bancos: {
     title: "Bancos",
     content:
@@ -52,6 +57,11 @@ const pageIntro = {
     title: "Contabilidad",
     content:
       "Esta pantalla reúne la información contable formal del sistema: plan de cuentas, libro diario, mayores y balance de sumas y saldos.",
+  },
+  panelContador: {
+    title: "Panel del Contador",
+    content:
+      "Esta pantalla concentra el estado mensual de la contabilidad, IVA, asientos, pendientes y alertas para preparar el cierre.",
   },
   asientosManuales: {
     title: "Asientos Manuales",
@@ -68,15 +78,35 @@ const pageIntro = {
     content:
       "Esta pantalla permite administrar cierres mensuales, bloquear períodos y controlar operaciones pendientes de asiento contable.",
   },
+  cierreEjercicio: {
+    title: "Cierre de Ejercicio",
+    content:
+      "Esta pantalla permite calcular el resultado anual, cerrar cuentas de resultado y generar la apertura del nuevo ejercicio.",
+  },
   auditoriaContable: {
     title: "Auditoría Contable",
     content:
       "Esta pantalla permite detectar operaciones sin asiento, inconsistencias contables y regenerar asientos pendientes de forma controlada.",
   },
+  historialAuditoria: {
+    title: "Historial de Auditoría",
+    content:
+      "Esta pantalla permite revisar acciones importantes realizadas por los usuarios, como cierres, pagos, anulaciones, importaciones y cambios contables.",
+  },
+  importaciones: {
+    title: "Importaciones",
+    content:
+      "Esta pantalla permite cargar datos masivos desde Excel o CSV, validarlos e incorporarlos al sistema.",
+  },
   iva: {
     title: "IVA",
     content:
       "Esta pantalla permite consultar el IVA ventas, IVA compras y el saldo fiscal estimado del período.",
+  },
+  configuracionFiscal: {
+    title: "ConfiguraciÃ³n Fiscal",
+    content:
+      "Esta pantalla permite administrar tipos de retenciones, percepciones e impuestos usados por el sistema.",
   },
   documentos: {
     title: "Documentos",
@@ -565,6 +595,40 @@ const tourStepsByPage = {
     },
   ],
 
+  cuentasCorrientesEntidades: [
+    {
+      target: '[data-tour="cc-entidades-header"]',
+      title: "Cuentas Corrientes",
+      content:
+        "Desde acá se revisan los saldos operativos de clientes y proveedores.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="cc-entidades-filtros"]',
+      title: "Filtros",
+      content:
+        "Permiten consultar por tipo de entidad, período o búsqueda puntual.",
+    },
+    {
+      target: '[data-tour="cc-entidades-resumen"]',
+      title: "Resumen de saldos",
+      content:
+        "Muestra totales generales de debe, haber y saldo pendiente.",
+    },
+    {
+      target: '[data-tour="cc-entidades-tabla"]',
+      title: "Saldos por entidad",
+      content:
+        "Cada fila resume la cuenta corriente de un cliente o proveedor.",
+    },
+    {
+      target: '[data-tour="cc-entidades-detalle"]',
+      title: "Detalle de movimientos",
+      content:
+        "El detalle permite ver facturas, cobros, pagos y saldo acumulado.",
+    },
+  ],
+
   bancos: [
     {
       target: '[data-tour="bancos-header"]',
@@ -701,6 +765,58 @@ const tourStepsByPage = {
     },
   ],
 
+  panelContador: [
+    {
+      target: '[data-tour="panel-contador-header"]',
+      title: "Panel del Contador",
+      content:
+        "Desde aca se revisa el estado mensual antes de cerrar o entregar informacion al contador.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="panel-contador-filtros"]',
+      title: "Periodo de analisis",
+      content:
+        "Selecciona el anio y mes que queres revisar.",
+    },
+    {
+      target: '[data-tour="panel-contador-periodo"]',
+      title: "Estado del periodo",
+      content:
+        "Muestra si el periodo esta abierto, cerrado o pendiente de creacion.",
+    },
+    {
+      target: '[data-tour="panel-contador-kpis"]',
+      title: "Indicadores principales",
+      content:
+        "Resume IVA, asientos, operaciones pendientes y diferencias contables.",
+    },
+    {
+      target: '[data-tour="panel-contador-operaciones"]',
+      title: "Operaciones del mes",
+      content:
+        "Muestra ingresos, egresos, facturas y movimientos bancarios del periodo.",
+    },
+    {
+      target: '[data-tour="panel-contador-ordenes"]',
+      title: "Ordenes de pago",
+      content:
+        "Resume el estado de ordenes pendientes, aprobadas y pagadas.",
+    },
+    {
+      target: '[data-tour="panel-contador-cc"]',
+      title: "Cuentas corrientes",
+      content:
+        "Muestra saldos de clientes y proveedores.",
+    },
+    {
+      target: '[data-tour="panel-contador-checklist"]',
+      title: "Checklist de cierre",
+      content:
+        "Ayuda a detectar si el mes esta listo para cierre o si requiere correcciones.",
+    },
+  ],
+
   asientosManuales: [
     {
       target: '[data-tour="asientos-manuales-header"]',
@@ -797,6 +913,52 @@ const tourStepsByPage = {
     },
   ],
 
+  cierreEjercicio: [
+    {
+      target: '[data-tour="cierre-ejercicio-header"]',
+      title: "Cierre de Ejercicio",
+      content:
+        "Desde acá se administra el cierre anual de la contabilidad.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="cierre-ejercicio-selector"]',
+      title: "Selector de ejercicio",
+      content:
+        "Seleccioná el año que querés revisar o cerrar.",
+    },
+    {
+      target: '[data-tour="cierre-ejercicio-estado"]',
+      title: "Estado del ejercicio",
+      content:
+        "Muestra si el ejercicio está abierto o cerrado y los asientos generados.",
+    },
+    {
+      target: '[data-tour="cierre-ejercicio-resultado"]',
+      title: "Resultado del ejercicio",
+      content:
+        "Resume ingresos, egresos y utilidad o pérdida anual.",
+    },
+    {
+      target: '[data-tour="cierre-ejercicio-validaciones"]',
+      title: "Validaciones",
+      content:
+        "Antes de cerrar, el sistema revisa períodos, pendientes e inconsistencias.",
+    },
+    {
+      target: '[data-tour="cierre-ejercicio-balance"]',
+      title: "Balance anual",
+      content:
+        "Muestra las cuentas patrimoniales y de resultado consideradas para el cierre.",
+    },
+    {
+      target: '[data-tour="cierre-ejercicio-acciones"]',
+      title: "Acciones de cierre",
+      content:
+        "Desde acá se genera el asiento de cierre, la apertura del nuevo ejercicio o la reapertura.",
+    },
+  ],
+
   auditoriaContable: [
     {
       target: '[data-tour="auditoria-header"]',
@@ -831,6 +993,86 @@ const tourStepsByPage = {
     },
   ],
 
+  historialAuditoria: [
+    {
+      target: '[data-tour="historial-auditoria-header"]',
+      title: "Historial de Auditoría",
+      content:
+        "Desde acá se consulta la trazabilidad de acciones relevantes del sistema.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="historial-auditoria-filtros"]',
+      title: "Filtros de auditoría",
+      content:
+        "Permiten buscar eventos por fecha, módulo, acción, usuario o severidad.",
+    },
+    {
+      target: '[data-tour="historial-auditoria-resumen"]',
+      title: "Resumen de eventos",
+      content:
+        "Muestra cantidad de eventos, alertas y usuarios involucrados.",
+    },
+    {
+      target: '[data-tour="historial-auditoria-tabla"]',
+      title: "Tabla de eventos",
+      content:
+        "Lista cada acción registrada con usuario, fecha, módulo y descripción.",
+    },
+    {
+      target: '[data-tour="historial-auditoria-detalle"]',
+      title: "Detalle del evento",
+      content:
+        "Permite revisar los datos antes y después cuando la acción registrada lo incluye.",
+    },
+  ],
+
+  importaciones: [
+    {
+      target: '[data-tour="importaciones-header"]',
+      title: "Importaciones",
+      content:
+        "Desde aca se cargan datos masivos desde archivos Excel o CSV.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="importaciones-tipo"]',
+      title: "Tipo de importacion",
+      content:
+        "Selecciona que clase de datos queres importar.",
+    },
+    {
+      target: '[data-tour="importaciones-plantilla"]',
+      title: "Plantillas",
+      content:
+        "Descarga una plantilla de ejemplo para cargar el archivo con el formato correcto.",
+    },
+    {
+      target: '[data-tour="importaciones-archivo"]',
+      title: "Archivo",
+      content:
+        "Selecciona el archivo Excel o CSV que queres procesar.",
+    },
+    {
+      target: '[data-tour="importaciones-preview"]',
+      title: "Vista previa",
+      content:
+        "Antes de importar, el sistema muestra las filas detectadas para revision.",
+    },
+    {
+      target: '[data-tour="importaciones-validacion"]',
+      title: "Validacion",
+      content:
+        "El sistema revisa errores de formato, cuentas inexistentes, importes invalidos o datos faltantes.",
+    },
+    {
+      target: '[data-tour="importaciones-resultado"]',
+      title: "Resultado",
+      content:
+        "Despues de importar se informa cuantas filas se procesaron y si hubo errores.",
+    },
+  ],
+
   iva: [
     {
       target: '[data-tour="iva-header"]',
@@ -862,6 +1104,25 @@ const tourStepsByPage = {
       title: "Detalle fiscal",
       content:
         "Acá se listan los comprobantes que componen el libro IVA seleccionado.",
+    },
+  ],
+
+  configuracionFiscal: [
+    {
+      target: '[data-tour="configuracion-fiscal-header"]',
+      title: "ConfiguraciÃ³n Fiscal",
+      content: "Desde acÃ¡ se administran los tipos de tributos disponibles.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="configuracion-fiscal-tabla"]',
+      title: "Tipos de tributos",
+      content: "Esta tabla muestra retenciones, percepciones, impuestos y tasas configuradas.",
+    },
+    {
+      target: '[data-tour="configuracion-fiscal-formulario"]',
+      title: "Alta o ediciÃ³n",
+      content: "Desde este formulario se pueden crear o modificar tipos de tributos.",
     },
   ],
 

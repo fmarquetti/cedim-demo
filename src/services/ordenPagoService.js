@@ -1,6 +1,8 @@
 import { supabase } from "../lib/supabaseClient";
 import { getEgresos, marcarEgresoPagado } from "./egresoService";
 import { crearAsientoSiNoExiste, resolverCuentasPorCodigo, validarPeriodoAbierto } from "./contabilidadService";
+import { generarCcDesdeOrdenPago } from "./cuentaCorrienteAutomaticaService";
+import { registrarAuditoria, registrarCambioSeguro } from "./auditoriaService";
 
 function toNumber(value) {
   return Number(value || 0);
@@ -191,6 +193,7 @@ export async function crearOrdenPago(payload) {
     throw new Error("El proveedor es requerido.");
   }
 
+  await validarPeriodoAbierto(payload.fecha || new Date().toISOString().split("T")[0]);
   const egresos = await validarEgresosSeleccionados(payload.egresosIds || [], payload.sedeId);
   const importeTotal = round2(egresos.reduce((acc, egreso) => acc + toNumber(egreso.importe), 0));
   const userId = await getCurrentUserId();
@@ -230,7 +233,17 @@ export async function crearOrdenPago(payload) {
     throw itemsError;
   }
 
-  return getOrdenConItems(orden.id);
+  const ordenCreada = await getOrdenConItems(orden.id);
+  await registrarAuditoria({
+    modulo: "Órdenes de Pago",
+    accion: "crear",
+    entidad: "orden_pago",
+    entidadId: ordenCreada.id,
+    descripcion: `Se creó la orden de pago ${ordenCreada.numeroFormateado} para ${ordenCreada.proveedor}.`,
+    datosDespues: ordenCreada,
+  });
+
+  return ordenCreada;
 }
 
 export async function aprobarOrdenPago(id) {
@@ -255,7 +268,17 @@ export async function aprobarOrdenPago(id) {
     .single();
 
   if (error) throw error;
-  return getOrdenConItems(data.id);
+  const aprobada = await getOrdenConItems(data.id);
+  await registrarCambioSeguro({
+    modulo: "Órdenes de Pago",
+    accion: "aprobar",
+    entidad: "orden_pago",
+    entidadId: id,
+    descripcion: `Se aprobó la orden de pago ${aprobada.numeroFormateado}.`,
+    antes: orden,
+    despues: aprobada,
+  });
+  return aprobada;
 }
 
 export async function pagarOrdenPago(id) {
@@ -334,7 +357,25 @@ export async function pagarOrdenPago(id) {
 
   void marcarEgresoPagado;
 
-  return getOrdenConItems(data.id);
+  const ordenPagada = await getOrdenConItems(data.id);
+
+  try {
+    await generarCcDesdeOrdenPago(ordenPagada);
+  } catch (ccError) {
+    console.error("Orden de pago pagada, pero no se pudo generar cuenta corriente:", ccError);
+  }
+
+  await registrarCambioSeguro({
+    modulo: "Órdenes de Pago",
+    accion: "pagar",
+    entidad: "orden_pago",
+    entidadId: id,
+    descripcion: `Se pagó la orden de pago ${ordenPagada.numeroFormateado}.`,
+    antes: orden,
+    despues: ordenPagada,
+  });
+
+  return ordenPagada;
 }
 
 export async function anularOrdenPago(id) {
@@ -356,7 +397,18 @@ export async function anularOrdenPago(id) {
     .single();
 
   if (error) throw error;
-  return getOrdenConItems(data.id);
+  const anulada = await getOrdenConItems(data.id);
+  await registrarAuditoria({
+    modulo: "Órdenes de Pago",
+    accion: "anular",
+    entidad: "orden_pago",
+    entidadId: id,
+    descripcion: `Se anuló la orden de pago ${anulada.numeroFormateado}.`,
+    severidad: "warning",
+    datosAntes: orden,
+    datosDespues: anulada,
+  });
+  return anulada;
 }
 
 export async function deleteOrdenPago(id) {
@@ -369,4 +421,14 @@ export async function deleteOrdenPago(id) {
 
   const { error } = await supabase.from("ordenes_pago").delete().eq("id", id);
   if (error) throw error;
+
+  await registrarAuditoria({
+    modulo: "Órdenes de Pago",
+    accion: "eliminar",
+    entidad: "orden_pago",
+    entidadId: id,
+    descripcion: `Se eliminó la orden de pago ${orden.numeroFormateado}.`,
+    severidad: "warning",
+    datosAntes: orden,
+  });
 }

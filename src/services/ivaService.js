@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { calcularTotalesFiscales } from "./fiscalService";
 
 function toNumber(value) {
   return Number(value || 0);
@@ -93,7 +94,28 @@ export async function getLibroIvaVentas({ desde, hasta, sedeId } = {}) {
 
   if (error) throw error;
 
-  return (data || [])
+  const rowsBase = data || [];
+  const ids = rowsBase.map((row) => row.id).filter(Boolean);
+  const [conceptosResult, tributosResult] = ids.length
+    ? await Promise.all([
+        supabase.from("comprobante_conceptos_fiscales").select("*").eq("origen", "arca_invoice").in("origen_id", ids),
+        supabase.from("comprobante_tributos").select("*").eq("origen", "arca_invoice").in("origen_id", ids),
+      ])
+    : [{ data: [] }, { data: [] }];
+  if (conceptosResult.error) throw conceptosResult.error;
+  if (tributosResult.error) throw tributosResult.error;
+  const conceptosPorOrigen = (conceptosResult.data || []).reduce((acc, item) => {
+    if (!acc[item.origen_id]) acc[item.origen_id] = [];
+    acc[item.origen_id].push(item);
+    return acc;
+  }, {});
+  const tributosPorOrigen = (tributosResult.data || []).reduce((acc, item) => {
+    if (!acc[item.origen_id]) acc[item.origen_id] = [];
+    acc[item.origen_id].push(item);
+    return acc;
+  }, {});
+
+  return rowsBase
     .filter((row) => row.es_fiscal !== false)
     .filter((row) => !isInternalVoucher(row.tipo_comprobante, row.comprobante_categoria))
     .filter((row) => matchesSede(row, sedeId))
@@ -115,10 +137,14 @@ export async function getLibroIvaVentas({ desde, hasta, sedeId } = {}) {
         : toNumber(row.importe_neto);
 
       const isC = isTipoC(row.tipo_comprobante);
+      const conceptos = conceptosPorOrigen[row.id] || [];
+      const tributos = tributosPorOrigen[row.id] || [];
+      const totales = calcularTotalesFiscales({ conceptos, tributos });
       const total = round2(totalBase * signo);
-      const iva = isC ? 0 : round2(ivaBase * signo);
-      const netoGravado = isC ? 0 : round2(netoBase * signo);
-      const noGravado = isC ? total : 0;
+      const iva = conceptos.length ? round2(totales.iva * signo) : isC ? 0 : round2(ivaBase * signo);
+      const netoGravado = conceptos.length ? round2(totales.netoGravado * signo) : isC ? 0 : round2(netoBase * signo);
+      const exento = conceptos.length ? round2(totales.exento * signo) : 0;
+      const noGravado = conceptos.length ? round2(totales.noGravado * signo) : isC ? total : 0;
 
       return {
         id: row.id,
@@ -133,9 +159,13 @@ export async function getLibroIvaVentas({ desde, hasta, sedeId } = {}) {
         clienteIva: row.cliente_iva || "-",
         netoGravado,
         iva,
-        exento: 0,
+        exento,
         noGravado,
         total,
+        retenciones: round2(totales.retenciones * signo),
+        percepciones: round2(totales.percepciones * signo),
+        otrosTributos: round2(totales.otrosTributos * signo),
+        totalFiscal: conceptos.length || tributos.length ? round2(totales.totalFinal * signo) : total,
         cae: row.cae || "-",
         estado: row.estado || "-",
         signo,
@@ -152,6 +182,9 @@ export function calcularResumenIvaVentas(rows) {
       ivaDebito: round2(acc.ivaDebito + toNumber(row.iva)),
       exento: round2(acc.exento + toNumber(row.exento)),
       noGravado: round2(acc.noGravado + toNumber(row.noGravado)),
+      retenciones: round2(acc.retenciones + toNumber(row.retenciones)),
+      percepciones: round2(acc.percepciones + toNumber(row.percepciones)),
+      otrosTributos: round2(acc.otrosTributos + toNumber(row.otrosTributos)),
       total: round2(acc.total + toNumber(row.total)),
     }),
     {
@@ -159,6 +192,9 @@ export function calcularResumenIvaVentas(rows) {
       ivaDebito: 0,
       exento: 0,
       noGravado: 0,
+      retenciones: 0,
+      percepciones: 0,
+      otrosTributos: 0,
       total: 0,
     }
   );
@@ -177,6 +213,26 @@ export async function getLibroIvaCompras({ desde, hasta, sedeId } = {}) {
   const { data, error } = await query;
 
   if (error) throw error;
+
+  const ids = (data || []).map((row) => row.id).filter(Boolean);
+  const [conceptosResult, tributosResult] = ids.length
+    ? await Promise.all([
+        supabase.from("comprobante_conceptos_fiscales").select("*").eq("origen", "egreso").in("origen_id", ids),
+        supabase.from("comprobante_tributos").select("*").eq("origen", "egreso").in("origen_id", ids),
+      ])
+    : [{ data: [] }, { data: [] }];
+  if (conceptosResult.error) throw conceptosResult.error;
+  if (tributosResult.error) throw tributosResult.error;
+  const conceptosPorOrigen = (conceptosResult.data || []).reduce((acc, item) => {
+    if (!acc[item.origen_id]) acc[item.origen_id] = [];
+    acc[item.origen_id].push(item);
+    return acc;
+  }, {});
+  const tributosPorOrigen = (tributosResult.data || []).reduce((acc, item) => {
+    if (!acc[item.origen_id]) acc[item.origen_id] = [];
+    acc[item.origen_id].push(item);
+    return acc;
+  }, {});
 
   return (data || []).map((row) => {
     const datosFiscales = row.datos_fiscales || {};
@@ -210,10 +266,14 @@ export async function getLibroIvaCompras({ desde, hasta, sedeId } = {}) {
       pickFiscalValue(datosFiscales, ["neto", "importe_neto", "impNeto"], totalBase - ivaBase)
     );
     const isC = isTipoC(tipoComprobante);
+    const conceptos = conceptosPorOrigen[row.id] || [];
+    const tributos = tributosPorOrigen[row.id] || [];
+    const totales = calcularTotalesFiscales({ conceptos, tributos });
     const total = round2(totalBase * signo);
-    const iva = isC ? 0 : round2(ivaBase * signo);
-    const netoGravado = isC ? 0 : round2(netoBase * signo);
-    const noGravado = isC ? total : 0;
+    const iva = conceptos.length ? round2(totales.iva * signo) : isC ? 0 : round2(ivaBase * signo);
+    const netoGravado = conceptos.length ? round2(totales.netoGravado * signo) : isC ? 0 : round2(netoBase * signo);
+    const exento = conceptos.length ? round2(totales.exento * signo) : 0;
+    const noGravado = conceptos.length ? round2(totales.noGravado * signo) : isC ? total : 0;
 
     return {
       id: row.id,
@@ -231,9 +291,13 @@ export async function getLibroIvaCompras({ desde, hasta, sedeId } = {}) {
       categoria: row.categoria || "-",
       netoGravado,
       iva,
-      exento: 0,
+      exento,
       noGravado,
       total,
+      retenciones: round2(totales.retenciones * signo),
+      percepciones: round2(totales.percepciones * signo),
+      otrosTributos: round2(totales.otrosTributos * signo),
+      totalFiscal: conceptos.length || tributos.length ? round2(totales.totalFinal * signo) : total,
       estado: row.estado || "-",
     };
   });
@@ -246,6 +310,9 @@ export function calcularResumenIvaCompras(rows) {
       ivaCredito: round2(acc.ivaCredito + toNumber(row.iva)),
       exento: round2(acc.exento + toNumber(row.exento)),
       noGravado: round2(acc.noGravado + toNumber(row.noGravado)),
+      retenciones: round2(acc.retenciones + toNumber(row.retenciones)),
+      percepciones: round2(acc.percepciones + toNumber(row.percepciones)),
+      otrosTributos: round2(acc.otrosTributos + toNumber(row.otrosTributos)),
       total: round2(acc.total + toNumber(row.total)),
     }),
     {
@@ -253,6 +320,9 @@ export function calcularResumenIvaCompras(rows) {
       ivaCredito: 0,
       exento: 0,
       noGravado: 0,
+      retenciones: 0,
+      percepciones: 0,
+      otrosTributos: 0,
       total: 0,
     }
   );

@@ -168,6 +168,39 @@ export async function registrarAsientoEgresoCargado(egreso) {
   const total = toMoney(egreso.importe);
   if (total <= 0) return null;
 
+  if (egreso.totalesFiscales) {
+    const fiscal = egreso.totalesFiscales;
+    const gastoBase = toMoney(fiscal.netoGravado + fiscal.exento + fiscal.noGravado);
+    const descripcionFiscal = egreso.concepto || egreso.proveedor || "Egreso";
+    const lineas = [
+      ...(gastoBase > 0 ? [await buildLinea(getCuentaEgresoPorCategoria(egreso.categoria), "debe", gastoBase, descripcionFiscal)] : []),
+      ...(fiscal.iva > 0 ? [await buildLinea("ivaCredito", "debe", fiscal.iva, "IVA credito fiscal")] : []),
+      ...(fiscal.percepciones > 0 ? [await buildLinea("percepcionesSufridas", "debe", fiscal.percepciones, "Percepciones sufridas")] : []),
+      ...(fiscal.retenciones > 0 ? [await buildLinea("retencionesSufridas", "haber", fiscal.retenciones, "Retenciones sufridas")] : []),
+      ...(fiscal.otrosTributos > 0 ? [await buildLinea("impuestosNoRecuperables", "debe", fiscal.otrosTributos, "Tributos no recuperables")] : []),
+      await buildLinea("proveedores", "haber", total, egreso.proveedor || "Proveedor"),
+    ];
+    const debe = toMoney(lineas.reduce((acc, linea) => acc + linea.debe, 0));
+    const haber = toMoney(lineas.reduce((acc, linea) => acc + linea.haber, 0));
+    const diferencia = toMoney(haber - debe);
+
+    if (diferencia > 0.01) {
+      lineas.splice(lineas.length - 1, 0, await buildLinea(getCuentaEgresoPorCategoria(egreso.categoria), "debe", diferencia, "Ajuste fiscal del egreso"));
+    } else if (diferencia < -0.01) {
+      lineas.splice(lineas.length - 1, 0, await buildLinea(getCuentaEgresoPorCategoria(egreso.categoria), "haber", Math.abs(diferencia), "Ajuste fiscal del egreso"));
+    }
+
+    return crearAsientoSiNoExiste({
+      fecha: dateOnly(egreso.fechaDb || egreso.fecha),
+      concepto: `Egreso cargado: ${descripcionFiscal}`,
+      origen: "egreso",
+      origenId: egreso.id,
+      sedeId: egreso.sedeId,
+      estado: "confirmado",
+      lineas,
+    });
+  }
+
   const iva = Math.min(
     total,
     Math.abs(

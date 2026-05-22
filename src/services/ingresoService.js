@@ -1,6 +1,8 @@
 import { supabase } from "../lib/supabaseClient";
 import { registrarAsientoIngresoCobrado } from "./contabilidadAutomationService";
+import { generarCcDesdeIngresoCobrado } from "./cuentaCorrienteAutomaticaService";
 import { validarPeriodoAbierto } from "./contabilidadService";
+import { registrarAuditoria, registrarCambioSeguro } from "./auditoriaService";
 
 function formatFecha(fecha) {
   if (!fecha) return "";
@@ -238,6 +240,7 @@ function buildConceptoResumen(form) {
 
 export async function createIngreso(form) {
   validarDistribuciones(form);
+  await validarPeriodoAbierto(form.fecha);
   const factura = await validarFacturaDuplicada(form);
   const conceptoResumen = buildConceptoResumen(form);
 
@@ -289,21 +292,53 @@ export async function createIngreso(form) {
   if (ingreso.estado === "Cobrado") {
     await validarPeriodoAbierto(ingreso.fechaDb || form.fecha);
     await registrarAsientoIngresoCobrado(ingreso);
+    try {
+      await generarCcDesdeIngresoCobrado(ingreso);
+    } catch (ccError) {
+      console.error("Ingreso cobrado, pero no se pudo generar cuenta corriente:", ccError);
+    }
   }
+
+  await registrarAuditoria({
+    modulo: "Ingresos",
+    accion: "crear",
+    entidad: "ingreso",
+    entidadId: ingreso.id,
+    descripcion: `Se creó el ingreso ${ingreso.comprobante || ingreso.concepto || ingreso.id}.`,
+    datosDespues: ingreso,
+  });
 
   return ingreso;
 }
 
 export async function deleteIngreso(id) {
+  const { data: antes, error: antesError } = await supabase
+    .from("ingresos")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (antesError) throw antesError;
+
   const { error } = await supabase.from("ingresos").delete().eq("id", id);
 
   if (error) throw error;
+
+  await registrarAuditoria({
+    modulo: "Ingresos",
+    accion: "eliminar",
+    entidad: "ingreso",
+    entidadId: id,
+    descripcion: `Se eliminó el ingreso ${antes?.comprobante || antes?.concepto || id}.`,
+    severidad: "warning",
+    datosAntes: antes,
+  });
 }
 
 export async function marcarIngresoCobrado(id) {
   const { data: ingresoActual, error: actualError } = await supabase
     .from("ingresos")
-    .select("fecha")
+    .select("*")
     .eq("id", id)
     .single();
 
@@ -335,7 +370,27 @@ export async function marcarIngresoCobrado(id) {
 
   if (ingresoError) throw ingresoError;
 
-  await registrarAsientoIngresoCobrado(
-    mapIngreso({ ...(data || ingresoData), ...ingresoData, ingreso_distribuciones: [] })
-  );
+  const ingresoActualizado = mapIngreso({
+    ...(data || ingresoData),
+    ...ingresoData,
+    ingreso_distribuciones: [],
+  });
+
+  await registrarAsientoIngresoCobrado(ingresoActualizado);
+
+  try {
+    await generarCcDesdeIngresoCobrado(ingresoActualizado);
+  } catch (ccError) {
+    console.error("Ingreso cobrado, pero no se pudo generar cuenta corriente:", ccError);
+  }
+
+  await registrarCambioSeguro({
+    modulo: "Ingresos",
+    accion: "marcar_cobrado",
+    entidad: "ingreso",
+    entidadId: id,
+    descripcion: `Se marcó como cobrado el ingreso ${ingresoActualizado.comprobante || ingresoActualizado.concepto || id}.`,
+    antes: ingresoActual,
+    despues: ingresoActualizado,
+  });
 }

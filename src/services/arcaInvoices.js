@@ -1,5 +1,7 @@
 import { supabase } from "../lib/supabaseClient";
 import { registrarAsientoFacturaArca } from "./contabilidadAutomationService";
+import { generarCcDesdeFacturaArca } from "./cuentaCorrienteAutomaticaService";
+import { registrarAuditoria } from "./auditoriaService";
 
 const arcaApiUrl =
   import.meta.env.VITE_ARCA_API_URL || "http://localhost:3001";
@@ -46,11 +48,30 @@ export async function emitArcaInvoice(payload) {
   try {
     await registrarAsientoFacturaArca(data.invoice);
   } catch (error) {
-    if (error.message === "El período contable correspondiente a esta fecha está cerrado.") {
-      console.error("Factura emitida, pero el período contable está cerrado y no se generó asiento.");
+    if (
+      error.message === "El período contable correspondiente a esta fecha está cerrado." ||
+      error.message === "El ejercicio contable correspondiente a esta fecha está cerrado."
+    ) {
+      console.error("Factura emitida, pero el ejercicio contable está cerrado y no se generó asiento.");
     } else {
       console.error("No se pudo generar el asiento contable ARCA:", error);
     }
+
+    try {
+      await generarCcDesdeFacturaArca(data.invoice);
+    } catch (ccError) {
+      console.error("Factura emitida, pero no se pudo generar cuenta corriente:", ccError);
+    }
+
+    await registrarAuditoria({
+      modulo: "Facturación",
+      accion: "emitir_factura",
+      entidad: "arca_invoice",
+      entidadId: data.invoice.id,
+      descripcion: `Se emitió comprobante ARCA para ${data.invoice.cliente_nombre || data.invoice.cliente || "cliente"}.`,
+      datosDespues: data.invoice,
+      metadata: { warningContabilidad: error.message },
+    });
 
     return {
       ...data.invoice,
@@ -58,6 +79,21 @@ export async function emitArcaInvoice(payload) {
         error.message || "La factura se emitio, pero no se genero el asiento contable.",
     };
   }
+
+  try {
+    await generarCcDesdeFacturaArca(data.invoice);
+  } catch (ccError) {
+    console.error("Factura emitida, pero no se pudo generar cuenta corriente:", ccError);
+  }
+
+  await registrarAuditoria({
+    modulo: "Facturación",
+    accion: "emitir_factura",
+    entidad: "arca_invoice",
+    entidadId: data.invoice.id,
+    descripcion: `Se emitió comprobante ARCA para ${data.invoice.cliente_nombre || data.invoice.cliente || "cliente"}.`,
+    datosDespues: data.invoice,
+  });
 
   return data.invoice;
 }
@@ -153,6 +189,16 @@ export async function sendArcaInvoiceEmail(invoiceId, email) {
   if (!response.ok || !data?.ok) {
     throw new Error(data?.error || "No se pudo enviar la factura por mail.");
   }
+
+  await registrarAuditoria({
+    modulo: "Facturación",
+    accion: "enviar_factura_email",
+    entidad: "arca_invoice",
+    entidadId: invoiceId,
+    descripcion: `Se envió comprobante ARCA por email a ${email}.`,
+    datosDespues: data.invoice,
+    metadata: { email },
+  });
 
   return data.invoice;
 }
