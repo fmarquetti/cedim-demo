@@ -22,8 +22,11 @@ import {
     Home,
     Calculator,
     FileSpreadsheet,
+    FilePenLine,
+    BookPlus,
     Stethoscope,
     ShieldCheck,
+    SearchCheck,
 } from "lucide-react";
 
 import logo from "../assets/logo-cedim.png";
@@ -54,7 +57,10 @@ const menuGroups = [
         icon: FileSpreadsheet,
         items: [
             { id: "contabilidad", label: "Contabilidad", icon: BookOpenCheck },
+            { id: "asientosManuales", label: "Asientos Manuales", icon: FilePenLine },
+            { id: "saldosIniciales", label: "Saldos Iniciales", icon: BookPlus },
             { id: "periodosContables", label: "Períodos Contables", icon: CalendarCheck },
+            { id: "auditoriaContable", label: "Auditoría Contable", icon: SearchCheck },
             { id: "iva", label: "IVA", icon: Percent },
             { id: "documentos", label: "Documentos", icon: FileText },
             { id: "facturacion", label: "Facturación", icon: ReceiptText },

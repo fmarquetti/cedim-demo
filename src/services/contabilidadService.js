@@ -69,7 +69,34 @@ function mapAsiento(row) {
     origenId: row.origen_id,
     sedeId: row.sede_id,
     estado: row.estado,
+    tipoAsiento: row.tipo_asiento || "automatico",
+    observaciones: row.observaciones || "",
+    confirmadoAt: row.confirmado_at,
+    confirmadoBy: row.confirmado_by,
+    anuladoAt: row.anulado_at,
+    anuladoBy: row.anulado_by,
+    motivoAnulacion: row.motivo_anulacion || "",
     lineas: (row.contabilidad_asiento_lineas || []).map(mapLinea),
+  };
+}
+
+function mapSaldoInicial(row) {
+  const cuenta = row.contabilidad_cuentas || {};
+
+  return {
+    id: row.id,
+    fechaApertura: row.fecha_apertura,
+    cuentaId: row.cuenta_id,
+    cuentaCodigo: cuenta.codigo || "",
+    cuentaNombre: cuenta.nombre || "",
+    cuentaTipo: cuenta.tipo || "",
+    sedeId: row.sede_id,
+    descripcion: row.descripcion,
+    debe: toMoney(row.debe),
+    haber: toMoney(row.haber),
+    asientoId: row.asiento_id,
+    estado: row.estado,
+    confirmadoAt: row.confirmado_at,
   };
 }
 
@@ -139,12 +166,8 @@ function validarLinea(linea, index) {
   }
 }
 
-function validarAsiento(payload) {
-  if (!payload?.fecha) throw new Error("La fecha del asiento es requerida.");
-  if (!payload?.concepto) throw new Error("El concepto del asiento es requerido.");
-  if (!payload?.origen) throw new Error("El origen del asiento es requerido.");
-
-  const lineas = Array.isArray(payload.lineas) ? payload.lineas : [];
+export function validarLineasAsiento(lineasInput) {
+  const lineas = Array.isArray(lineasInput) ? lineasInput : [];
 
   if (lineas.length < 2) {
     throw new Error("El asiento debe tener al menos 2 lineas.");
@@ -154,10 +177,21 @@ function validarAsiento(payload) {
 
   const totalDebe = toMoney(lineas.reduce((acc, item) => acc + toNumber(item.debe), 0));
   const totalHaber = toMoney(lineas.reduce((acc, item) => acc + toNumber(item.haber), 0));
+  const diferencia = toMoney(totalDebe - totalHaber);
 
-  if (Math.abs(totalDebe - totalHaber) > 0.01) {
+  if (Math.abs(diferencia) > 0.01) {
     throw new Error(`El asiento no balancea: debe ${totalDebe} y haber ${totalHaber}.`);
   }
+
+  return { totalDebe, totalHaber, diferencia };
+}
+
+function validarAsiento(payload) {
+  if (!payload?.fecha) throw new Error("La fecha del asiento es requerida.");
+  if (!payload?.concepto) throw new Error("El concepto del asiento es requerido.");
+  if (!payload?.origen) throw new Error("El origen del asiento es requerido.");
+
+  validarLineasAsiento(payload.lineas);
 }
 
 export async function getCuentasContables() {
@@ -171,7 +205,7 @@ export async function getCuentasContables() {
   return (data || []).map(mapCuenta);
 }
 
-export async function getAsientosContables({ desde, hasta, sedeId } = {}) {
+export async function getAsientosContables({ desde, hasta, sedeId, estado, tipoAsiento } = {}) {
   let query = supabase
     .from("contabilidad_asientos")
     .select(`
@@ -196,6 +230,14 @@ export async function getAsientosContables({ desde, hasta, sedeId } = {}) {
 
   if (idParaFiltro) {
     query = query.eq("sede_id", idParaFiltro);
+  }
+
+  if (estado && estado !== "todos") {
+    query = query.eq("estado", estado);
+  }
+
+  if (tipoAsiento && tipoAsiento !== "todos") {
+    query = query.eq("tipo_asiento", tipoAsiento);
   }
 
   const { data, error } = await query;
@@ -260,12 +302,472 @@ export async function crearAsientoContable(payload) {
   });
 }
 
-export async function anularAsientoContable(id) {
+export async function getAsientoContableById(id) {
+  const { data, error } = await supabase
+    .from("contabilidad_asientos")
+    .select(`
+      *,
+      contabilidad_asiento_lineas (
+        *,
+        contabilidad_cuentas (*)
+      )
+    `)
+    .eq("id", id)
+    .single();
+
+  if (error) throw error;
+
+  return mapAsiento(data);
+}
+
+async function getAuthUserId() {
+  const { data } = await supabase.auth.getUser();
+  return data?.user?.id || null;
+}
+
+function applySaldoInicialFilters(query, { fechaApertura, sedeId, estado } = {}) {
+  let nextQuery = query;
+  const idParaFiltro = getSedeId(sedeId);
+
+  if (fechaApertura) nextQuery = nextQuery.eq("fecha_apertura", dateOnly(fechaApertura));
+  if (idParaFiltro) nextQuery = nextQuery.eq("sede_id", idParaFiltro);
+  if (sedeId !== undefined && !idParaFiltro) nextQuery = nextQuery.is("sede_id", null);
+  if (estado) nextQuery = nextQuery.eq("estado", estado);
+
+  return nextQuery;
+}
+
+async function assertSinSaldosInicialesConfirmados({ fechaApertura, sedeId }) {
+  const { data, error } = await applySaldoInicialFilters(
+    supabase.from("contabilidad_saldos_iniciales").select("id").limit(1),
+    { fechaApertura, sedeId, estado: "confirmado" }
+  ).maybeSingle();
+
+  if (error) throw error;
+
+  if (data?.id) {
+    throw new Error("Ya existen saldos iniciales confirmados para esta fecha.");
+  }
+}
+
+export async function getSaldosIniciales({ fechaApertura, sedeId } = {}) {
+  let query = supabase
+    .from("contabilidad_saldos_iniciales")
+    .select(`
+      *,
+      contabilidad_cuentas (id, codigo, nombre, tipo)
+    `)
+    .order("created_at", { ascending: true });
+
+  if (fechaApertura) query = query.eq("fecha_apertura", dateOnly(fechaApertura));
+
+  const idParaFiltro = getSedeId(sedeId);
+  if (idParaFiltro) query = query.eq("sede_id", idParaFiltro);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return (data || [])
+    .map(mapSaldoInicial)
+    .sort((a, b) => a.cuentaCodigo.localeCompare(b.cuentaCodigo));
+}
+
+async function getSaldosInicialesOperativos({ fechaApertura, sedeId, estado } = {}) {
+  const { data, error } = await applySaldoInicialFilters(
+    supabase
+      .from("contabilidad_saldos_iniciales")
+      .select(`
+        *,
+        contabilidad_cuentas (id, codigo, nombre, tipo)
+      `)
+      .order("created_at", { ascending: true }),
+    { fechaApertura, sedeId: getSedeId(sedeId), estado }
+  );
+
+  if (error) throw error;
+
+  return (data || [])
+    .map(mapSaldoInicial)
+    .sort((a, b) => a.cuentaCodigo.localeCompare(b.cuentaCodigo));
+}
+
+export function validarSaldosIniciales(lineasInput) {
+  const lineas = Array.isArray(lineasInput) ? lineasInput : [];
+
+  if (lineas.length < 2) {
+    throw new Error("Los saldos iniciales deben tener al menos 2 lineas.");
+  }
+
+  lineas.forEach(validarLinea);
+
+  const totalDebe = toMoney(lineas.reduce((acc, item) => acc + toNumber(item.debe), 0));
+  const totalHaber = toMoney(lineas.reduce((acc, item) => acc + toNumber(item.haber), 0));
+  const diferencia = toMoney(totalDebe - totalHaber);
+
+  if (Math.abs(diferencia) > 0.01) {
+    throw new Error(`Los saldos iniciales no balancean: debe ${totalDebe} y haber ${totalHaber}.`);
+  }
+
+  return { totalDebe, totalHaber, diferencia };
+}
+
+export async function guardarSaldosIniciales({ fechaApertura, sedeId, lineas } = {}) {
+  if (!fechaApertura) throw new Error("La fecha de apertura es requerida.");
+
+  const fecha = dateOnly(fechaApertura);
+  const sede = getSedeId(sedeId);
+
+  await validarPeriodoAbierto(fecha);
+  validarSaldosIniciales(lineas);
+  await assertSinSaldosInicialesConfirmados({ fechaApertura: fecha, sedeId });
+
+  let deleteQuery = supabase
+    .from("contabilidad_saldos_iniciales")
+    .delete()
+    .eq("fecha_apertura", fecha)
+    .eq("estado", "borrador");
+
+  deleteQuery = sede ? deleteQuery.eq("sede_id", sede) : deleteQuery.is("sede_id", null);
+  const { error: deleteError } = await deleteQuery;
+  if (deleteError) throw deleteError;
+
+  const userId = await getAuthUserId();
+  const payload = lineas.map((linea) => ({
+    fecha_apertura: fecha,
+    cuenta_id: linea.cuentaId,
+    sede_id: sede,
+    descripcion: linea.descripcion || null,
+    debe: toMoney(linea.debe),
+    haber: toMoney(linea.haber),
+    estado: "borrador",
+    created_by: userId,
+  }));
+
+  const { error: insertError } = await supabase
+    .from("contabilidad_saldos_iniciales")
+    .insert(payload);
+
+  if (insertError) throw insertError;
+
+  return getSaldosIniciales({ fechaApertura: fecha, sedeId });
+}
+
+export async function confirmarSaldosIniciales({ fechaApertura, sedeId } = {}) {
+  if (!fechaApertura) throw new Error("La fecha de apertura es requerida.");
+
+  const fecha = dateOnly(fechaApertura);
+  const sede = getSedeId(sedeId);
+
+  await validarPeriodoAbierto(fecha);
+  await assertSinSaldosInicialesConfirmados({ fechaApertura: fecha, sedeId });
+
+  const saldos = await getSaldosInicialesOperativos({ fechaApertura: fecha, sedeId: sede });
+  const borradores = saldos.filter((saldo) => saldo.estado === "borrador");
+
+  if (!borradores.length) {
+    throw new Error("No hay saldos iniciales en borrador para confirmar.");
+  }
+
+  validarSaldosIniciales(borradores.map((saldo) => ({
+    cuentaId: saldo.cuentaId,
+    descripcion: saldo.descripcion,
+    debe: saldo.debe,
+    haber: saldo.haber,
+  })));
+
+  const asiento = await crearAsientoManual({
+    fecha,
+    concepto: "Asiento de apertura",
+    tipoAsiento: "apertura",
+    estado: "confirmado",
+    sedeId: sede,
+    lineas: borradores.map((saldo) => ({
+      cuentaId: saldo.cuentaId,
+      descripcion: saldo.descripcion || "Saldo inicial",
+      debe: saldo.debe,
+      haber: saldo.haber,
+    })),
+  });
+
+  const ids = borradores.map((saldo) => saldo.id);
+  const { error: updateError } = await supabase
+    .from("contabilidad_saldos_iniciales")
+    .update({
+      estado: "confirmado",
+      asiento_id: asiento.id,
+      confirmado_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .in("id", ids);
+
+  if (updateError) {
+    console.error("Error confirmando saldos iniciales despues de crear asiento de apertura:", updateError);
+    throw updateError;
+  }
+
+  return {
+    asiento,
+    saldos: await getSaldosIniciales({ fechaApertura: fecha, sedeId }),
+  };
+}
+
+export async function anularSaldosIniciales({ fechaApertura, sedeId, motivo } = {}) {
+  if (!fechaApertura) throw new Error("La fecha de apertura es requerida.");
+  if (!String(motivo || "").trim()) throw new Error("El motivo de anulacion es obligatorio.");
+
+  const fecha = dateOnly(fechaApertura);
+
+  await validarPeriodoAbierto(fecha);
+
+  const saldos = (await getSaldosInicialesOperativos({ fechaApertura: fecha, sedeId: getSedeId(sedeId) }))
+    .filter((saldo) => saldo.estado === "confirmado");
+
+  if (!saldos.length) {
+    throw new Error("No hay saldos iniciales confirmados para anular.");
+  }
+
+  const asientoIds = [...new Set(saldos.map((saldo) => saldo.asientoId).filter(Boolean))];
+
+  for (const asientoId of asientoIds) {
+    await anularAsientoManual(asientoId, `Anulacion de saldos iniciales: ${String(motivo).trim()}`);
+  }
+
+  const { error } = await supabase
+    .from("contabilidad_saldos_iniciales")
+    .update({
+      estado: "anulado",
+      updated_at: new Date().toISOString(),
+    })
+    .in("id", saldos.map((saldo) => saldo.id));
+
+  if (error) throw error;
+
+  return getSaldosIniciales({ fechaApertura: fecha, sedeId });
+}
+
+export async function getFechasAperturaDisponibles() {
+  const { data, error } = await supabase
+    .from("contabilidad_saldos_iniciales")
+    .select("fecha_apertura")
+    .order("fecha_apertura", { ascending: false });
+
+  if (error) throw error;
+
+  return [...new Set((data || []).map((row) => row.fecha_apertura).filter(Boolean))];
+}
+
+function assertManualEditable(asiento) {
+  if (asiento.estado !== "borrador") {
+    throw new Error("Solo se pueden editar asientos manuales en borrador.");
+  }
+
+  if (!["manual", "ajuste"].includes(asiento.origen) || asiento.tipoAsiento === "automatico") {
+    throw new Error("No se pueden editar asientos automaticos desde operaciones.");
+  }
+}
+
+function normalizeTipoAsiento(tipoAsiento) {
+  const tipo = tipoAsiento || "manual";
+  const permitidos = ["manual", "ajuste", "apertura", "reclasificacion", "correccion"];
+
+  if (!permitidos.includes(tipo)) {
+    throw new Error("El tipo de asiento manual no es valido.");
+  }
+
+  return tipo;
+}
+
+function getOrigenManual(tipoAsiento) {
+  return tipoAsiento === "manual" ? "manual" : "ajuste";
+}
+
+async function insertarLineasAsiento(asientoId, lineas) {
+  const payload = lineas.map((linea) => ({
+    asiento_id: asientoId,
+    cuenta_id: linea.cuentaId,
+    descripcion: linea.descripcion || null,
+    debe: toMoney(linea.debe),
+    haber: toMoney(linea.haber),
+  }));
+
+  const { error } = await supabase.from("contabilidad_asiento_lineas").insert(payload);
+  if (error) throw error;
+}
+
+export async function crearAsientoManual(payload) {
+  const tipoAsiento = normalizeTipoAsiento(payload?.tipoAsiento);
+  const estado = payload?.estado === "confirmado" ? "confirmado" : "borrador";
+  const fecha = dateOnly(payload?.fecha);
+
+  if (!payload?.concepto) throw new Error("El concepto del asiento es requerido.");
+  await validarPeriodoAbierto(fecha);
+  validarLineasAsiento(payload.lineas);
+
+  const userId = estado === "confirmado" ? await getAuthUserId() : null;
+  const { data: asiento, error: asientoError } = await supabase
+    .from("contabilidad_asientos")
+    .insert({
+      fecha,
+      concepto: payload.concepto,
+      origen: getOrigenManual(tipoAsiento),
+      origen_id: null,
+      sede_id: getSedeId(payload.sedeId),
+      estado,
+      tipo_asiento: tipoAsiento,
+      observaciones: payload.observaciones || null,
+      confirmado_at: estado === "confirmado" ? new Date().toISOString() : null,
+      confirmado_by: userId,
+      created_by: payload.createdBy || userId,
+    })
+    .select("*")
+    .single();
+
+  if (asientoError) throw asientoError;
+
+  try {
+    await insertarLineasAsiento(asiento.id, payload.lineas);
+  } catch (error) {
+    await supabase.from("contabilidad_asientos").delete().eq("id", asiento.id);
+    throw error;
+  }
+
+  return getAsientoContableById(asiento.id);
+}
+
+export async function actualizarAsientoManual(id, payload) {
+  const asiento = await getAsientoContableById(id);
+  assertManualEditable(asiento);
+
+  const tipoAsiento = normalizeTipoAsiento(payload?.tipoAsiento || asiento.tipoAsiento);
+  const fecha = dateOnly(payload?.fecha || asiento.fecha);
+
+  if (!payload?.concepto) throw new Error("El concepto del asiento es requerido.");
+  await validarPeriodoAbierto(fecha);
+  validarLineasAsiento(payload.lineas);
+
+  const { error: updateError } = await supabase
+    .from("contabilidad_asientos")
+    .update({
+      fecha,
+      concepto: payload.concepto,
+      origen: getOrigenManual(tipoAsiento),
+      sede_id: getSedeId(payload.sedeId),
+      tipo_asiento: tipoAsiento,
+      observaciones: payload.observaciones || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (updateError) throw updateError;
+
+  const { error: deleteError } = await supabase
+    .from("contabilidad_asiento_lineas")
+    .delete()
+    .eq("asiento_id", id);
+
+  if (deleteError) throw deleteError;
+
+  await insertarLineasAsiento(id, payload.lineas);
+  return getAsientoContableById(id);
+}
+
+export async function confirmarAsientoManual(id) {
+  const asiento = await getAsientoContableById(id);
+
+  if (asiento.estado !== "borrador") {
+    throw new Error("Solo se pueden confirmar asientos en borrador.");
+  }
+
+  if (!["manual", "ajuste"].includes(asiento.origen) || asiento.tipoAsiento === "automatico") {
+    throw new Error("Solo se pueden confirmar asientos manuales o de ajuste.");
+  }
+
+  await validarPeriodoAbierto(asiento.fecha);
+  validarLineasAsiento(asiento.lineas);
+
+  const userId = await getAuthUserId();
+  const { error } = await supabase
+    .from("contabilidad_asientos")
+    .update({
+      estado: "confirmado",
+      confirmado_at: new Date().toISOString(),
+      confirmado_by: userId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) throw error;
+
+  return getAsientoContableById(id);
+}
+
+export async function anularAsientoManual(id, motivo) {
+  if (!String(motivo || "").trim()) {
+    throw new Error("El motivo de anulacion es obligatorio.");
+  }
+
+  const asiento = await getAsientoContableById(id);
+
+  if (asiento.estado === "anulado") {
+    throw new Error("El asiento ya esta anulado.");
+  }
+
+  await validarPeriodoAbierto(asiento.fecha);
+
+  const userId = await getAuthUserId();
+  const { error } = await supabase
+    .from("contabilidad_asientos")
+    .update({
+      estado: "anulado",
+      anulado_at: new Date().toISOString(),
+      anulado_by: userId,
+      motivo_anulacion: String(motivo).trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) throw error;
+
+  return getAsientoContableById(id);
+}
+
+export async function duplicarAsientoManual(id) {
+  const asiento = await getAsientoContableById(id);
+  const fecha = dateOnly(new Date().toISOString());
+
+  await validarPeriodoAbierto(fecha);
+
+  return crearAsientoManual({
+    fecha,
+    concepto: `Copia de ${asiento.concepto}`,
+    tipoAsiento: asiento.tipoAsiento === "automatico" ? "manual" : asiento.tipoAsiento,
+    observaciones: asiento.observaciones,
+    sedeId: asiento.sedeId,
+    estado: "borrador",
+    lineas: asiento.lineas.map((linea) => ({
+      cuentaId: linea.cuentaId,
+      descripcion: linea.descripcion,
+      debe: linea.debe,
+      haber: linea.haber,
+    })),
+  });
+}
+
+export async function anularAsientoContable(id, motivo) {
+  const metadata = motivo
+    ? {
+        anulado_at: new Date().toISOString(),
+        anulado_by: await getAuthUserId(),
+        motivo_anulacion: motivo,
+      }
+    : {};
+
   const { data, error } = await supabase
     .from("contabilidad_asientos")
     .update({
       estado: "anulado",
       updated_at: new Date().toISOString(),
+      ...metadata,
     })
     .eq("id", id)
     .select("*")
@@ -561,6 +1063,194 @@ export async function getAsientosPendientesControl({ desde, hasta, sedeId } = {}
     conciliacionesIngresoSinAsiento,
     conciliacionesEgresoSinAsiento,
     resumen: { totalPendientes },
+  };
+}
+
+export async function getAsientosDesbalanceados({ desde, hasta, sedeId } = {}) {
+  const asientos = await getAsientosContables({ desde, hasta, sedeId });
+
+  return asientos
+    .filter((asiento) => asiento.estado !== "anulado")
+    .map((asiento) => {
+      const totalDebe = toMoney(asiento.lineas.reduce((acc, linea) => acc + toNumber(linea.debe), 0));
+      const totalHaber = toMoney(asiento.lineas.reduce((acc, linea) => acc + toNumber(linea.haber), 0));
+      const diferencia = toMoney(totalDebe - totalHaber);
+
+      return {
+        asientoId: asiento.id,
+        fecha: asiento.fecha,
+        numero: asiento.numero,
+        concepto: asiento.concepto,
+        origen: asiento.origen,
+        origenId: asiento.origenId,
+        totalDebe,
+        totalHaber,
+        diferencia,
+      };
+    })
+    .filter((item) => Math.abs(item.diferencia) > 0.01);
+}
+
+export async function getAsientosDuplicadosPorOrigen({ desde, hasta, sedeId } = {}) {
+  const asientos = await getAsientosContables({ desde, hasta, sedeId });
+  const grupos = new Map();
+
+  asientos
+    .filter((asiento) => asiento.estado !== "anulado")
+    .filter((asiento) => asiento.origen && asiento.origenId)
+    .forEach((asiento) => {
+      const key = `${asiento.origen}:${asiento.origenId}`;
+      if (!grupos.has(key)) {
+        grupos.set(key, {
+          origen: asiento.origen,
+          origenId: asiento.origenId,
+          asientos: [],
+        });
+      }
+
+      grupos.get(key).asientos.push({
+        id: asiento.id,
+        fecha: asiento.fecha,
+        numero: asiento.numero,
+        concepto: asiento.concepto,
+        estado: asiento.estado,
+      });
+    });
+
+  return Array.from(grupos.values())
+    .filter((grupo) => grupo.asientos.length > 1)
+    .map((grupo) => ({
+      ...grupo,
+      cantidad: grupo.asientos.length,
+    }));
+}
+
+export async function getLineasInvalidas({ desde, hasta, sedeId } = {}) {
+  const asientos = await getAsientosContables({ desde, hasta, sedeId });
+  const invalidas = [];
+
+  asientos
+    .filter((asiento) => asiento.estado !== "anulado")
+    .forEach((asiento) => {
+      asiento.lineas.forEach((linea) => {
+        const motivos = [];
+        const debe = toMoney(linea.debe);
+        const haber = toMoney(linea.haber);
+
+        if (!linea.cuentaId) motivos.push("Sin cuenta contable");
+        if (debe < 0) motivos.push("Debe negativo");
+        if (haber < 0) motivos.push("Haber negativo");
+        if (debe === 0 && haber === 0) motivos.push("Debe y haber en cero");
+        if (debe > 0 && haber > 0) motivos.push("Debe y haber informados al mismo tiempo");
+
+        motivos.forEach((motivo) => {
+          invalidas.push({
+            lineaId: linea.id,
+            asientoId: asiento.id,
+            fecha: asiento.fecha,
+            numero: asiento.numero,
+            concepto: asiento.concepto,
+            cuentaId: linea.cuentaId,
+            debe,
+            haber,
+            motivo,
+          });
+        });
+      });
+    });
+
+  return invalidas;
+}
+
+export async function getCuentasInactivasUsadas({ desde, hasta, sedeId } = {}) {
+  const asientos = await getAsientosContables({ desde, hasta, sedeId });
+  const usadas = [];
+
+  asientos
+    .filter((asiento) => asiento.estado !== "anulado")
+    .forEach((asiento) => {
+      asiento.lineas
+        .filter((linea) => linea.cuenta && linea.cuenta.activa === false)
+        .forEach((linea) => {
+          usadas.push({
+            asientoId: asiento.id,
+            fecha: asiento.fecha,
+            numero: asiento.numero,
+            concepto: asiento.concepto,
+            cuentaCodigo: linea.cuenta.codigo,
+            cuentaNombre: linea.cuenta.nombre,
+            debe: linea.debe,
+            haber: linea.haber,
+          });
+        });
+    });
+
+  return usadas;
+}
+
+export async function getAsientosSinLineas({ desde, hasta, sedeId } = {}) {
+  const asientos = await getAsientosContables({ desde, hasta, sedeId });
+
+  return asientos
+    .filter((asiento) => asiento.estado !== "anulado")
+    .filter((asiento) => asiento.lineas.length === 0)
+    .map((asiento) => ({
+      asientoId: asiento.id,
+      fecha: asiento.fecha,
+      numero: asiento.numero,
+      concepto: asiento.concepto,
+      origen: asiento.origen,
+      origenId: asiento.origenId,
+    }));
+}
+
+export async function getAuditoriaContable({ desde, hasta, sedeId } = {}) {
+  const params = { desde, hasta, sedeId };
+  const [
+    pendientesBase,
+    asientosDesbalanceados,
+    asientosDuplicados,
+    lineasInvalidas,
+    cuentasInactivasUsadas,
+    asientosSinLineas,
+  ] = await Promise.all([
+    getAsientosPendientesControl(params),
+    getAsientosDesbalanceados(params),
+    getAsientosDuplicadosPorOrigen(params),
+    getLineasInvalidas(params),
+    getCuentasInactivasUsadas(params),
+    getAsientosSinLineas(params),
+  ]);
+
+  const pendientes = {
+    facturasArcaSinAsiento: pendientesBase.facturasArcaSinAsiento || [],
+    ingresosCobradosSinAsiento: pendientesBase.ingresosCobradosSinAsiento || [],
+    egresosSinAsiento: pendientesBase.egresosSinAsiento || [],
+    egresosPagadosSinAsiento: pendientesBase.egresosPagadosSinAsiento || [],
+    ordenesPagoPagadasSinAsiento: pendientesBase.ordenesPagoPagadasSinAsiento || [],
+    conciliacionesIngresoSinAsiento: pendientesBase.conciliacionesIngresoSinAsiento || [],
+    conciliacionesEgresoSinAsiento: pendientesBase.conciliacionesEgresoSinAsiento || [],
+  };
+
+  const inconsistencias = {
+    asientosDesbalanceados,
+    asientosDuplicados,
+    lineasInvalidas,
+    cuentasInactivasUsadas,
+    asientosSinLineas,
+  };
+
+  const totalPendientes = Object.values(pendientes).reduce((acc, list) => acc + list.length, 0);
+  const totalInconsistencias = Object.values(inconsistencias).reduce((acc, list) => acc + list.length, 0);
+
+  return {
+    pendientes,
+    inconsistencias,
+    resumen: {
+      totalPendientes,
+      totalInconsistencias,
+      totalAlertas: totalPendientes + totalInconsistencias,
+    },
   };
 }
 

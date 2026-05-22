@@ -12,7 +12,10 @@ import CuentasCorrientes from "./pages/CuentasCorrientes";
 import Bancos from "./pages/Bancos";
 import Reportes from "./pages/Reportes";
 import Contabilidad from "./pages/Contabilidad";
+import AsientosManuales from "./pages/AsientosManuales";
+import SaldosIniciales from "./pages/SaldosIniciales";
 import PeriodosContables from "./pages/PeriodosContables";
+import AuditoriaContable from "./pages/AuditoriaContable";
 import Iva from "./pages/Iva";
 import Documentos from "./pages/Documentos";
 import Pacientes from "./pages/Pacientes";
@@ -41,13 +44,14 @@ function getSedeId(selectedSede) {
   return "todas";
 }
 
-function getPage(activePage, selectedSede, currentUser) {
+function getPage(activePage, selectedSede, currentUser, setActivePage) {
   const sedeId = getSedeId(selectedSede);
 
   const props = {
     selectedSede,
     sedeId,
     currentUser,
+    setActivePage,
   };
 
   const pages = {
@@ -59,7 +63,10 @@ function getPage(activePage, selectedSede, currentUser) {
     bancos: <Bancos {...props} />,
     reportes: <Reportes {...props} />,
     contabilidad: <Contabilidad {...props} />,
+    asientosManuales: <AsientosManuales {...props} />,
+    saldosIniciales: <SaldosIniciales {...props} />,
     periodosContables: <PeriodosContables {...props} />,
+    auditoriaContable: <AuditoriaContable {...props} />,
     iva: <Iva {...props} />,
     documentos: <Documentos {...props} />,
     pacientes: <Pacientes {...props} />,
@@ -132,7 +139,7 @@ function AppContent() {
         <DemoTour activePage={activePage} currentUser={currentUser} />
 
         <div className="page-content" data-tour="page-content">
-          {getPage(activePage, effectiveSelectedSede, currentUser)}
+          {getPage(activePage, effectiveSelectedSede, currentUser, setActivePage)}
         </div>
 
         <Footer />

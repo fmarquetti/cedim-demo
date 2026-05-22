@@ -53,10 +53,25 @@ const pageIntro = {
     content:
       "Esta pantalla reúne la información contable formal del sistema: plan de cuentas, libro diario, mayores y balance de sumas y saldos.",
   },
+  asientosManuales: {
+    title: "Asientos Manuales",
+    content:
+      "Esta pantalla permite cargar ajustes, reclasificaciones y asientos manuales solicitados por el contador.",
+  },
+  saldosIniciales: {
+    title: "Saldos Iniciales",
+    content:
+      "Esta pantalla permite cargar los saldos de apertura para iniciar la contabilidad desde una fecha determinada.",
+  },
   periodosContables: {
     title: "Períodos Contables",
     content:
       "Esta pantalla permite administrar cierres mensuales, bloquear períodos y controlar operaciones pendientes de asiento contable.",
+  },
+  auditoriaContable: {
+    title: "Auditoría Contable",
+    content:
+      "Esta pantalla permite detectar operaciones sin asiento, inconsistencias contables y regenerar asientos pendientes de forma controlada.",
   },
   iva: {
     title: "IVA",
@@ -686,6 +701,74 @@ const tourStepsByPage = {
     },
   ],
 
+  asientosManuales: [
+    {
+      target: '[data-tour="asientos-manuales-header"]',
+      title: "Asientos Manuales",
+      content:
+        "Desde acá se administran asientos cargados manualmente, ajustes y reclasificaciones.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="asientos-manuales-filtros"]',
+      title: "Filtros",
+      content:
+        "Permiten buscar asientos manuales por período, estado o tipo.",
+    },
+    {
+      target: '[data-tour="asientos-manuales-resumen"]',
+      title: "Resumen",
+      content:
+        "Muestra totales de asientos, estados y sumas de debe/haber.",
+    },
+    {
+      target: '[data-tour="asientos-manuales-tabla"]',
+      title: "Listado de asientos",
+      content:
+        "La tabla muestra los asientos manuales cargados y sus acciones disponibles.",
+    },
+    {
+      target: '[data-tour="asientos-manuales-formulario"]',
+      title: "Formulario de asiento",
+      content:
+        "Desde este formulario se cargan las líneas del asiento, controlando que el debe y el haber coincidan.",
+    },
+  ],
+
+  saldosIniciales: [
+    {
+      target: '[data-tour="saldos-iniciales-header"]',
+      title: "Saldos Iniciales",
+      content:
+        "Desde aca se cargan los saldos iniciales de cada cuenta contable.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="saldos-iniciales-configuracion"]',
+      title: "Fecha de apertura",
+      content:
+        "La fecha de apertura define desde cuando comienza la contabilidad formal del sistema.",
+    },
+    {
+      target: '[data-tour="saldos-iniciales-resumen"]',
+      title: "Resumen de saldos",
+      content:
+        "Estos indicadores muestran total debe, total haber y diferencia antes de confirmar.",
+    },
+    {
+      target: '[data-tour="saldos-iniciales-formulario"]',
+      title: "Carga de cuentas",
+      content:
+        "En esta tabla se cargan las cuentas con saldo inicial deudor o acreedor.",
+    },
+    {
+      target: '[data-tour="saldos-iniciales-tabla"]',
+      title: "Saldos guardados",
+      content:
+        "Aca se muestran los saldos iniciales guardados o confirmados.",
+    },
+  ],
+
   periodosContables: [
     {
       target: '[data-tour="periodos-header"]',
@@ -711,6 +794,40 @@ const tourStepsByPage = {
       title: "Control de pendientes",
       content:
         "Este panel ayuda a detectar facturas, pagos o movimientos que todavía no tienen asiento contable.",
+    },
+  ],
+
+  auditoriaContable: [
+    {
+      target: '[data-tour="auditoria-header"]',
+      title: "Auditoría Contable",
+      content:
+        "Desde acá se controla la integridad contable del sistema.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="auditoria-filtros"]',
+      title: "Filtros",
+      content:
+        "Permiten revisar pendientes e inconsistencias por período.",
+    },
+    {
+      target: '[data-tour="auditoria-resumen"]',
+      title: "Resumen de auditoría",
+      content:
+        "Estos indicadores muestran cuántas operaciones pendientes o inconsistentes existen.",
+    },
+    {
+      target: '[data-tour="auditoria-pendientes"]',
+      title: "Pendientes de asiento",
+      content:
+        "Acá se listan operaciones administrativas que todavía no tienen asiento contable.",
+    },
+    {
+      target: '[data-tour="auditoria-inconsistencias"]',
+      title: "Inconsistencias contables",
+      content:
+        "Esta sección muestra asientos desbalanceados, duplicados o con líneas inválidas.",
     },
   ],
 

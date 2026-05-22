@@ -208,6 +208,12 @@ export default function PeriodosContables({ selectedSede, sedeId, currentUser })
         </button>
       </div>
 
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <p className="muted" style={{ margin: 0 }}>
+          Antes de cerrar un período, revisá la Auditoría Contable para confirmar que no existan asientos pendientes o inconsistencias.
+        </p>
+      </div>
+
       {error && <div className="login-error">{error}</div>}
 
       <div className="panel" data-tour="periodos-tabla">

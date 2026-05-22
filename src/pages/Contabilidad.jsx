@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileSpreadsheet, FileText, RefreshCw } from "lucide-react";
+import { BookPlus, FileSpreadsheet, FileText, RefreshCw } from "lucide-react";
 
 import {
   generarBalanceSumasYSaldos,
@@ -35,7 +35,7 @@ function EmptyRow({ colSpan }) {
   );
 }
 
-export default function Contabilidad({ sedeId }) {
+export default function Contabilidad({ sedeId, setActivePage }) {
   const [cuentas, setCuentas] = useState([]);
   const [libroDiario, setLibroDiario] = useState([]);
   const [libroMayor, setLibroMayor] = useState([]);
@@ -325,8 +325,19 @@ export default function Contabilidad({ sedeId }) {
       <div className="panel" style={{ marginBottom: 16 }}>
         <p className="muted" style={{ margin: 0 }}>
           Los reportes contables dependen de los asientos generados y del estado de los períodos contables.
-          Cerrá un período solo después de revisar pendientes.
+          Cerrá un período solo después de revisar pendientes. Los saldos iniciales generan un asiento de apertura
+          y afectan el Libro Mayor y el Balance de Sumas y Saldos.
         </p>
+        {setActivePage && (
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setActivePage("saldosIniciales")}
+            style={{ marginTop: 12 }}
+          >
+            <BookPlus size={16} /> Ir a Saldos Iniciales
+          </button>
+        )}
       </div>
 
       <div className="filters-bar" data-tour="contabilidad-filtros">
