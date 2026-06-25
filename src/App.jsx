@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
-import TicketReportButton from "./components/TicketReportButton";
 
 import Login from "./pages/Login";
 
@@ -210,6 +209,7 @@ function AppContent() {
         currentUser={currentUser}
         collapsed={sidebarCollapsed}
         setCollapsed={setSidebarCollapsed}
+        onTicketCreated={() => window.dispatchEvent(new Event("tickets:changed"))}
       />
 
       <main className="main-content">
@@ -246,13 +246,6 @@ function AppContent() {
 
         <ToastProvider />
       </main>
-
-      <TicketReportButton
-        currentUser={currentUser}
-        currentPage={activePage}
-        global
-        onCreated={() => window.dispatchEvent(new Event("tickets:changed"))}
-      />
     </div>
   );
 }
