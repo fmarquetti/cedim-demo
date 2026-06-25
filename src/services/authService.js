@@ -18,6 +18,8 @@ function normalizeUser(dbUser) {
         sedeId: dbUser.usuario_sedes?.[0]?.sedes?.id || null,
         permissions: getPermissionsForRole(dbUser.rol, dbUser.permisos || []),
         permisos: getPermissionsForRole(dbUser.rol, dbUser.permisos || []),
+        developmentDisabledPages: dbUser.development_disabled_pages || [],
+        development_disabled_pages: dbUser.development_disabled_pages || [],
         estado: dbUser.estado,
     };
 }

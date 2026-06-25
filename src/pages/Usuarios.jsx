@@ -6,6 +6,7 @@ import {
   deleteUsuario,
   getUsuarios,
   toggleUsuarioEstado,
+  updateUsuarioDevelopmentDisabledPages,
   updateUsuarioPermisos,
 } from "../services/usuarioService";
 import { getSedes } from "../services/sedeService";
@@ -17,6 +18,7 @@ import {
   PERMISSION_ACTIONS,
   PERMISSION_MODULES,
 } from "../utils/permissions";
+import { getDevelopmentDisabledPages } from "../utils/developmentFlags";
 
 function PermissionEditor({ disabled = false, permissions, role, onChange }) {
   const isAdmin = role === "Administrador";
@@ -85,7 +87,51 @@ function PermissionEditor({ disabled = false, permissions, role, onChange }) {
   );
 }
 
-export default function Usuarios({ selectedSede, currentUser }) {
+function DevelopmentPagesEditor({ disabled = false, pages, onChange }) {
+  function isChecked(pageId) {
+    return pages.includes(pageId);
+  }
+
+  function togglePage(pageId) {
+    if (disabled) return;
+
+    const nextPages = pages.includes(pageId)
+      ? pages.filter((item) => item !== pageId)
+      : [...pages, pageId];
+
+    onChange(nextPages);
+  }
+
+  return (
+    <div className="development-pages-editor">
+      <div className="development-pages-note">
+        Las paginas marcadas mostraran el aviso EN DESARROLLO, NO DISPONIBLE para este usuario.
+      </div>
+
+      {PERMISSION_MODULES.map((group) => (
+        <div className="development-pages-group" key={group.group}>
+          <h4>{group.group}</h4>
+
+          <div className="development-pages-grid">
+            {group.modules.map((module) => (
+              <label className="development-page-toggle" key={module.id}>
+                <input
+                  type="checkbox"
+                  checked={isChecked(module.id)}
+                  disabled={disabled}
+                  onChange={() => togglePage(module.id)}
+                />
+                <span>{module.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function Usuarios({ selectedSede, currentUser, setCurrentUser }) {
   const [usuarios, setUsuarios] = useState([]);
   const [sedes, setSedes] = useState([]);
   const [search, setSearch] = useState("");
@@ -93,6 +139,7 @@ export default function Usuarios({ selectedSede, currentUser }) {
   const [modal, setModal] = useState(null);
   const [selectedUsuario, setSelectedUsuario] = useState(null);
   const [permissionDraft, setPermissionDraft] = useState([]);
+  const [developmentDraft, setDevelopmentDraft] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -104,6 +151,7 @@ export default function Usuarios({ selectedSede, currentUser }) {
     sedeId: "",
     estado: "Activo",
     permisos: [],
+    developmentDisabledPages: [],
   });
 
   const canCreateUsuarios = canPerform(currentUser, "usuarios", "create");
@@ -183,6 +231,7 @@ export default function Usuarios({ selectedSede, currentUser }) {
         sedeId: sedes[0]?.id || "",
         estado: "Activo",
         permisos: [],
+        developmentDisabledPages: [],
       });
 
       setModal(null);
@@ -214,6 +263,7 @@ export default function Usuarios({ selectedSede, currentUser }) {
   function abrirDetalle(usuario) {
     setSelectedUsuario(usuario);
     setPermissionDraft(getUserPermissions(usuario).filter((permission) => permission !== "all"));
+    setDevelopmentDraft(getDevelopmentDisabledPages(usuario));
     setModal("detalle");
   }
 
@@ -228,12 +278,23 @@ export default function Usuarios({ selectedSede, currentUser }) {
         permissionDraft,
         selectedUsuario.rol
       );
+      await updateUsuarioDevelopmentDisabledPages(
+        selectedUsuario.id,
+        developmentDraft
+      );
+      if (selectedUsuario.id === currentUser?.id) {
+        setCurrentUser?.((user) => ({
+          ...user,
+          developmentDisabledPages: developmentDraft,
+          development_disabled_pages: developmentDraft,
+        }));
+      }
       await loadData();
       setSelectedUsuario(null);
       setModal(null);
     } catch (error) {
       console.error("Error guardando permisos:", error);
-      alert(error.message || "No se pudieron guardar los permisos.");
+      alert(error.message || "No se pudo guardar la configuracion.");
     } finally {
       setSaving(false);
     }
@@ -517,6 +578,22 @@ export default function Usuarios({ selectedSede, currentUser }) {
             onChange={setPermissionDraft}
           />
 
+          <section className="development-section">
+            <div>
+              <h4>Funcionalidades en desarrollo</h4>
+              <p>
+                Activa este aviso para funcionalidades que el usuario no deberia usar todavia,
+                aunque tenga permiso de acceso.
+              </p>
+            </div>
+
+            <DevelopmentPagesEditor
+              disabled={!canEditUsuarios}
+              pages={developmentDraft}
+              onChange={setDevelopmentDraft}
+            />
+          </section>
+
           <div className="modal-actions">
             <button
               type="button"
@@ -533,7 +610,7 @@ export default function Usuarios({ selectedSede, currentUser }) {
                 onClick={handleSavePermisos}
                 disabled={saving}
               >
-                {saving ? "Guardando..." : "Guardar permisos"}
+                {saving ? "Guardando..." : "Guardar configuracion"}
               </button>
             )}
           </div>

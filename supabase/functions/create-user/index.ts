@@ -145,6 +145,11 @@ Deno.serve(async (req) => {
     const accesoTodasSedes = body.acceso === "Todas las sedes";
     const sedeId = body.sedeId || null;
     const permisos = getInitialPermissions(rol, body.permisos);
+    const developmentDisabledPages = Array.isArray(body.development_disabled_pages)
+      ? body.development_disabled_pages.filter((page) => typeof page === "string")
+      : Array.isArray(body.developmentDisabledPages)
+        ? body.developmentDisabledPages.filter((page) => typeof page === "string")
+        : [];
 
     if (!nombre || !email || !rol) {
       return new Response(
@@ -205,6 +210,7 @@ Deno.serve(async (req) => {
           acceso_todas_sedes: accesoTodasSedes,
           estado: "Activo",
           permisos,
+          development_disabled_pages: developmentDisabledPages,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "email" }

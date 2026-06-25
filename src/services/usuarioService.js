@@ -18,6 +18,8 @@ function mapUsuario(row) {
         estado: row.estado,
         permisos: getPermissionsForRole(row.rol, row.permisos || []),
         permissions: getPermissionsForRole(row.rol, row.permisos || []),
+        developmentDisabledPages: row.development_disabled_pages || [],
+        development_disabled_pages: row.development_disabled_pages || [],
     };
 }
 
@@ -43,7 +45,10 @@ export async function getUsuarios() {
 
 export async function createUsuario(form) {
   const { data, error } = await supabase.functions.invoke("create-user", {
-    body: form,
+    body: {
+      ...form,
+      development_disabled_pages: form.developmentDisabledPages || [],
+    },
   });
 
   if (error) {
@@ -104,6 +109,15 @@ export async function updateUsuarioPermisos(id, permisos, rol) {
     const { error } = await supabase
         .from("usuarios")
         .update({ permisos: getPermissionsForRole(rol, permisos) })
+        .eq("id", id);
+
+    if (error) throw error;
+}
+
+export async function updateUsuarioDevelopmentDisabledPages(id, pages) {
+    const { error } = await supabase
+        .from("usuarios")
+        .update({ development_disabled_pages: pages })
         .eq("id", id);
 
     if (error) throw error;

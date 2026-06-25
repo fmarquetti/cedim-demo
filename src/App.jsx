@@ -40,6 +40,7 @@ import { ToastProvider } from "./components/ToastProvider";
 import { AppConfigProvider } from "./context/AppConfigContext";
 import { useAppConfig } from "./context/AppConfigContext";
 import FloatingNotice from "./components/FloatingNotice";
+import DevelopmentNotice from "./components/DevelopmentNotice";
 import { canAccessInternalTools } from "./utils/internalAccess";
 import { canViewPage, getFirstPermittedPage } from "./utils/permissions";
 
@@ -86,7 +87,7 @@ function getSedeId(selectedSede) {
   return "todas";
 }
 
-function getPage(activePage, selectedSede, currentUser, setActivePage) {
+function getPage(activePage, selectedSede, currentUser, setActivePage, setCurrentUser) {
   const sedeId = getSedeId(selectedSede);
 
   const props = {
@@ -94,6 +95,7 @@ function getPage(activePage, selectedSede, currentUser, setActivePage) {
     sedeId,
     currentUser,
     setActivePage,
+    setCurrentUser,
   };
 
   const pages = {
@@ -221,10 +223,11 @@ function AppContent() {
         />
 
         <DemoTour activePage={activePage} currentUser={currentUser} />
+        <DevelopmentNotice currentUser={currentUser} activePage={activePage} />
 
         <div className="page-content" data-tour="page-content">
           {activePageAllowed ? (
-            getPage(activePage, effectiveSelectedSede, currentUser, setActivePage)
+            getPage(activePage, effectiveSelectedSede, currentUser, setActivePage, setCurrentUser)
           ) : (
             <section className="page">
               <div className="empty-state">
