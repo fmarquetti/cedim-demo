@@ -21,6 +21,8 @@ import {
     PanelLeftClose,
     PanelLeftOpen,
     ChevronRight,
+    Menu,
+    X,
     Home,
     Calculator,
     FileSpreadsheet,
@@ -34,6 +36,7 @@ import {
     Ticket,
 } from "lucide-react";
 
+import { useState } from "react";
 import logo from "../assets/logo-cedim.png";
 import TicketReportButton from "./TicketReportButton";
 import { useAppConfig } from "../context/AppConfigContext";
@@ -110,6 +113,7 @@ export default function Sidebar({
     onTicketCreated,
 }) {
     const { config } = useAppConfig();
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     const hiddenMenuItems = Array.isArray(config.hiddenMenuItems)
         ? config.hiddenMenuItems
@@ -148,8 +152,33 @@ export default function Sidebar({
               .toUpperCase()
         : "US";
 
+    const handlePageSelect = (pageId) => {
+        setActivePage(pageId);
+        setMobileMenuOpen(false);
+    };
+
     return (
-        <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
+        <>
+        <button
+            type="button"
+            className="mobile-menu-toggle"
+            onClick={() => setMobileMenuOpen(true)}
+            aria-label="Abrir menu"
+            aria-expanded={mobileMenuOpen}
+        >
+            <Menu size={22} />
+        </button>
+
+        {mobileMenuOpen && (
+            <button
+                type="button"
+                className="mobile-sidebar-backdrop"
+                onClick={() => setMobileMenuOpen(false)}
+                aria-label="Cerrar menu"
+            />
+        )}
+
+        <aside className={`sidebar ${collapsed ? "collapsed" : ""} ${mobileMenuOpen ? "mobile-open" : ""}`}>
             <div className="brand">
                 <img src={brandLogo} alt={config.platformName || "CEDIM"} />
 
@@ -165,6 +194,14 @@ export default function Sidebar({
                     title={collapsed ? "Expandir menú" : "Ocultar menú"}
                 >
                     {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+                </button>
+                <button
+                    type="button"
+                    className="mobile-sidebar-close"
+                    onClick={() => setMobileMenuOpen(false)}
+                    aria-label="Cerrar menu"
+                >
+                    <X size={20} />
                 </button>
             </div>
 
@@ -202,7 +239,7 @@ export default function Sidebar({
                                             className={`nav-item ${
                                                 activePage === item.id ? "active" : ""
                                             }`}
-                                            onClick={() => setActivePage(item.id)}
+                                            onClick={() => handlePageSelect(item.id)}
                                         >
                                             <Icon size={17} />
                                             <span>{item.label}</span>
@@ -237,5 +274,6 @@ export default function Sidebar({
                 </div>
             )}
         </aside>
+        </>
     );
 }

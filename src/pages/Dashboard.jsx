@@ -3,7 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowDownCircle,
+  ArrowDown,
   ArrowUpCircle,
+  ArrowUp,
   Banknote,
   GripVertical,
   RefreshCw,
@@ -290,6 +292,28 @@ const moveWidget = (order, sourceId, targetId) => {
 const isInteractiveDragTarget = (target) =>
   target?.closest?.("button, input, select, textarea, a, [role='button']");
 
+const useMediaQuery = (query) => {
+  const getMatches = () =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia(query).matches
+      : false;
+
+  const [matches, setMatches] = useState(getMatches);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+
+    const mediaQuery = window.matchMedia(query);
+    const handleChange = () => setMatches(mediaQuery.matches);
+
+    handleChange();
+    mediaQuery.addEventListener?.("change", handleChange);
+    return () => mediaQuery.removeEventListener?.("change", handleChange);
+  }, [query]);
+
+  return matches;
+};
+
 const getInitialWidgetOrder = (currentUser) => {
   try {
     const rawOrder = localStorage.getItem(getDashboardWidgetsStorageKey(currentUser));
@@ -314,6 +338,8 @@ export default function Dashboard({ sedeId, currentUser }) {
   const [widgetOrder, setWidgetOrder] = useState(() => getInitialWidgetOrder(currentUser));
   const [draggedWidgetId, setDraggedWidgetId] = useState("");
   const [dragOverWidgetId, setDragOverWidgetId] = useState("");
+  const isMobileWidgetOrdering = useMediaQuery("(max-width: 800px), (pointer: coarse)");
+  const isWidgetDragEnabled = !isMobileWidgetOrdering;
 
   // Filtros de período
   const [periodo, setPeriodo] = useState("6m");
@@ -398,6 +424,13 @@ export default function Dashboard({ sedeId, currentUser }) {
   useEffect(() => {
     if (!verTodasSedes) setVistaComparativa(false);
   }, [verTodasSedes]);
+
+  useEffect(() => {
+    if (isMobileWidgetOrdering) {
+      setDraggedWidgetId("");
+      setDragOverWidgetId("");
+    }
+  }, [isMobileWidgetOrdering]);
 
   // ─── Rango del período ─────────────────────────────────────────────────
   const { desde, hasta } = useMemo(
@@ -600,9 +633,27 @@ export default function Dashboard({ sedeId, currentUser }) {
     }
   };
 
+  const resetWidgetDragState = () => {
+    setDraggedWidgetId("");
+    setDragOverWidgetId("");
+  };
+
+  const handleMobileWidgetMove = (widgetId, direction) => {
+    const normalizedOrder = mergeWidgetOrder(widgetOrder);
+    const currentIndex = normalizedOrder.indexOf(widgetId);
+    const targetWidgetId = normalizedOrder[currentIndex + direction];
+
+    if (currentIndex === -1 || !targetWidgetId) return;
+
+    const nextOrder = moveWidget(normalizedOrder, widgetId, targetWidgetId);
+    setWidgetOrder(nextOrder);
+    void persistWidgetOrder(nextOrder);
+  };
+
   const handleWidgetDragStart = (event, widgetId) => {
-    if (isInteractiveDragTarget(event.target)) {
+    if (!isWidgetDragEnabled || isInteractiveDragTarget(event.target)) {
       event.preventDefault();
+      resetWidgetDragState();
       return;
     }
 
@@ -613,29 +664,35 @@ export default function Dashboard({ sedeId, currentUser }) {
   };
 
   const handleWidgetDragOver = (event, widgetId) => {
+    if (!isWidgetDragEnabled) {
+      resetWidgetDragState();
+      return;
+    }
+
     event.preventDefault();
     if (widgetId !== dragOverWidgetId) setDragOverWidgetId(widgetId);
     event.dataTransfer.dropEffect = "move";
   };
 
   const handleWidgetDrop = (event, targetWidgetId) => {
+    if (!isWidgetDragEnabled) {
+      resetWidgetDragState();
+      return;
+    }
+
     event.preventDefault();
     const sourceWidgetId = event.dataTransfer.getData("text/plain") || draggedWidgetId;
 
-    setWidgetOrder((currentOrder) => {
-      const normalizedOrder = mergeWidgetOrder(currentOrder);
-      const nextOrder = moveWidget(normalizedOrder, sourceWidgetId, targetWidgetId);
-      void persistWidgetOrder(nextOrder);
-      return nextOrder;
-    });
+    const normalizedOrder = mergeWidgetOrder(widgetOrder);
+    const nextOrder = moveWidget(normalizedOrder, sourceWidgetId, targetWidgetId);
+    setWidgetOrder(nextOrder);
+    void persistWidgetOrder(nextOrder);
 
-    setDraggedWidgetId("");
-    setDragOverWidgetId("");
+    resetWidgetDragState();
   };
 
   const handleWidgetDragEnd = () => {
-    setDraggedWidgetId("");
-    setDragOverWidgetId("");
+    resetWidgetDragState();
   };
 
   if (loading) {
@@ -981,7 +1038,7 @@ export default function Dashboard({ sedeId, currentUser }) {
       </div>
 
       <div className="dashboard-widgets-grid">
-        {orderedDashboardWidgets.map((widget) => (
+        {orderedDashboardWidgets.map((widget, index) => (
           <div
             key={widget.id}
             className={[
@@ -992,15 +1049,38 @@ export default function Dashboard({ sedeId, currentUser }) {
             ].filter(Boolean).join(" ")}
             data-widget-id={widget.id}
             data-tour={widget.dataTour}
-            draggable
-            onDragStart={(event) => handleWidgetDragStart(event, widget.id)}
-            onDragOver={(event) => handleWidgetDragOver(event, widget.id)}
-            onDrop={(event) => handleWidgetDrop(event, widget.id)}
-            onDragEnd={handleWidgetDragEnd}
+            draggable={isWidgetDragEnabled}
+            onDragStart={isWidgetDragEnabled ? (event) => handleWidgetDragStart(event, widget.id) : undefined}
+            onDragOver={isWidgetDragEnabled ? (event) => handleWidgetDragOver(event, widget.id) : undefined}
+            onDrop={isWidgetDragEnabled ? (event) => handleWidgetDrop(event, widget.id) : undefined}
+            onDragEnd={isWidgetDragEnabled ? handleWidgetDragEnd : undefined}
           >
-            <div className="dashboard-widget-drag-handle" title="Arrastrar para reordenar">
-              <GripVertical size={16} />
-            </div>
+            {isWidgetDragEnabled ? (
+              <div className="dashboard-widget-drag-handle" title="Arrastrar para reordenar">
+                <GripVertical size={16} />
+              </div>
+            ) : (
+              <div className="dashboard-widget-mobile-order" aria-label="Ordenar widget">
+                <button
+                  type="button"
+                  onClick={() => handleMobileWidgetMove(widget.id, -1)}
+                  disabled={index === 0}
+                  aria-label="Mover widget arriba"
+                  title="Mover arriba"
+                >
+                  <ArrowUp size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMobileWidgetMove(widget.id, 1)}
+                  disabled={index === orderedDashboardWidgets.length - 1}
+                  aria-label="Mover widget abajo"
+                  title="Mover abajo"
+                >
+                  <ArrowDown size={15} />
+                </button>
+              </div>
+            )}
             {widget.content}
           </div>
         ))}
