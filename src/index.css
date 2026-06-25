@@ -859,6 +859,194 @@ td {
   min-height: 92px;
 }
 
+.ticket-report-slot {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.ticket-report-button {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  cursor: pointer;
+  font-weight: 800;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.ticket-report-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.24);
+  transform: translateY(-1px);
+}
+
+.ticket-report-button:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.ticket-report-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar.collapsed .ticket-report-slot,
+.app-layout.sidebar-collapsed .ticket-report-slot {
+  justify-items: center;
+  padding: 10px 8px;
+}
+
+.sidebar.collapsed .ticket-report-button,
+.app-layout.sidebar-collapsed .ticket-report-button {
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
+}
+
+.ticket-report-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5200;
+  padding: 16px;
+  background: rgba(7, 20, 38, 0.58);
+  display: grid;
+  place-items: center;
+}
+
+.ticket-report-modal {
+  width: min(1120px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 24px 80px rgba(7, 20, 38, 0.28);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ticket-report-modal-header,
+.ticket-report-modal-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ticket-report-modal-header h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+}
+
+.ticket-report-modal-header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ticket-report-modal-body {
+  overflow: auto;
+  padding: 18px 20px;
+  display: grid;
+  gap: 16px;
+}
+
+.ticket-report-modal-actions {
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+  justify-content: flex-end;
+}
+
+.ticket-report-error {
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #991b1b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ticket-report-error.warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.ticket-screenshot-editor {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  overflow: hidden;
+}
+
+.ticket-editor-toolbar {
+  min-height: 48px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ticket-editor-toolbar span {
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.ticket-canvas-wrap {
+  max-height: 48vh;
+  overflow: auto;
+  padding: 12px;
+}
+
+.ticket-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: white;
+  touch-action: none;
+}
+
+.ticket-screenshot-detail {
+  display: grid;
+  gap: 8px;
+}
+
+.ticket-screenshot-preview {
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: white;
+}
+
 @media (max-width: 760px) {
   .tickets-table {
     display: none;
@@ -904,6 +1092,41 @@ td {
     color: var(--muted);
     font-size: 12px;
     font-weight: 700;
+  }
+
+  .ticket-report-overlay {
+    padding: 8px;
+  }
+
+  .ticket-report-modal {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+  }
+
+  .ticket-report-modal-header,
+  .ticket-report-modal-body,
+  .ticket-report-modal-actions {
+    padding: 14px;
+  }
+
+  .ticket-report-modal-actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--surface);
+    flex-direction: column-reverse;
+  }
+
+  .ticket-report-modal-actions button {
+    width: 100%;
+  }
+
+  .ticket-editor-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ticket-editor-toolbar button {
+    width: 100%;
   }
 }
 

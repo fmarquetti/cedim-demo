@@ -209,6 +209,7 @@ function AppContent() {
         currentUser={currentUser}
         collapsed={sidebarCollapsed}
         setCollapsed={setSidebarCollapsed}
+        onTicketCreated={() => window.dispatchEvent(new Event("tickets:changed"))}
       />
 
       <main className="main-content">

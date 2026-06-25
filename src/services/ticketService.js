@@ -1,6 +1,7 @@
 import { supabase } from "../lib/supabaseClient";
 
 const STORAGE_KEY = "cedim_support_tickets";
+const STORAGE_BUCKET = "genetics-archivos";
 
 function isMissingTableError(error) {
   const message = String(error?.message || "").toLowerCase();
@@ -96,6 +97,10 @@ function mapTicket(row) {
     adjuntoPath: adjuntos[0]?.path || row.adjunto_path || "",
     adjuntoTipo: adjuntos[0]?.tipo || row.adjunto_tipo || "",
     adjuntoSize: adjuntos[0]?.size || row.adjunto_size || 0,
+    screenshotPath: row.screenshot_path || row.captura_path || "",
+    pageUrl: row.page_url || "",
+    pagePath: row.page_path || "",
+    browserInfo: row.browser_info || "",
     comentarios: (row.ticket_comentarios || row.ticket_comments || row.comentarios || []).map(
       mapComment
     ),
@@ -181,6 +186,10 @@ export async function createTicket(form, currentUser) {
           estado: "Abierto",
           creado_por: userId(currentUser),
           sede_id: currentUser?.sedeId || null,
+          screenshot_path: form.screenshotPath || null,
+          page_url: form.pageUrl || null,
+          page_path: form.pagePath || null,
+          browser_info: form.browserInfo || null,
         })
         .select()
         .single();
@@ -226,6 +235,10 @@ export async function createTicket(form, currentUser) {
         adjunto_path: form.adjuntoPath || "",
         adjunto_tipo: form.adjuntoTipo || "",
         adjunto_size: form.adjuntoSize || 0,
+        screenshot_path: form.screenshotPath || "",
+        page_url: form.pageUrl || "",
+        page_path: form.pagePath || "",
+        browser_info: form.browserInfo || "",
         created_at: now,
         updated_at: now,
         comentarios: [
@@ -245,6 +258,125 @@ export async function createTicket(form, currentUser) {
       ticket.comentarios[0].ticket_id = ticket.id;
       writeLocalTickets([ticket, ...tickets]);
       return mapTicket(ticket);
+    }
+  );
+}
+
+export async function addTicketAttachment(ticketId, uploadedFile) {
+  if (!ticketId || !uploadedFile?.path) return null;
+
+  return withLocalFallback(
+    async () => {
+      const { data, error } = await supabase
+        .from("ticket_adjuntos")
+        .insert({
+          ticket_id: ticketId,
+          nombre_archivo: uploadedFile.nombre || uploadedFile.name || "archivo",
+          storage_path: uploadedFile.path,
+          mime_type: uploadedFile.tipo || uploadedFile.type || null,
+          size_bytes: uploadedFile.size || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return mapAttachment(data);
+    },
+    () => {
+      const tickets = readLocalTickets();
+      const now = new Date().toISOString();
+      const attachment = {
+        id: crypto.randomUUID(),
+        ticket_id: ticketId,
+        nombre_archivo: uploadedFile.nombre || uploadedFile.name || "archivo",
+        storage_path: uploadedFile.path,
+        mime_type: uploadedFile.tipo || uploadedFile.type || "",
+        size_bytes: uploadedFile.size || 0,
+        created_at: now,
+      };
+
+      writeLocalTickets(
+        tickets.map((ticket) =>
+          ticket.id === ticketId
+            ? {
+                ...ticket,
+                updated_at: now,
+                adjuntos: [...(ticket.adjuntos || []), attachment],
+              }
+            : ticket
+        )
+      );
+
+      return mapAttachment(attachment);
+    }
+  );
+}
+
+export async function uploadTicketFile(path, file) {
+  if (!path || !file) return null;
+
+  const { data, error } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(path, file, {
+      cacheControl: "3600",
+      upsert: true,
+      contentType: file.type || "image/png",
+    });
+
+  if (error) throw error;
+
+  return {
+    path: data?.path || path,
+    nombre: file.name || path.split("/").pop() || "archivo",
+    tipo: file.type || "",
+    size: file.size || 0,
+  };
+}
+
+export async function updateTicketScreenshot(ticketId, payload) {
+  const nextValues = {
+    screenshot_path: payload?.screenshotPath || payload?.screenshot_path || null,
+    page_url: payload?.pageUrl || payload?.page_url || null,
+    page_path: payload?.pagePath || payload?.page_path || null,
+    browser_info: payload?.browserInfo || payload?.browser_info || null,
+  };
+
+  return withLocalFallback(
+    async () => {
+      const { data: rpcData, error: rpcError } = await supabase.rpc("set_ticket_screenshot", {
+        ticket_id: ticketId,
+        screenshot_path: nextValues.screenshot_path,
+        page_url: nextValues.page_url,
+        page_path: nextValues.page_path,
+        browser_info: nextValues.browser_info,
+      });
+
+      if (!rpcError) return mapTicket(rpcData || { id: ticketId, ...nextValues });
+
+      const { data, error } = await supabase
+        .from("tickets")
+        .update(nextValues)
+        .eq("id", ticketId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return mapTicket(data);
+    },
+    () => {
+      const tickets = readLocalTickets();
+      const now = new Date().toISOString();
+      const nextTickets = tickets.map((ticket) =>
+        ticket.id === ticketId
+          ? {
+              ...ticket,
+              ...nextValues,
+              updated_at: now,
+            }
+          : ticket
+      );
+      writeLocalTickets(nextTickets);
+      return mapTicket(nextTickets.find((ticket) => ticket.id === ticketId));
     }
   );
 }

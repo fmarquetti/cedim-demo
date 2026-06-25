@@ -16,7 +16,7 @@ import {
   getTickets,
   updateTicketAdmin,
 } from "../services/ticketService";
-import { uploadArchivo } from "../services/storageService";
+import { getSignedArchivoUrl, uploadArchivo } from "../services/storageService";
 
 const CATEGORIAS = ["Error", "Mejora", "Consulta", "Configuración"];
 const PRIORIDADES = ["Baja", "Media", "Alta", "Urgente"];
@@ -73,6 +73,7 @@ export default function Tickets({ currentUser }) {
     prioridadInterna: "Media",
   });
   const [commentDraft, setCommentDraft] = useState("");
+  const [screenshotUrl, setScreenshotUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -94,6 +95,38 @@ export default function Tickets({ currentUser }) {
     queueMicrotask(() => loadData());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, currentUser?.email, currentUser?.role]);
+
+  useEffect(() => {
+    function handleTicketsChanged() {
+      loadData();
+    }
+
+    window.addEventListener("tickets:changed", handleTicketsChanged);
+    return () => window.removeEventListener("tickets:changed", handleTicketsChanged);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, currentUser?.email, currentUser?.role]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadScreenshotUrl() {
+      setScreenshotUrl("");
+      if (modal !== "detalle" || !selectedTicket?.screenshotPath) return;
+
+      try {
+        const url = await getSignedArchivoUrl(selectedTicket.screenshotPath);
+        if (active) setScreenshotUrl(url || "");
+      } catch (error) {
+        console.error("Error cargando captura del ticket:", error);
+        if (active) setScreenshotUrl("");
+      }
+    }
+
+    loadScreenshotUrl();
+    return () => {
+      active = false;
+    };
+  }, [modal, selectedTicket?.screenshotPath]);
 
   const filteredTickets = useMemo(() => {
     const searchValue = normalizeText(search);
@@ -181,6 +214,7 @@ export default function Tickets({ currentUser }) {
 
   function openDetail(ticket) {
     setSelectedTicket(ticket);
+    setScreenshotUrl("");
     setAdminDraft({
       estado: ticket.estado,
       prioridadInterna: ticket.prioridadInterna || ticket.prioridad,
@@ -510,6 +544,24 @@ export default function Tickets({ currentUser }) {
                   </strong>
                 </div>
               )}
+              <div className="full ticket-screenshot-detail">
+                <span>Captura</span>
+                {selectedTicket.screenshotPath ? (
+                  screenshotUrl ? (
+                    <a href={screenshotUrl} target="_blank" rel="noreferrer">
+                      <img
+                        className="ticket-screenshot-preview"
+                        src={screenshotUrl}
+                        alt={`Captura del ticket ${selectedTicket.codigo}`}
+                      />
+                    </a>
+                  ) : (
+                    <strong>Cargando captura...</strong>
+                  )
+                ) : (
+                  <strong>No hay captura disponible.</strong>
+                )}
+              </div>
             </div>
 
             {admin && (
