@@ -866,6 +866,16 @@ td {
   padding: 10px 12px;
 }
 
+.ticket-report-global {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 10050;
+  padding: 0;
+  width: auto;
+  max-width: min(280px, calc(100vw - 48px));
+}
+
 .ticket-report-button {
   width: 100%;
   min-height: 44px;
@@ -883,6 +893,16 @@ td {
     background 0.18s ease,
     border-color 0.18s ease,
     transform 0.18s ease;
+}
+
+.ticket-report-global .ticket-report-button {
+  width: auto;
+  min-width: 188px;
+  padding: 0 16px;
+  border-color: rgba(2, 139, 175, 0.28);
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: white;
+  box-shadow: 0 14px 32px rgba(7, 20, 38, 0.22);
 }
 
 .ticket-report-button:hover:not(:disabled) {
@@ -919,7 +939,7 @@ td {
 .ticket-report-overlay {
   position: fixed;
   inset: 0;
-  z-index: 5200;
+  z-index: 10060;
   padding: 16px;
   background: rgba(7, 20, 38, 0.58);
   display: grid;
@@ -1096,6 +1116,24 @@ td {
 
   .ticket-report-overlay {
     padding: 8px;
+  }
+
+  .ticket-report-global {
+    right: 16px;
+    bottom: 88px;
+    max-width: calc(100vw - 32px);
+  }
+
+  .ticket-report-global .ticket-report-button {
+    width: 52px;
+    min-width: 52px;
+    height: 52px;
+    padding: 0;
+    border-radius: 50%;
+  }
+
+  .ticket-report-global .ticket-report-button span {
+    display: none;
   }
 
   .ticket-report-modal {

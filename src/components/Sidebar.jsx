@@ -35,7 +35,6 @@ import {
 } from "lucide-react";
 
 import logo from "../assets/logo-cedim.png";
-import TicketReportButton from "./TicketReportButton";
 import { useAppConfig } from "../context/AppConfigContext";
 import { canAccessInternalTools } from "../utils/internalAccess";
 import { canViewPage } from "../utils/permissions";
@@ -107,7 +106,6 @@ export default function Sidebar({
     currentUser,
     collapsed,
     setCollapsed,
-    onTicketCreated,
 }) {
     const { config } = useAppConfig();
 
@@ -214,15 +212,6 @@ export default function Sidebar({
                     );
                 })}
             </nav>
-
-            {currentUser && (
-                <TicketReportButton
-                    currentUser={currentUser}
-                    currentPage={activePage}
-                    collapsed={collapsed}
-                    onCreated={onTicketCreated}
-                />
-            )}
 
             {currentUser && (
                 <div className="sidebar-user">

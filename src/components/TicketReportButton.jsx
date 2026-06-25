@@ -8,6 +8,7 @@ export default function TicketReportButton({
   currentUser,
   currentPage,
   collapsed = false,
+  global = false,
   onCreated,
 }) {
   const [capturing, setCapturing] = useState(false);
@@ -27,9 +28,15 @@ export default function TicketReportButton({
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
         ignoreElements: (element) =>
+          element.classList?.contains("ticket-report-global") ||
           element.classList?.contains("ticket-report-slot") ||
           element.classList?.contains("ticket-report-button") ||
           element.classList?.contains("ticket-report-error") ||
+          element.classList?.contains("ticket-report-modal-overlay") ||
+          element.classList?.contains("ticket-report-modal") ||
+          element.classList?.contains("ticket-screenshot-editor") ||
+          element.closest?.(".ticket-report-modal") ||
+          element.closest?.(".ticket-screenshot-editor") ||
           element.hasAttribute?.("data-ticket-report-modal"),
       });
 
@@ -45,7 +52,7 @@ export default function TicketReportButton({
   if (!currentUser) return null;
 
   return (
-    <div className="ticket-report-slot">
+    <div className={`ticket-report-slot ${global ? "ticket-report-global" : ""}`}>
       <button
         type="button"
         className="ticket-report-button"

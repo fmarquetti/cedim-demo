@@ -129,7 +129,11 @@ export default function TicketReportModal({
   }
 
   return (
-    <div className="ticket-report-overlay" data-ticket-report-modal onClick={onClose}>
+    <div
+      className="ticket-report-overlay ticket-report-modal-overlay"
+      data-ticket-report-modal
+      onClick={onClose}
+    >
       <form className="ticket-report-modal" onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()}>
         <div className="ticket-report-modal-header">
           <div>
