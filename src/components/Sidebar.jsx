@@ -35,6 +35,8 @@ import {
 
 import logo from "../assets/logo-cedim.png";
 import { useAppConfig } from "../context/AppConfigContext";
+import { canAccessInternalTools } from "../utils/internalAccess";
+import { canViewPage } from "../utils/permissions";
 
 const menuGroups = [
     {
@@ -91,6 +93,7 @@ const menuGroups = [
             { id: "sedes", label: "Sociedades / Sedes", icon: Building2 },
             { id: "usuarios", label: "Usuarios", icon: UserCog },
             { id: "configuracion", label: "Configuración", icon: Settings },
+            { id: "propuestasComerciales", label: "Propuestas", icon: FileText, internalOnly: true },
         ],
     },
 ];
@@ -108,22 +111,18 @@ export default function Sidebar({
         ? config.hiddenMenuItems
         : [];
 
-    const userPermissions = Array.isArray(currentUser?.permissions)
-        ? currentUser.permissions
-        : [];
-
     const canSeeItem = (item) => {
         if (!currentUser) return false;
+
+        if (item.internalOnly) {
+            return canAccessInternalTools(currentUser);
+        }
 
         if (hiddenMenuItems.includes(item.id)) {
             return false;
         }
 
-        if (userPermissions.includes("all")) {
-            return true;
-        }
-
-        return userPermissions.includes(item.id);
+        return canViewPage(currentUser, item.id);
     };
 
     const visibleMenuGroups = menuGroups

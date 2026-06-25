@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-05-22T22:32:34.579Z",
+  "baseUrl": "http://localhost:5173",
+  "screenshots": {
+    "dashboard": "missing",
+    "ingresos": "missing",
+    "egresos": "missing",
+    "bancos": "missing",
+    "ordenesPago": "missing",
+    "facturacion": "missing",
+    "iva": "missing",
+    "contabilidad": "missing",
+    "panelContador": "missing",
+    "periodosContables": "missing",
+    "auditoriaContable": "missing",
+    "asientosManuales": "missing",
+    "saldosIniciales": "missing",
+    "cuentasCorrientesEntidades": "missing",
+    "importaciones": "missing",
+    "historialAuditoria": "missing",
+    "configuracionFiscal": "missing",
+    "cierreEjercicio": "missing"
+  }
+}

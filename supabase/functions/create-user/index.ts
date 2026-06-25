@@ -81,19 +81,28 @@ Deno.serve(async (req) => {
 
     const { data: currentProfile, error: profileError } = await supabaseAdmin
       .from("usuarios")
-      .select("id, rol, estado")
+      .select("id, rol, estado, permisos")
       .eq("auth_user_id", currentAuthUser.id)
       .single();
+
+    const currentPermissions = Array.isArray(currentProfile?.permisos)
+      ? currentProfile.permisos
+      : [];
+    const canCreateUsers =
+      currentProfile?.rol === "Administrador" ||
+      currentPermissions.includes("all") ||
+      currentPermissions.includes("usuarios.create") ||
+      currentPermissions.includes("usuarios");
 
     if (
       profileError ||
       !currentProfile ||
-      currentProfile.rol !== "Administrador" ||
-      currentProfile.estado !== "Activo"
+      currentProfile.estado !== "Activo" ||
+      !canCreateUsers
     ) {
       return new Response(
         JSON.stringify({
-          error: "Solo un administrador puede crear usuarios.",
+          error: "No tenes permisos para crear usuarios.",
         }),
         {
           status: 403,
@@ -109,6 +118,11 @@ Deno.serve(async (req) => {
     const rol = body.rol || "Operador";
     const accesoTodasSedes = body.acceso === "Todas las sedes";
     const sedeId = body.sedeId || null;
+    const permisosSolicitados = Array.isArray(body.permisos) ? body.permisos : [];
+    const permisos =
+      rol === "Administrador"
+        ? ["all"]
+        : permisosSolicitados.filter((permiso) => permiso !== "all");
 
     if (!nombre || !email || !rol) {
       return new Response(
@@ -168,7 +182,7 @@ Deno.serve(async (req) => {
           rol,
           acceso_todas_sedes: accesoTodasSedes,
           estado: "Activo",
-          permisos: rol === "Administrador" ? ["all"] : [],
+          permisos,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "email" }

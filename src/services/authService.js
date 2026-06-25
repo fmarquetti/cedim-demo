@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { getPermissionsForRole } from "../utils/permissions";
 
 function normalizeUser(dbUser) {
     return {
@@ -15,7 +16,8 @@ function normalizeUser(dbUser) {
             ? "Todas las sedes"
             : dbUser.usuario_sedes?.[0]?.sedes?.nombre || "",
         sedeId: dbUser.usuario_sedes?.[0]?.sedes?.id || null,
-        permissions: dbUser.permisos || [],
+        permissions: getPermissionsForRole(dbUser.rol, dbUser.permisos || []),
+        permisos: getPermissionsForRole(dbUser.rol, dbUser.permisos || []),
         estado: dbUser.estado,
     };
 }

@@ -272,7 +272,7 @@ export default function Importaciones({ sedeId }) {
             </div>
 
             {validation.errores.length > 0 && (
-              <div className="table-card" style={{ marginTop: 14 }}>
+              <div className="table-card table-card-spaced">
                 <table>
                   <thead><tr><th>Fila</th><th>Campo</th><th>Error</th></tr></thead>
                   <tbody>
@@ -285,7 +285,7 @@ export default function Importaciones({ sedeId }) {
             )}
 
             {validation.warnings?.length > 0 && (
-              <div className="table-card" style={{ marginTop: 14 }}>
+              <div className="table-card table-card-spaced">
                 <table>
                   <thead><tr><th>Fila</th><th>Campo</th><th>Advertencia</th></tr></thead>
                   <tbody>
@@ -313,7 +313,7 @@ export default function Importaciones({ sedeId }) {
 
         {result && (
           <>
-            <div className="table-card" style={{ marginTop: 14 }}>
+            <div className="table-card table-card-spaced">
               <table>
                 <tbody>
                   <tr><th>Procesados</th><td>{result.procesados ?? result.importados ?? 0}</td></tr>
@@ -325,7 +325,7 @@ export default function Importaciones({ sedeId }) {
             </div>
 
             {result.errores?.length > 0 && (
-              <div className="table-card" style={{ marginTop: 14 }}>
+              <div className="table-card table-card-spaced">
                 <table>
                   <thead><tr><th>Fila</th><th>Error</th></tr></thead>
                   <tbody>

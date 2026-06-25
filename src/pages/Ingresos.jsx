@@ -30,6 +30,7 @@ import { getSedes } from "../services/sedeService";
 
 import { formatMoney, formatDate, toDate } from "../utils/format";
 import { toast } from "../components/ToastProvider";
+import { canPerform } from "../utils/permissions";
 
 import ConceptoSelector from "../components/ConceptoSelector";
 import { getConceptoItems } from "../services/conceptoItemService";
@@ -89,8 +90,11 @@ function formatFechaInput(fecha) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export default function Ingresos({ selectedSede, sedeId }) {
+export default function Ingresos({ selectedSede, sedeId, currentUser }) {
   const facturaInputRef = useRef(null);
+  const canCreateIngresos = canPerform(currentUser, "ingresos", "create");
+  const canEditIngresos = canPerform(currentUser, "ingresos", "edit");
+  const canDeleteIngresos = canPerform(currentUser, "ingresos", "delete");
 
   const [ingresos, setIngresos] = useState([]);
   const [sedes, setSedes] = useState([]);
@@ -601,6 +605,7 @@ export default function Ingresos({ selectedSede, sedeId }) {
 
   async function handleCreate(e) {
     e.preventDefault();
+    if (!canCreateIngresos) return;
 
     if (form.distribuciones?.length) {
       const total = totalDistribucion();
@@ -644,6 +649,8 @@ export default function Ingresos({ selectedSede, sedeId }) {
   }
 
   async function handleDelete(id) {
+    if (!canDeleteIngresos) return;
+
     if (!window.confirm("¿Eliminar este ingreso?")) return;
     setDeletingId(id);
     try {
@@ -658,6 +665,8 @@ export default function Ingresos({ selectedSede, sedeId }) {
   }
 
   async function marcarCobrado(id) {
+    if (!canEditIngresos) return;
+
     try {
       await marcarIngresoCobrado(id);
       await loadData();
@@ -686,6 +695,8 @@ export default function Ingresos({ selectedSede, sedeId }) {
   }
 
   async function importarFacturaFiscal(e) {
+    if (!canCreateIngresos) return;
+
     const file = e.target.files?.[0];
     if (!file) return;
     try {
@@ -728,6 +739,7 @@ export default function Ingresos({ selectedSede, sedeId }) {
 
   async function confirmarIngresoImportado(e) {
     e.preventDefault();
+    if (!canCreateIngresos) return;
     if (!ingresoPendiente.conceptosItems?.length && !ingresoPendiente.concepto?.trim()) {
       toast.error("Seleccioná al menos un concepto o cargá uno manual.");
       return;
@@ -943,21 +955,25 @@ export default function Ingresos({ selectedSede, sedeId }) {
           >
             <RefreshCw size={16} /> Actualizar
           </button>
-          <button
-            className="secondary-button"
-            onClick={() => facturaInputRef.current?.click()}
-            disabled={importandoFactura}
-            data-tour="ingresos-importar-factura"
-          >
-            <Upload size={16} />{importandoFactura ? "Leyendo factura..." : "Importar factura PDF"}
-          </button>
-          <button
-            className="primary-button"
-            onClick={() => setModal("nuevo")}
-            data-tour="ingresos-nuevo"
-          >
-            <Plus size={16} /> Nuevo ingreso
-          </button>
+          {canCreateIngresos && (
+            <button
+              className="secondary-button"
+              onClick={() => facturaInputRef.current?.click()}
+              disabled={importandoFactura}
+              data-tour="ingresos-importar-factura"
+            >
+              <Upload size={16} />{importandoFactura ? "Leyendo factura..." : "Importar factura PDF"}
+            </button>
+          )}
+          {canCreateIngresos && (
+            <button
+              className="primary-button"
+              onClick={() => setModal("nuevo")}
+              data-tour="ingresos-nuevo"
+            >
+              <Plus size={16} /> Nuevo ingreso
+            </button>
+          )}
         </div>
       </div>
 
@@ -1086,14 +1102,16 @@ export default function Ingresos({ selectedSede, sedeId }) {
                           <ExternalLink size={16} />
                         </button>
                       )}
-                      {item.estado === "Pendiente" && (
+                      {canEditIngresos && item.estado === "Pendiente" && (
                         <button title="Marcar como cobrado" onClick={() => marcarCobrado(item.id)}>
                           <CheckCircle size={16} />
                         </button>
                       )}
-                      <button title="Eliminar ingreso" onClick={() => handleDelete(item.id)} disabled={deletingId === item.id}>
-                        <Trash2 size={16} />
-                      </button>
+                      {canDeleteIngresos && (
+                        <button title="Eliminar ingreso" onClick={() => handleDelete(item.id)} disabled={deletingId === item.id}>
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -1106,7 +1124,7 @@ export default function Ingresos({ selectedSede, sedeId }) {
         </div>
       </div>
 
-      {modal === "nuevo" && (
+      {modal === "nuevo" && canCreateIngresos && (
         <Modal title="Nuevo ingreso" onClose={() => setModal(null)}>
           <form className="form-grid" onSubmit={handleCreate}>
             <label>Fecha <input type="date" required value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} /></label>
@@ -1301,7 +1319,7 @@ export default function Ingresos({ selectedSede, sedeId }) {
         </Modal>
       )}
 
-      {modal === "revisarFactura" && ingresoPendiente && (
+      {modal === "revisarFactura" && ingresoPendiente && canCreateIngresos && (
         <Modal title="Revisar factura importada" onClose={() => setModal(null)}>
           <form className="form-grid" onSubmit={confirmarIngresoImportado}>
             <div className="full">

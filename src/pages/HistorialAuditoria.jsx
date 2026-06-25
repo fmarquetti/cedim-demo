@@ -211,11 +211,11 @@ export default function HistorialAuditoria({ selectedSede, sedeId, currentUser }
               <p><strong>Severidad:</strong> <SeveridadBadge value={detalle.severidad} /></p>
             </div>
             <h4>Datos antes</h4>
-            <pre style={{ maxHeight: 180, overflow: "auto" }}>{jsonText(detalle.datosAntes)}</pre>
+            <pre className="audit-json-preview">{jsonText(detalle.datosAntes)}</pre>
             <h4>Datos despues</h4>
-            <pre style={{ maxHeight: 180, overflow: "auto" }}>{jsonText(detalle.datosDespues)}</pre>
+            <pre className="audit-json-preview">{jsonText(detalle.datosDespues)}</pre>
             <h4>Metadata</h4>
-            <pre style={{ maxHeight: 160, overflow: "auto" }}>{jsonText(detalle.metadata)}</pre>
+            <pre className="audit-json-preview audit-json-preview-small">{jsonText(detalle.metadata)}</pre>
           </Modal>
         </div>
       )}

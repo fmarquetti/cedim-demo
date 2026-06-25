@@ -419,12 +419,12 @@ export default function AsientosManuales({ selectedSede, sedeId, currentUser }) 
                     value={form.observaciones}
                     onChange={(event) => setForm({ ...form, observaciones: event.target.value })}
                     disabled={selected && selected.estado !== "borrador"}
-                    style={{ minHeight: 74 }}
+                    className="textarea-compact"
                   />
                 </label>
               </div>
 
-              <div className="table-card" style={{ marginTop: 16 }}>
+              <div className="table-card table-card-form">
                 <table>
                   <thead>
                     <tr>
@@ -471,7 +471,7 @@ export default function AsientosManuales({ selectedSede, sedeId, currentUser }) 
                 </table>
               </div>
 
-              <div className="filters-bar" style={{ marginTop: 14 }}>
+              <div className="filters-bar totals-bar">
                 <button type="button" className="secondary-button" onClick={() => setForm((prev) => ({ ...prev, lineas: [...prev.lineas, emptyLine()] }))} disabled={selected && selected.estado !== "borrador"}>
                   <Plus size={16} /> Agregar linea
                 </button>
@@ -512,7 +512,7 @@ export default function AsientosManuales({ selectedSede, sedeId, currentUser }) 
               </p>
               <label>
                 Motivo de anulacion
-                <textarea value={motivo} onChange={(event) => setMotivo(event.target.value)} style={{ minHeight: 90 }} />
+                <textarea value={motivo} onChange={(event) => setMotivo(event.target.value)} className="textarea-medium" />
               </label>
               <div className="modal-actions">
                 <button type="button" className="secondary-button" onClick={() => setModal(null)}>Cancelar</button>

@@ -312,7 +312,7 @@ export default function SaldosIniciales({ selectedSede, sedeId, currentUser }) {
           </table>
         </div>
 
-        <div className="filters-bar" style={{ marginTop: 14 }}>
+        <div className="filters-bar totals-bar">
           <button type="button" className="secondary-button" onClick={() => setLineas((prev) => [...prev, emptyLine()])} disabled={estado === "confirmado"}>
             <Plus size={16} /> Agregar linea
           </button>

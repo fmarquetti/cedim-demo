@@ -195,8 +195,8 @@ export default function AuditoriaContable({ selectedSede, sedeId, currentUser, s
         </button>
       </div>
 
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <p className="muted" style={{ marginTop: 0 }}>
+      <div className="panel">
+        <p className="muted no-margin-top">
           Las inconsistencias no se corrigen automaticamente. Para ajustes contables usa Asientos Manuales.
         </p>
         {setActivePage && (
@@ -213,7 +213,7 @@ export default function AuditoriaContable({ selectedSede, sedeId, currentUser, s
       {resultado && (
         <div className="panel">
           <h3>Resultado de reparación</h3>
-          <p className="muted" style={{ marginTop: 0 }}>
+          <p className="muted no-margin-top">
             Procesados: {resultado.procesados} | Reparados: {resultado.reparados} | Omitidos: {resultado.omitidos} | Errores: {resultado.errores.length}
           </p>
           {resultado.errores.length > 0 && (
@@ -267,8 +267,8 @@ export default function AuditoriaContable({ selectedSede, sedeId, currentUser, s
               const rows = auditoria.pendientes[key] || [];
 
               return (
-                <details className="table-card" key={key} open={rows.length > 0} style={{ marginTop: 12 }}>
-                  <summary style={{ cursor: "pointer", padding: 12, fontWeight: 700 }}>
+                <details className="table-card details-table" key={key} open={rows.length > 0}>
+                  <summary className="details-summary">
                     {title} ({rows.length})
                   </summary>
                   <table>
@@ -313,8 +313,8 @@ export default function AuditoriaContable({ selectedSede, sedeId, currentUser, s
               const rows = auditoria.inconsistencias[key] || [];
 
               return (
-                <details className="table-card" key={key} open={rows.length > 0} style={{ marginTop: 12 }}>
-                  <summary style={{ cursor: "pointer", padding: 12, fontWeight: 700 }}>
+                <details className="table-card details-table" key={key} open={rows.length > 0}>
+                  <summary className="details-summary">
                     {title} ({rows.length})
                   </summary>
                   <table>

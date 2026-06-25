@@ -130,7 +130,7 @@ export default function ConfiguracionFiscal() {
               )}
               {!loading &&
                 tributos.map((item) => (
-                  <tr key={item.id} onClick={() => editTributo(item)} style={{ cursor: "pointer" }}>
+                  <tr key={item.id} onClick={() => editTributo(item)} className="clickable-row">
                     <td><strong>{item.codigo}</strong></td>
                     <td>{item.nombre}</td>
                     <td>{item.categoria}</td>

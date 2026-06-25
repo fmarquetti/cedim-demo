@@ -6,16 +6,93 @@ import {
   deleteUsuario,
   getUsuarios,
   toggleUsuarioEstado,
+  updateUsuarioPermisos,
 } from "../services/usuarioService";
 import { getSedes } from "../services/sedeService";
+import {
+  canPerform,
+  getModuleActions,
+  getPermissionsForRole,
+  getUserPermissions,
+  PERMISSION_ACTIONS,
+  PERMISSION_MODULES,
+} from "../utils/permissions";
 
-export default function Usuarios({ selectedSede }) {
+function PermissionEditor({ disabled = false, permissions, role, onChange }) {
+  const isAdmin = role === "Administrador";
+  const effectivePermissions = isAdmin ? ["all"] : permissions;
+
+  function isChecked(permission) {
+    return effectivePermissions.includes("all") || effectivePermissions.includes(permission);
+  }
+
+  function togglePermission(permission) {
+    if (disabled || isAdmin) return;
+
+    const nextPermissions = permissions.includes(permission)
+      ? permissions.filter((item) => item !== permission)
+      : [...permissions, permission];
+
+    onChange(nextPermissions);
+  }
+
+  return (
+    <div className="permissions-editor">
+      {isAdmin && (
+        <div className="permissions-admin-note">
+          El rol Administrador tiene acceso total mediante el permiso all.
+        </div>
+      )}
+
+      {PERMISSION_MODULES.map((group) => (
+        <div className="permissions-group" key={group.group}>
+          <h4>{group.group}</h4>
+
+          <div className="permissions-grid">
+            {group.modules.map((module) => {
+              const actions = getModuleActions(module);
+
+              return (
+                <div className="permissions-row" key={module.id}>
+                  <strong>{module.label}</strong>
+
+                  <div>
+                    {PERMISSION_ACTIONS.filter((action) =>
+                      actions.includes(action.id)
+                    ).map((action) => {
+                      const permission = `${module.id}.${action.id}`;
+
+                      return (
+                        <label key={permission}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked(permission)}
+                            disabled={disabled || isAdmin}
+                            onChange={() => togglePermission(permission)}
+                          />
+                          <span>{action.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function Usuarios({ selectedSede, currentUser }) {
   const [usuarios, setUsuarios] = useState([]);
   const [sedes, setSedes] = useState([]);
   const [search, setSearch] = useState("");
   const [rolFiltro, setRolFiltro] = useState("Todos");
   const [modal, setModal] = useState(null);
   const [selectedUsuario, setSelectedUsuario] = useState(null);
+  const [permissionDraft, setPermissionDraft] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -26,7 +103,12 @@ export default function Usuarios({ selectedSede }) {
     acceso: "Una sede",
     sedeId: "",
     estado: "Activo",
+    permisos: [],
   });
+
+  const canCreateUsuarios = canPerform(currentUser, "usuarios", "create");
+  const canEditUsuarios = canPerform(currentUser, "usuarios", "edit");
+  const canDeleteUsuarios = canPerform(currentUser, "usuarios", "delete");
 
   async function loadData() {
     setLoading(true);
@@ -82,10 +164,15 @@ export default function Usuarios({ selectedSede }) {
 
   async function handleCreate(e) {
     e.preventDefault();
+    if (!canCreateUsuarios) return;
+
     setSaving(true);
 
     try {
-      await createUsuario(form);
+      await createUsuario({
+        ...form,
+        permisos: getPermissionsForRole(form.rol, form.permisos),
+      });
       await loadData();
 
       setForm({
@@ -95,6 +182,7 @@ export default function Usuarios({ selectedSede }) {
         acceso: "Una sede",
         sedeId: sedes[0]?.id || "",
         estado: "Activo",
+        permisos: [],
       });
 
       setModal(null);
@@ -107,11 +195,15 @@ export default function Usuarios({ selectedSede }) {
   }
 
   async function handleToggleEstado(usuario) {
+    if (!canEditUsuarios) return;
+
     await toggleUsuarioEstado(usuario);
     await loadData();
   }
 
   async function handleDelete(id) {
+    if (!canDeleteUsuarios) return;
+
     const confirmDelete = window.confirm("¿Eliminar este usuario autorizado?");
     if (!confirmDelete) return;
 
@@ -121,7 +213,30 @@ export default function Usuarios({ selectedSede }) {
 
   function abrirDetalle(usuario) {
     setSelectedUsuario(usuario);
+    setPermissionDraft(getUserPermissions(usuario).filter((permission) => permission !== "all"));
     setModal("detalle");
+  }
+
+  async function handleSavePermisos() {
+    if (!selectedUsuario || !canEditUsuarios) return;
+
+    setSaving(true);
+
+    try {
+      await updateUsuarioPermisos(
+        selectedUsuario.id,
+        permissionDraft,
+        selectedUsuario.rol
+      );
+      await loadData();
+      setSelectedUsuario(null);
+      setModal(null);
+    } catch (error) {
+      console.error("Error guardando permisos:", error);
+      alert(error.message || "No se pudieron guardar los permisos.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -132,9 +247,11 @@ export default function Usuarios({ selectedSede }) {
           <p>Gestión de roles, permisos y acceso por sociedad o sede.</p>
         </div>
 
-        <button className="primary-button" onClick={() => setModal("nuevo")}>
-          <Plus size={16} /> Nuevo usuario
-        </button>
+        {canCreateUsuarios && (
+          <button className="primary-button" onClick={() => setModal("nuevo")}>
+            <Plus size={16} /> Nuevo usuario
+          </button>
+        )}
       </div>
 
       <div className="stats-grid small">
@@ -228,17 +345,21 @@ export default function Usuarios({ selectedSede }) {
                         <Eye size={16} />
                       </button>
 
-                      <button onClick={() => handleToggleEstado(item)}>
-                        {item.estado === "Activo" ? (
-                          <UserX size={16} />
-                        ) : (
-                          <UserCheck size={16} />
-                        )}
-                      </button>
+                      {canEditUsuarios && (
+                        <button onClick={() => handleToggleEstado(item)}>
+                          {item.estado === "Activo" ? (
+                            <UserX size={16} />
+                          ) : (
+                            <UserCheck size={16} />
+                          )}
+                        </button>
+                      )}
 
-                      <button onClick={() => handleDelete(item.id)}>
-                        <Trash2 size={16} />
-                      </button>
+                      {canDeleteUsuarios && (
+                        <button onClick={() => handleDelete(item.id)}>
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -279,7 +400,13 @@ export default function Usuarios({ selectedSede }) {
               Rol
               <select
                 value={form.rol}
-                onChange={(e) => setForm({ ...form, rol: e.target.value })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    rol: e.target.value,
+                    permisos: getPermissionsForRole(e.target.value, form.permisos),
+                  })
+                }
               >
                 <option>Administrador</option>
                 <option>Contador</option>
@@ -316,6 +443,14 @@ export default function Usuarios({ selectedSede }) {
                 </select>
               </label>
             )}
+
+            <div className="full">
+              <PermissionEditor
+                permissions={form.permisos}
+                role={form.rol}
+                onChange={(permisos) => setForm({ ...form, permisos })}
+              />
+            </div>
 
             <div className="modal-actions">
               <button
@@ -373,6 +508,34 @@ export default function Usuarios({ selectedSede }) {
                   : "Pendiente: crear este email en Supabase Auth. Se vincula automáticamente al iniciar sesión."}
               </strong>
             </div>
+          </div>
+
+          <PermissionEditor
+            disabled={!canEditUsuarios}
+            permissions={permissionDraft}
+            role={selectedUsuario.rol}
+            onChange={setPermissionDraft}
+          />
+
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setModal(null)}
+            >
+              Cerrar
+            </button>
+
+            {canEditUsuarios && (
+              <button
+                type="button"
+                className="primary-button"
+                onClick={handleSavePermisos}
+                disabled={saving}
+              >
+                {saving ? "Guardando..." : "Guardar permisos"}
+              </button>
+            )}
           </div>
         </Modal>
       )}

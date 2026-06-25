@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 
@@ -31,14 +31,48 @@ import ConfiguracionFiscal from "./pages/ConfiguracionFiscal";
 import SetPassword from "./pages/setPassword";
 import Facturacion from "./pages/Facturacion";
 import Importaciones from "./pages/Importaciones";
+import PropuestasComerciales from "./pages/PropuestasComerciales";
 
 import Footer from "./components/Footer";
 import HelpAssistant from "./components/HelpAssistant";
 import { ToastProvider } from "./components/ToastProvider";
 import { AppConfigProvider } from "./context/AppConfigContext";
+import { useAppConfig } from "./context/AppConfigContext";
 import FloatingNotice from "./components/FloatingNotice";
+import { canAccessInternalTools } from "./utils/internalAccess";
+import { canViewPage, getFirstPermittedPage } from "./utils/permissions";
 
 import DemoTour from "./components/DemoTour";
+
+const appPageIds = [
+  "dashboard",
+  "ingresos",
+  "egresos",
+  "ordenesPago",
+  "cuentas",
+  "cuentasCorrientesEntidades",
+  "bancos",
+  "reportes",
+  "panelContador",
+  "contabilidad",
+  "asientosManuales",
+  "saldosIniciales",
+  "periodosContables",
+  "auditoriaContable",
+  "historialAuditoria",
+  "cierreEjercicio",
+  "iva",
+  "documentos",
+  "pacientes",
+  "turnos",
+  "sedes",
+  "usuarios",
+  "configuracion",
+  "configuracionFiscal",
+  "facturacion",
+  "importaciones",
+  "propuestasComerciales",
+];
 
 function getSedeId(selectedSede) {
   if (!selectedSede) return "todas";
@@ -86,7 +120,8 @@ function getPage(activePage, selectedSede, currentUser, setActivePage) {
     configuracion: <Configuracion {...props} />,
     configuracionFiscal: <ConfiguracionFiscal {...props} />,
     facturacion: <Facturacion {...props} />,
-    importaciones: <Importaciones {...props} />
+    importaciones: <Importaciones {...props} />,
+    propuestasComerciales: <PropuestasComerciales {...props} />,
   };
 
   return pages[activePage] || pages.dashboard;
@@ -112,6 +147,7 @@ function getEffectiveSelectedSede(currentUser, selectedSede) {
 }
 
 function AppContent() {
+  const { config } = useAppConfig();
   const [activePage, setActivePage] = useState("dashboard");
   const [selectedSede, setSelectedSede] = useState("Todas las sedes");
   const [currentUser, setCurrentUser] = useState(null);
@@ -119,6 +155,37 @@ function AppContent() {
   const pathname = window.location.pathname;
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+
+  const permittedPageIds = useMemo(() => {
+    const hiddenMenuItems = Array.isArray(config.hiddenMenuItems)
+      ? config.hiddenMenuItems
+      : [];
+
+    if (!currentUser) return [];
+
+    return appPageIds.filter((pageId) => {
+      if (hiddenMenuItems.includes(pageId)) return false;
+      if (pageId === "propuestasComerciales") {
+        return canAccessInternalTools(currentUser);
+      }
+
+      return canViewPage(currentUser, pageId);
+    });
+  }, [config.hiddenMenuItems, currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    if (permittedPageIds.includes(activePage)) return;
+
+    const fallbackPage =
+      (canViewPage(currentUser, "dashboard") && !config.hiddenMenuItems?.includes("dashboard"))
+        ? "dashboard"
+        : getFirstPermittedPage(currentUser, permittedPageIds);
+
+    if (fallbackPage && fallbackPage !== activePage) {
+      queueMicrotask(() => setActivePage(fallbackPage));
+    }
+  }, [activePage, config.hiddenMenuItems, currentUser, permittedPageIds]);
 
   if (pathname.includes("/set-password")) {
     return <SetPassword />;
@@ -129,6 +196,7 @@ function AppContent() {
   }
 
   const effectiveSelectedSede = getEffectiveSelectedSede(currentUser, selectedSede);
+  const activePageAllowed = permittedPageIds.includes(activePage);
 
   return (
     <div className={`app-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
@@ -151,7 +219,15 @@ function AppContent() {
         <DemoTour activePage={activePage} currentUser={currentUser} />
 
         <div className="page-content" data-tour="page-content">
-          {getPage(activePage, effectiveSelectedSede, currentUser, setActivePage)}
+          {activePageAllowed ? (
+            getPage(activePage, effectiveSelectedSede, currentUser, setActivePage)
+          ) : (
+            <section className="page">
+              <div className="empty-state">
+                No tenes permisos para acceder a esta seccion.
+              </div>
+            </section>
+          )}
         </div>
 
         <Footer />

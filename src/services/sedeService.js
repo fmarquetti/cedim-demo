@@ -50,6 +50,29 @@ export async function createSede(form) {
   return mapSede(data);
 }
 
+export async function updateSede(id, form) {
+  const { data, error } = await supabase
+    .from("sedes")
+    .update({
+      nombre: form.sede.trim(),
+      nombre_fantasia: form.sociedad.trim(),
+      razon_social: form.razonSocial?.trim() || null,
+      cuit: form.cuit.trim(),
+      ubicacion: form.ubicacion?.trim() || null,
+      direccion: form.direccion?.trim() || null,
+      responsable: form.responsable?.trim() || null,
+      estado: form.estado,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return mapSede(data);
+}
+
 export async function toggleSedeEstado(sede) {
   const nuevoEstado = sede.estado === "Activa" ? "Inactiva" : "Activa";
 

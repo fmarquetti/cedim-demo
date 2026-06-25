@@ -322,8 +322,8 @@ export default function Contabilidad({ sedeId, setActivePage }) {
         </div>
       </div>
 
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <p className="muted" style={{ margin: 0 }}>
+      <div className="panel">
+        <p className="muted no-margin">
           Los reportes contables dependen de los asientos generados y del estado de los períodos contables.
           Cerrá un período solo después de revisar pendientes. Los saldos iniciales generan un asiento de apertura
           y afectan el Libro Mayor y el Balance de Sumas y Saldos.
@@ -331,9 +331,8 @@ export default function Contabilidad({ sedeId, setActivePage }) {
         {setActivePage && (
           <button
             type="button"
-            className="secondary-button"
+            className="secondary-button button-spaced"
             onClick={() => setActivePage("saldosIniciales")}
-            style={{ marginTop: 12 }}
           >
             <BookPlus size={16} /> Ir a Saldos Iniciales
           </button>
@@ -445,7 +444,7 @@ export default function Contabilidad({ sedeId, setActivePage }) {
             </div>
 
             {libroMayor.map((grupo) => (
-              <div className="table-card" key={grupo.cuentaId} style={{ marginBottom: 18 }}>
+              <div className="table-card table-card-separated" key={grupo.cuentaId}>
                 <table>
                   <thead>
                     <tr>

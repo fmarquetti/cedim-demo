@@ -23,8 +23,8 @@ const getCurrentYear = () => new Date().getFullYear();
 
 function PendingTable({ title, rows, columns }) {
   return (
-    <details className="table-card" open={rows.length > 0} style={{ marginTop: 12 }}>
-      <summary style={{ cursor: "pointer", padding: 12, fontWeight: 700 }}>
+    <details className="table-card details-table" open={rows.length > 0}>
+      <summary className="details-summary">
         {title} ({rows.length})
       </summary>
       <table>
@@ -208,8 +208,8 @@ export default function PeriodosContables({ selectedSede, sedeId, currentUser })
         </button>
       </div>
 
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <p className="muted" style={{ margin: 0 }}>
+      <div className="panel">
+        <p className="muted no-margin">
           Antes de cerrar un período, revisá la Auditoría Contable para confirmar que no existan asientos pendientes o inconsistencias.
         </p>
       </div>

@@ -272,7 +272,7 @@ function OperationOverlay({ operation, onClose }) {
         </div>
 
         {operation.status !== "loading" && (
-          <button type="button" className="btn-secondary" onClick={onClose}>
+          <button type="button" className="secondary-button" onClick={onClose}>
             Cerrar
           </button>
         )}
@@ -1053,10 +1053,10 @@ export default function Facturacion() {
   }
 
   return (
-    <div className="page facturacion-page">
+    <section className="page facturacion-page">
       <div className="page-header" data-tour="facturacion-header">
         <div>
-          <h1>Facturacion</h1>
+          <h2>Facturacion</h2>
           <p>
             Emision de comprobantes ARCA/AFIP desde CEDIM mediante Afip SDK.
           </p>
@@ -1065,7 +1065,7 @@ export default function Facturacion() {
         <div className="header-actions">
           <button
             type="button"
-            className="btn-secondary"
+            className="secondary-button"
             onClick={loadInvoices}
             disabled={loadingInvoices}
             data-tour="facturacion-actualizar"
@@ -1075,8 +1075,8 @@ export default function Facturacion() {
         </div>
       </div>
 
-      <div className="dashboard-grid">
-        <section className="card" data-tour="facturacion-formulario">
+      <div className="fiscal-two-column">
+        <section className="panel" data-tour="facturacion-formulario">
           <h2>Nueva factura</h2>
           <p className="muted">
             Carga los datos fiscales y emiti el comprobante mediante Afip SDK.
@@ -1365,7 +1365,7 @@ export default function Facturacion() {
             <div className="form-actions">
               <button
                 type="button"
-                className="btn-secondary"
+                className="secondary-button"
                 onClick={calcularTotalDesdeNeto}
                 disabled={emitting}
               >
@@ -1374,7 +1374,7 @@ export default function Facturacion() {
 
               <button
                 type="button"
-                className="btn-secondary"
+                className="secondary-button"
                 onClick={limpiarFormulario}
                 disabled={emitting}
               >
@@ -1383,7 +1383,7 @@ export default function Facturacion() {
 
               <button
                 type="submit"
-                className="btn-primary"
+                className="primary-button"
                 disabled={emitting}
               >
                 {emitting
@@ -1398,7 +1398,7 @@ export default function Facturacion() {
           {message && <div className="notice">{message}</div>}
         </section>
 
-        <section className="card" data-tour="facturacion-vista-previa">
+        <section className="panel" data-tour="facturacion-vista-previa">
           <h2>Vista previa</h2>
 
           <div className="invoice-preview">
@@ -1562,7 +1562,7 @@ export default function Facturacion() {
             )}
             <button
               type="button"
-              className="btn-secondary"
+              className="secondary-button"
               onClick={() => handleDownloadPdf(lastIssuedInvoice)}
               disabled={!hasInvoicePdf(lastIssuedInvoice) || Boolean(pdfActionLoading)}
             >
@@ -1572,7 +1572,7 @@ export default function Facturacion() {
             </button>
             <button
               type="button"
-              className="btn-secondary"
+              className="secondary-button"
               onClick={() => handleOpenPdf(lastIssuedInvoice)}
               disabled={!hasInvoicePdf(lastIssuedInvoice) || Boolean(pdfActionLoading)}
             >
@@ -1582,7 +1582,7 @@ export default function Facturacion() {
             </button>
             <button
               type="button"
-              className="btn-primary"
+              className="primary-button"
               onClick={() => openEmailModal(lastIssuedInvoice)}
               disabled={!hasInvoicePdf(lastIssuedInvoice) || Boolean(pdfActionLoading)}
             >
@@ -1594,29 +1594,16 @@ export default function Facturacion() {
         </section>
       </div>
 
-      <section
-        className="card"
-        style={{ marginTop: 18 }}
-        data-tour="facturacion-historial"
-      >
-        <div
-          className="page-header"
-          data-tour="facturacion-busqueda"
-          style={{
-            marginBottom: 12,
-            padding: 0,
-            boxShadow: "none",
-            border: 0,
-          }}
-        >
+      <section className="panel" data-tour="facturacion-historial">
+        <div className="split-header" data-tour="facturacion-busqueda">
           <div>
-            <h2>Facturas ARCA</h2>
+            <h3>Facturas ARCA</h3>
             <p>Ultimos comprobantes registrados desde CEDIM.</p>
           </div>
 
           <button
             type="button"
-            className="btn-secondary"
+            className="secondary-button"
             onClick={loadInvoices}
             disabled={loadingInvoices}
           >
@@ -1652,7 +1639,7 @@ export default function Facturacion() {
               <p className="muted">No se encontraron facturas con ese criterio.</p>
             ) : (
               <>
-                <div className="table-card" style={{ marginTop: 12 }}>
+                <div className="table-card table-card-spaced">
                   <table>
                     <thead>
                       <tr>
@@ -1854,7 +1841,7 @@ export default function Facturacion() {
                   <div className="invoice-pagination">
                     <button
                       type="button"
-                      className="btn-secondary"
+                      className="secondary-button"
                       onClick={() => setInvoicePage((prev) => Math.max(1, prev - 1))}
                       disabled={invoicePage === 1}
                     >
@@ -1867,7 +1854,7 @@ export default function Facturacion() {
 
                     <button
                       type="button"
-                      className="btn-secondary"
+                      className="secondary-button"
                       onClick={() =>
                         setInvoicePage((prev) =>
                           Math.min(totalInvoicePages, prev + 1),
@@ -1932,7 +1919,7 @@ export default function Facturacion() {
             <div className="email-modal-actions">
               <button
                 type="button"
-                className="btn-secondary"
+                className="secondary-button"
                 onClick={closeEmailModal}
                 disabled={emailModal.sending}
               >
@@ -1941,7 +1928,7 @@ export default function Facturacion() {
 
               <button
                 type="submit"
-                className="btn-primary"
+                className="primary-button"
                 disabled={emailModal.sending}
               >
                 {emailModal.sending ? "Enviando..." : "Enviar factura"}
@@ -1951,6 +1938,6 @@ export default function Facturacion() {
         </div>
       )}
       <OperationOverlay operation={operation} onClose={clearOperation} />
-    </div>
+    </section>
   );
 }

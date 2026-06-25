@@ -30,6 +30,7 @@ import {
 import { getSedes } from "../services/sedeService";
 import { formatMoney, formatDate, toDate } from "../utils/format";
 import { toast } from "../components/ToastProvider";
+import { canPerform } from "../utils/permissions";
 
 import ConceptoSelector from "../components/ConceptoSelector";
 import { getConceptoItems } from "../services/conceptoItemService";
@@ -144,8 +145,11 @@ function detalleFiscalDesdeDatos(datos, importe) {
   };
 }
 
-export default function Egresos({ selectedSede, sedeId }) {
+export default function Egresos({ selectedSede, sedeId, currentUser }) {
   const facturaInputRef = useRef(null);
+  const canCreateEgresos = canPerform(currentUser, "egresos", "create");
+  const canEditEgresos = canPerform(currentUser, "egresos", "edit");
+  const canDeleteEgresos = canPerform(currentUser, "egresos", "delete");
 
   const [egresos, setEgresos] = useState([]);
   const [sedes, setSedes] = useState([]);
@@ -335,6 +339,8 @@ export default function Egresos({ selectedSede, sedeId }) {
   }
 
   function openNuevoEgreso() {
+    if (!canCreateEgresos) return;
+
     setForm({
       ...emptyForm,
       fecha: new Date().toISOString().split("T")[0],
@@ -726,6 +732,7 @@ export default function Egresos({ selectedSede, sedeId }) {
 
   async function handleCreate(e) {
     e.preventDefault();
+    if (!canCreateEgresos) return;
 
     if (!form.sedeId) {
       toast.error("Seleccioná una sede.");
@@ -778,6 +785,8 @@ export default function Egresos({ selectedSede, sedeId }) {
   }
 
   async function handleDelete(id) {
+    if (!canDeleteEgresos) return;
+
     if (!window.confirm("¿Eliminar este egreso?")) return;
 
     setDeletingId(id);
@@ -794,6 +803,8 @@ export default function Egresos({ selectedSede, sedeId }) {
   }
 
   async function marcarPagado(id) {
+    if (!canEditEgresos) return;
+
     try {
       await marcarEgresoPagado(id);
       await loadData(sedeId);
@@ -832,6 +843,8 @@ export default function Egresos({ selectedSede, sedeId }) {
   }
 
   async function importarFacturaFiscal(e) {
+    if (!canCreateEgresos) return;
+
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -884,6 +897,7 @@ export default function Egresos({ selectedSede, sedeId }) {
 
   async function confirmarEgresoImportado(e) {
     e.preventDefault();
+    if (!canCreateEgresos) return;
 
     if (!egresoPendiente?.proveedor?.trim()) {
       toast.error("Debés cargar el proveedor antes de guardar el egreso.");
@@ -1225,19 +1239,23 @@ export default function Egresos({ selectedSede, sedeId }) {
             <RefreshCw size={16} /> Actualizar
           </button>
 
-          <button
-            className="secondary-button"
-            onClick={() => facturaInputRef.current?.click()}
-            disabled={importandoFactura}
-            data-tour="egresos-importar-factura"
-          >
-            <Upload size={16} />
-            {importandoFactura ? "Leyendo factura..." : "Importar factura PDF"}
-          </button>
+          {canCreateEgresos && (
+            <button
+              className="secondary-button"
+              onClick={() => facturaInputRef.current?.click()}
+              disabled={importandoFactura}
+              data-tour="egresos-importar-factura"
+            >
+              <Upload size={16} />
+              {importandoFactura ? "Leyendo factura..." : "Importar factura PDF"}
+            </button>
+          )}
 
-          <button className="primary-button" onClick={openNuevoEgreso} data-tour="egresos-nuevo">
-            <Plus size={16} /> Nuevo egreso
-          </button>
+          {canCreateEgresos && (
+            <button className="primary-button" onClick={openNuevoEgreso} data-tour="egresos-nuevo">
+              <Plus size={16} /> Nuevo egreso
+            </button>
+          )}
         </div>
       </div>
 
@@ -1468,7 +1486,7 @@ export default function Egresos({ selectedSede, sedeId }) {
                           </button>
                         )}
 
-                        {item.estado === "Pendiente" && (
+                        {canEditEgresos && item.estado === "Pendiente" && (
                           <button
                             title="Marcar como pagado"
                             onClick={() => marcarPagado(item.id)}
@@ -1477,13 +1495,15 @@ export default function Egresos({ selectedSede, sedeId }) {
                           </button>
                         )}
 
-                        <button
-                          title="Eliminar egreso"
-                          onClick={() => handleDelete(item.id)}
-                          disabled={deletingId === item.id}
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        {canDeleteEgresos && (
+                          <button
+                            title="Eliminar egreso"
+                            onClick={() => handleDelete(item.id)}
+                            disabled={deletingId === item.id}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1499,7 +1519,7 @@ export default function Egresos({ selectedSede, sedeId }) {
         </div>
       </div>
 
-      {modal === "nuevo" && (
+      {modal === "nuevo" && canCreateEgresos && (
         <Modal title="Nuevo egreso" onClose={() => setModal(null)}>
           <form className="form-grid" onSubmit={handleCreate}>
             <label>
@@ -1681,7 +1701,7 @@ export default function Egresos({ selectedSede, sedeId }) {
         </Modal>
       )}
 
-      {modal === "revisarFactura" && egresoPendiente && (
+      {modal === "revisarFactura" && egresoPendiente && canCreateEgresos && (
         <Modal title="Revisar factura importada" onClose={() => setModal(null)}>
           <form className="form-grid" onSubmit={confirmarEgresoImportado}>
             <label>

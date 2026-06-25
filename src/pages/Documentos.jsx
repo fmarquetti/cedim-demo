@@ -697,7 +697,7 @@ export default function Documentos({ selectedSede, sedeId }) {
               </button>
 
               {form.archivo && (
-                <small style={{ display: "block", marginTop: 8 }}>
+                <small className="document-file-meta">
                   Archivo seleccionado: {form.archivo} · {formatFileSize(form.archivoSize)}
                 </small>
               )}

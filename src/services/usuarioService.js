@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { getPermissionsForRole } from "../utils/permissions";
 
 function mapUsuario(row) {
     const sedesAsignadas = row.usuario_sedes || [];
@@ -15,7 +16,8 @@ function mapUsuario(row) {
             : sedesAsignadas[0]?.sedes?.nombre || "Sin sede",
         sedeId: sedesAsignadas[0]?.sedes?.id || "",
         estado: row.estado,
-        permisos: row.permisos || [],
+        permisos: getPermissionsForRole(row.rol, row.permisos || []),
+        permissions: getPermissionsForRole(row.rol, row.permisos || []),
     };
 }
 
@@ -76,6 +78,33 @@ export async function toggleUsuarioEstado(usuario) {
         .from("usuarios")
         .update({ estado: nuevoEstado })
         .eq("id", usuario.id);
+
+    if (error) throw error;
+}
+
+export async function updateUsuario(id, payload) {
+    const updatePayload = { ...payload };
+
+    if ("permisos" in updatePayload || "rol" in updatePayload) {
+        updatePayload.permisos = getPermissionsForRole(
+            updatePayload.rol,
+            updatePayload.permisos || []
+        );
+    }
+
+    const { error } = await supabase
+        .from("usuarios")
+        .update(updatePayload)
+        .eq("id", id);
+
+    if (error) throw error;
+}
+
+export async function updateUsuarioPermisos(id, permisos, rol) {
+    const { error } = await supabase
+        .from("usuarios")
+        .update({ permisos: getPermissionsForRole(rol, permisos) })
+        .eq("id", id);
 
     if (error) throw error;
 }

@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Eye, Power } from "lucide-react";
+import { Plus, Trash2, Eye, Power, Pencil } from "lucide-react";
 import Modal from "../components/Modal";
 import {
   createSede,
   deleteSede,
   getSedes,
   toggleSedeEstado,
+  updateSede,
 } from "../services/sedeService";
+import { canPerform } from "../utils/permissions";
 
 function filterBySede(items, selectedSede) {
   if (!selectedSede || selectedSede === "Todas las sedes") return items;
@@ -22,17 +24,22 @@ const emptyForm = {
   ubicacion: "",
   direccion: "",
   responsable: "",
+  estado: "Activa",
 };
 
-export default function Sedes({ selectedSede }) {
+export default function Sedes({ selectedSede, currentUser }) {
   const [sedes, setSedes] = useState([]);
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
   const [modal, setModal] = useState(null);
   const [selectedSedeDetalle, setSelectedSedeDetalle] = useState(null);
+  const [editingSede, setEditingSede] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const canCreateSedes = canPerform(currentUser, "sedes", "create");
+  const canEditSedes = canPerform(currentUser, "sedes", "edit");
+  const canDeleteSedes = canPerform(currentUser, "sedes", "delete");
 
   async function loadSedes() {
     setLoading(true);
@@ -49,7 +56,19 @@ export default function Sedes({ selectedSede }) {
   }
 
   useEffect(() => {
-    loadSedes();
+    async function loadInitialSedes() {
+      try {
+        const data = await getSedes();
+        setSedes(data);
+      } catch (error) {
+        console.error("Error cargando sedes:", error);
+        alert(error.message || "No se pudieron cargar las sedes.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadInitialSedes();
   }, []);
 
   const sedesPorFiltro = filterBySede(sedes, selectedSede);
@@ -83,24 +102,49 @@ export default function Sedes({ selectedSede }) {
     0
   );
 
-  async function handleCreate(e) {
+  function resetFormState() {
+    setForm(emptyForm);
+    setEditingSede(null);
+  }
+
+  function cerrarModal() {
+    setModal(null);
+    setSelectedSedeDetalle(null);
+    resetFormState();
+  }
+
+  async function handleSubmit(e) {
     e.preventDefault();
+    if (editingSede ? !canEditSedes : !canCreateSedes) return;
+
     setSaving(true);
 
     try {
-      await createSede(form);
+      if (editingSede) {
+        await updateSede(editingSede.id, form);
+      } else {
+        await createSede(form);
+      }
+
       await loadSedes();
-      setForm(emptyForm);
-      setModal(null);
+      cerrarModal();
     } catch (error) {
-      console.error("Error creando sede:", error);
-      alert(error.message || "No se pudo crear la sede.");
+      console.error(
+        editingSede ? "Error editando sede:" : "Error creando sede:",
+        error
+      );
+      alert(
+        error.message ||
+          (editingSede ? "No se pudo editar la sede." : "No se pudo crear la sede.")
+      );
     } finally {
       setSaving(false);
     }
   }
 
   async function handleToggleEstado(sede) {
+    if (!canEditSedes) return;
+
     try {
       await toggleSedeEstado(sede);
       await loadSedes();
@@ -111,6 +155,8 @@ export default function Sedes({ selectedSede }) {
   }
 
   async function handleDelete(id) {
+    if (!canDeleteSedes) return;
+
     const confirmDelete = window.confirm(
       "¿Eliminar esta sede? Esta acción no se puede deshacer."
     );
@@ -135,7 +181,26 @@ export default function Sedes({ selectedSede }) {
   }
 
   function abrirNuevaSede() {
-    setForm(emptyForm);
+    if (!canCreateSedes) return;
+
+    resetFormState();
+    setModal("nueva");
+  }
+
+  function abrirEditarSede(sede) {
+    if (!canEditSedes) return;
+
+    setEditingSede(sede);
+    setForm({
+      sede: sede.sede || "",
+      sociedad: sede.sociedad || "",
+      razonSocial: sede.razonSocial || "",
+      cuit: sede.cuit || "",
+      ubicacion: sede.ubicacion || "",
+      direccion: sede.direccion || "",
+      responsable: sede.responsable || "",
+      estado: sede.estado || "Activa",
+    });
     setModal("nueva");
   }
 
@@ -150,9 +215,11 @@ export default function Sedes({ selectedSede }) {
           </p>
         </div>
 
-        <button className="primary-button" onClick={abrirNuevaSede} data-tour="sedes-nueva">
-          <Plus size={16} /> Nueva sede
-        </button>
+        {canCreateSedes && (
+          <button className="primary-button" onClick={abrirNuevaSede} data-tour="sedes-nueva">
+            <Plus size={16} /> Nueva sede
+          </button>
+        )}
       </div>
 
       <div className="stats-grid small">
@@ -251,13 +318,23 @@ export default function Sedes({ selectedSede }) {
                         <Eye size={16} />
                       </button>
 
-                      <button onClick={() => handleToggleEstado(item)}>
-                        <Power size={16} />
-                      </button>
+                      {canEditSedes && (
+                        <button onClick={() => abrirEditarSede(item)}>
+                          <Pencil size={16} />
+                        </button>
+                      )}
 
-                      <button onClick={() => handleDelete(item.id)}>
-                        <Trash2 size={16} />
-                      </button>
+                      {canEditSedes && (
+                        <button onClick={() => handleToggleEstado(item)}>
+                          <Power size={16} />
+                        </button>
+                      )}
+
+                      {canDeleteSedes && (
+                        <button onClick={() => handleDelete(item.id)}>
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -272,9 +349,12 @@ export default function Sedes({ selectedSede }) {
         </table>
       </div>
 
-      {modal === "nueva" && (
-        <Modal title="Nueva sede / sociedad" onClose={() => setModal(null)}>
-          <form className="form-grid" onSubmit={handleCreate}>
+      {modal === "nueva" && (editingSede ? canEditSedes : canCreateSedes) && (
+        <Modal
+          title={editingSede ? "Editar sede / sociedad" : "Nueva sede / sociedad"}
+          onClose={cerrarModal}
+        >
+          <form className="form-grid" onSubmit={handleSubmit}>
             <label>
               Nombre de sede
               <input
@@ -349,17 +429,34 @@ export default function Sedes({ selectedSede }) {
               />
             </label>
 
+            {editingSede && (
+              <label>
+                Estado
+                <select
+                  value={form.estado}
+                  onChange={(e) => setForm({ ...form, estado: e.target.value })}
+                >
+                  <option>Activa</option>
+                  <option>Inactiva</option>
+                </select>
+              </label>
+            )}
+
             <div className="modal-actions">
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => setModal(null)}
+                onClick={cerrarModal}
               >
                 Cancelar
               </button>
 
               <button type="submit" className="primary-button" disabled={saving}>
-                {saving ? "Guardando..." : "Crear sede"}
+                {saving
+                  ? "Guardando..."
+                  : editingSede
+                    ? "Guardar cambios"
+                    : "Crear sede"}
               </button>
             </div>
           </form>
@@ -369,7 +466,7 @@ export default function Sedes({ selectedSede }) {
       {modal === "detalle" && selectedSedeDetalle && (
         <Modal
           title={`Detalle de ${selectedSedeDetalle.sede}`}
-          onClose={() => setModal(null)}
+          onClose={cerrarModal}
         >
           <div className="detail-grid">
             <div>

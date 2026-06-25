@@ -5,6 +5,7 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   Banknote,
+  GripVertical,
   RefreshCw,
   TrendingUp,
   Wallet,
@@ -31,6 +32,10 @@ import { getEgresos } from "../services/egresoService";
 import { getMovimientosBancarios } from "../services/bancoService";
 import { getCuentasCorrientes } from "../services/cuentaCorrienteService";
 import { getSedes } from "../services/sedeService";
+import {
+  getUserPreference,
+  saveUserPreference,
+} from "../services/userPreferenceService";
 
 import { formatMoney } from "../utils/format";
 
@@ -229,9 +234,76 @@ const LABELS_METRICA = {
   rentabilidad: "Rentabilidad %",
 };
 
+const DASHBOARD_WIDGETS_STORAGE_PREFIX = "cedim_dashboard_widgets_order";
+const DASHBOARD_WIDGETS_PREFERENCE_KEY = "dashboard_widgets_order";
+
+const DEFAULT_DASHBOARD_WIDGET_ORDER = [
+  "kpi-ingresos",
+  "kpi-egresos",
+  "kpi-resultado",
+  "kpi-caja-bancaria",
+  "kpi-a-cobrar",
+  "kpi-a-pagar",
+  "kpi-deuda-vencida",
+  "kpi-sin-conciliar",
+  "chart-ingresos-egresos",
+  "chart-resultado-sede",
+  "chart-resultado-mensual",
+  "chart-caja-cuenta",
+  "table-resumen-sede",
+  "panel-alertas",
+  "table-saldos-bancarios",
+];
+
+const getDashboardWidgetsStorageKey = (currentUser) => {
+  const email = String(currentUser?.email || "anonimo").trim().toLowerCase();
+  return `${DASHBOARD_WIDGETS_STORAGE_PREFIX}_${email || "anonimo"}`;
+};
+
+const mergeWidgetOrder = (savedOrder, defaultOrder = DEFAULT_DASHBOARD_WIDGET_ORDER) => {
+  const savedIds = Array.isArray(savedOrder) ? savedOrder : [];
+  const validIds = new Set(defaultOrder);
+  const orderedKnownIds = savedIds.filter((id) => validIds.has(id));
+  const newDefaultIds = defaultOrder.filter((id) => !orderedKnownIds.includes(id));
+  return [...orderedKnownIds, ...newDefaultIds];
+};
+
+const getWidgetOrderFromPreference = (preferenceValue) => {
+  if (Array.isArray(preferenceValue)) return preferenceValue;
+  if (Array.isArray(preferenceValue?.order)) return preferenceValue.order;
+  return null;
+};
+
+const moveWidget = (order, sourceId, targetId) => {
+  if (!sourceId || !targetId || sourceId === targetId) return order;
+
+  const fromIndex = order.indexOf(sourceId);
+  const toIndex = order.indexOf(targetId);
+  if (fromIndex === -1 || toIndex === -1) return order;
+
+  const nextOrder = [...order];
+  const [moved] = nextOrder.splice(fromIndex, 1);
+  nextOrder.splice(toIndex, 0, moved);
+  return nextOrder;
+};
+
+const isInteractiveDragTarget = (target) =>
+  target?.closest?.("button, input, select, textarea, a, [role='button']");
+
+const getInitialWidgetOrder = (currentUser) => {
+  try {
+    const rawOrder = localStorage.getItem(getDashboardWidgetsStorageKey(currentUser));
+    return mergeWidgetOrder(rawOrder ? JSON.parse(rawOrder) : null);
+  } catch (err) {
+    console.warn("No se pudo leer el orden de widgets del dashboard:", err);
+    return DEFAULT_DASHBOARD_WIDGET_ORDER;
+  }
+};
+
 // ─── COMPONENTE ────────────────────────────────────────────────────────────
 
-export default function Dashboard({ selectedSede, sedeId }) {
+export default function Dashboard({ sedeId, currentUser }) {
+  const widgetsStorageKey = getDashboardWidgetsStorageKey(currentUser);
   const [ingresos, setIngresos] = useState([]);
   const [egresos, setEgresos] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
@@ -239,6 +311,9 @@ export default function Dashboard({ selectedSede, sedeId }) {
   const [sedes, setSedes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [widgetOrder, setWidgetOrder] = useState(() => getInitialWidgetOrder(currentUser));
+  const [draggedWidgetId, setDraggedWidgetId] = useState("");
+  const [dragOverWidgetId, setDragOverWidgetId] = useState("");
 
   // Filtros de período
   const [periodo, setPeriodo] = useState("6m");
@@ -283,6 +358,41 @@ export default function Dashboard({ selectedSede, sedeId }) {
   useEffect(() => {
     loadDashboard();
   }, [sedeId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWidgetOrderPreference() {
+      if (!currentUser?.id) return;
+
+      try {
+        const preferenceValue = await getUserPreference(
+          currentUser.id,
+          DASHBOARD_WIDGETS_PREFERENCE_KEY
+        );
+        const remoteOrder = getWidgetOrderFromPreference(preferenceValue);
+
+        if (!cancelled && remoteOrder) {
+          const nextOrder = mergeWidgetOrder(remoteOrder);
+          setWidgetOrder(nextOrder);
+
+          try {
+            localStorage.setItem(widgetsStorageKey, JSON.stringify(nextOrder));
+          } catch (storageError) {
+            console.warn("No se pudo sincronizar el orden local del dashboard:", storageError);
+          }
+        }
+      } catch (err) {
+        console.warn("No se pudo cargar la preferencia de widgets del dashboard:", err);
+      }
+    }
+
+    loadWidgetOrderPreference();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id, widgetsStorageKey]);
 
   // Si la sede cambia y deja de ser "todas", apagamos la vista comparativa
   useEffect(() => {
@@ -470,6 +580,64 @@ export default function Dashboard({ selectedSede, sedeId }) {
     return `${fmt(desde)} → ${fmt(hasta)}`;
   }, [desde, hasta]);
 
+  const persistWidgetOrder = async (nextOrder) => {
+    try {
+      localStorage.setItem(widgetsStorageKey, JSON.stringify(nextOrder));
+    } catch (err) {
+      console.warn("No se pudo guardar el orden de widgets del dashboard:", err);
+    }
+
+    if (!currentUser?.id) return;
+
+    try {
+      await saveUserPreference(
+        currentUser.id,
+        DASHBOARD_WIDGETS_PREFERENCE_KEY,
+        { order: nextOrder }
+      );
+    } catch (err) {
+      console.warn("No se pudo guardar la preferencia de widgets del dashboard:", err);
+    }
+  };
+
+  const handleWidgetDragStart = (event, widgetId) => {
+    if (isInteractiveDragTarget(event.target)) {
+      event.preventDefault();
+      return;
+    }
+
+    setDraggedWidgetId(widgetId);
+    setDragOverWidgetId("");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", widgetId);
+  };
+
+  const handleWidgetDragOver = (event, widgetId) => {
+    event.preventDefault();
+    if (widgetId !== dragOverWidgetId) setDragOverWidgetId(widgetId);
+    event.dataTransfer.dropEffect = "move";
+  };
+
+  const handleWidgetDrop = (event, targetWidgetId) => {
+    event.preventDefault();
+    const sourceWidgetId = event.dataTransfer.getData("text/plain") || draggedWidgetId;
+
+    setWidgetOrder((currentOrder) => {
+      const normalizedOrder = mergeWidgetOrder(currentOrder);
+      const nextOrder = moveWidget(normalizedOrder, sourceWidgetId, targetWidgetId);
+      void persistWidgetOrder(nextOrder);
+      return nextOrder;
+    });
+
+    setDraggedWidgetId("");
+    setDragOverWidgetId("");
+  };
+
+  const handleWidgetDragEnd = () => {
+    setDraggedWidgetId("");
+    setDragOverWidgetId("");
+  };
+
   if (loading) {
     return (
       <section className="page">
@@ -497,6 +665,276 @@ export default function Dashboard({ selectedSede, sedeId }) {
       </section>
     );
   }
+
+  const dashboardWidgetsById = {
+    "kpi-ingresos": {
+      className: "dashboard-widget--stat",
+      dataTour: "dashboard-kpis",
+      content: (
+        <StatCard
+          title="Ingresos"
+          value={formatMoney(totalIngresos)}
+          detail={`${ingresosFiltrados.length} registros`}
+          icon={<ArrowDownCircle size={22} />}
+          dataTour="dashboard-kpi-ingresos"
+        />
+      ),
+    },
+    "kpi-egresos": {
+      className: "dashboard-widget--stat",
+      content: (
+        <StatCard
+          title="Egresos"
+          value={formatMoney(totalEgresos)}
+          detail={`${egresosFiltrados.length} registros`}
+          icon={<ArrowUpCircle size={22} />}
+          dataTour="dashboard-kpi-egresos"
+        />
+      ),
+    },
+    "kpi-resultado": {
+      className: "dashboard-widget--stat",
+      content: (
+        <StatCard
+          title="Resultado"
+          value={formatMoney(resultado)}
+          detail={resultado >= 0 ? "Resultado positivo" : "Resultado negativo"}
+          icon={<TrendingUp size={22} />}
+        />
+      ),
+    },
+    "kpi-caja-bancaria": {
+      className: "dashboard-widget--stat",
+      content: (
+        <StatCard
+          title="Caja bancaria"
+          value={formatMoney(cajaBancos)}
+          detail={`${movimientosFiltrados.length} movimientos`}
+          icon={<Wallet size={22} />}
+          dataTour="dashboard-kpi-pendientes"
+        />
+      ),
+    },
+    "kpi-a-cobrar": {
+      className: "dashboard-widget--stat",
+      content: (
+        <StatCard
+          title="A cobrar"
+          value={formatMoney(aCobrar)}
+          detail="Cuentas corrientes pendientes"
+          icon={<Banknote size={22} />}
+        />
+      ),
+    },
+    "kpi-a-pagar": {
+      className: "dashboard-widget--stat",
+      content: (
+        <StatCard
+          title="A pagar"
+          value={formatMoney(aPagar)}
+          detail="Proveedores pendientes"
+          icon={<Banknote size={22} />}
+        />
+      ),
+    },
+    "kpi-deuda-vencida": {
+      className: "dashboard-widget--stat",
+      content: (
+        <StatCard
+          title="Deuda vencida"
+          value={formatMoney(deudaVencida)}
+          detail={`${cuentasVencidas.length} comprobantes vencidos`}
+          icon={<AlertTriangle size={22} />}
+        />
+      ),
+    },
+    "kpi-sin-conciliar": {
+      className: "dashboard-widget--stat",
+      content: (
+        <StatCard
+          title="Sin conciliar"
+          value={conciliacionesPendientes.length}
+          detail="Movimientos bancarios pendientes"
+          icon={<AlertTriangle size={22} />}
+          dataTour="dashboard-kpi-turnos"
+        />
+      ),
+    },
+    "chart-ingresos-egresos": {
+      className: "dashboard-widget--large",
+      dataTour: "dashboard-graficos",
+      content: (
+        <div className="panel">
+          <div className="panel-toolbar">
+            <h3 className="panel-toolbar-title">
+              {vistaComparativa
+                ? `Comparativa por sede Â· ${LABELS_METRICA[metricaComparativa]}`
+                : "Ingresos vs egresos"}
+            </h3>
+            <div className="panel-toolbar-controls">
+              {vistaComparativa && (
+                <select
+                  value={metricaComparativa}
+                  onChange={(e) => setMetricaComparativa(e.target.value)}
+                  className="mini-select"
+                >
+                  <option value="ingresos">Ingresos</option>
+                  <option value="egresos">Egresos</option>
+                  <option value="resultado">Resultado</option>
+                  <option value="rentabilidad">Rentabilidad %</option>
+                </select>
+              )}
+              {verTodasSedes && (
+                <button
+                  className="secondary-button"
+                  onClick={() => setVistaComparativa((v) => !v)}
+                  title={vistaComparativa ? "Ver ingresos vs egresos" : "Comparar por sede"}
+                >
+                  {vistaComparativa ? "Vista total" : "Comparar sedes"}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <ResponsiveContainer width="100%" height={300}>
+            {vistaComparativa ? (
+              <LineChart data={comparativa.data}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="periodo" />
+                <YAxis tickFormatter={tickFormatterY} />
+                <Tooltip formatter={tooltipFormatter} />
+                <Legend />
+                {comparativa.sedesActivas.map((sede, i) => (
+                  <Line
+                    key={sede}
+                    type="monotone"
+                    dataKey={sede}
+                    stroke={COLORES_SEDES[i % COLORES_SEDES.length]}
+                    strokeWidth={2.5}
+                    dot={{ r: 3 }}
+                  />
+                ))}
+              </LineChart>
+            ) : (
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="periodo" />
+                <YAxis tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
+                <Tooltip formatter={(value) => formatMoney(value)} />
+                <Legend />
+                <Line type="monotone" dataKey="ingresos" name="Ingresos" stroke="#019cc5" strokeWidth={3} />
+                <Line type="monotone" dataKey="egresos" name="Egresos" stroke="#3a73b9" strokeWidth={3} />
+              </LineChart>
+            )}
+          </ResponsiveContainer>
+
+          {vistaComparativa && comparativa.sedesActivas.length === 0 && (
+            <p style={{ textAlign: "center", color: "#888", marginTop: 8 }}>
+              No hay datos por sede en el perÃ­odo seleccionado.
+            </p>
+          )}
+        </div>
+      ),
+    },
+    "chart-resultado-sede": {
+      className: "dashboard-widget--large",
+      content: (
+        <div className="panel">
+          <h3>Resultado por sede</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={sedesResumen}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="sede" />
+              <YAxis tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
+              <Tooltip formatter={(value) => formatMoney(value)} />
+              <Bar dataKey="resultado" fill="#3eb9b1" radius={[8, 8, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ),
+    },
+    "chart-resultado-mensual": {
+      className: "dashboard-widget--large",
+      content: (
+        <div className="panel">
+          <h3>Resultado mensual</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="periodo" />
+              <YAxis tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
+              <Tooltip formatter={(value) => formatMoney(value)} />
+              <Bar dataKey="resultado" fill="#028baf" radius={[8, 8, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ),
+    },
+    "chart-caja-cuenta": {
+      className: "dashboard-widget--large",
+      content: (
+        <div className="panel">
+          <h3>Caja por cuenta</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={bancosPorCuenta}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="cuenta" />
+              <YAxis tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
+              <Tooltip formatter={(value) => formatMoney(value)} />
+              <Bar dataKey="saldo" fill="#3a73b9" radius={[8, 8, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ),
+    },
+    "table-resumen-sede": {
+      className: "dashboard-widget--wide",
+      dataTour: "dashboard-actividad",
+      content: (
+        <div className="panel wide">
+          <h3>Resumen por sede</h3>
+          <DataTable
+            columns={["Sede", "Ingresos", "Egresos", "Resultado", "Rentabilidad"]}
+            rows={rows}
+          />
+        </div>
+      ),
+    },
+    "panel-alertas": {
+      className: "dashboard-widget--large",
+      content: (
+        <div className="panel">
+          <h3>Alertas</h3>
+          <div className="alert-item danger">
+            <strong>{cuentasVencidas.length} cuentas vencidas</strong>
+            <span>Total: {formatMoney(deudaVencida)}</span>
+          </div>
+          <div className="alert-item warning">
+            <strong>{conciliacionesPendientes.length} movimientos sin conciliar</strong>
+            <span>Requieren revisiÃ³n bancaria</span>
+          </div>
+          <div className="alert-item info">
+            <strong>{cuentasFiltradas.length} registros en cuentas corrientes</strong>
+            <span>Control operativo general</span>
+          </div>
+        </div>
+      ),
+    },
+    "table-saldos-bancarios": {
+      className: "dashboard-widget--wide",
+      content: (
+        <div className="panel">
+          <h3>Saldos bancarios por cuenta</h3>
+          <DataTable columns={["Cuenta", "Saldo", "Pendientes"]} rows={bancosRows} />
+        </div>
+      ),
+    },
+  };
+
+  const orderedDashboardWidgets = mergeWidgetOrder(widgetOrder)
+    .map((id) => ({ id, ...dashboardWidgetsById[id] }))
+    .filter((widget) => widget.content);
+  const showLegacyDashboard = window.__CEDIM_SHOW_LEGACY_DASHBOARD__ === true;
 
   return (
     <section className="page">
@@ -542,6 +980,34 @@ export default function Dashboard({ selectedSede, sedeId }) {
         )}
       </div>
 
+      <div className="dashboard-widgets-grid">
+        {orderedDashboardWidgets.map((widget) => (
+          <div
+            key={widget.id}
+            className={[
+              "dashboard-widget",
+              widget.className,
+              draggedWidgetId === widget.id ? "is-dragging" : "",
+              dragOverWidgetId === widget.id && draggedWidgetId !== widget.id ? "is-drag-over" : "",
+            ].filter(Boolean).join(" ")}
+            data-widget-id={widget.id}
+            data-tour={widget.dataTour}
+            draggable
+            onDragStart={(event) => handleWidgetDragStart(event, widget.id)}
+            onDragOver={(event) => handleWidgetDragOver(event, widget.id)}
+            onDrop={(event) => handleWidgetDrop(event, widget.id)}
+            onDragEnd={handleWidgetDragEnd}
+          >
+            <div className="dashboard-widget-drag-handle" title="Arrastrar para reordenar">
+              <GripVertical size={16} />
+            </div>
+            {widget.content}
+          </div>
+        ))}
+      </div>
+
+      {showLegacyDashboard && (
+      <>
       <div className="stats-grid" data-tour="dashboard-kpis">
         <StatCard
           title="Ingresos"
@@ -741,6 +1207,8 @@ export default function Dashboard({ selectedSede, sedeId }) {
         <h3>Saldos bancarios por cuenta</h3>
         <DataTable columns={["Cuenta", "Saldo", "Pendientes"]} rows={bancosRows} />
       </div>
+      </>
+      )}
     </section>
   );
 }

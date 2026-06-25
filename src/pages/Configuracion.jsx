@@ -17,6 +17,7 @@ import {
   getArcaSettings,
   updateArcaSettings,
 } from "../services/arcaInvoices";
+import { canPerform } from "../utils/permissions";
 
 const menuOptions = [
   { id: "dashboard", label: "Dashboard" },
@@ -101,6 +102,7 @@ export default function Configuracion({ currentUser }) {
   const [loadingArcaSettings, setLoadingArcaSettings] = useState(false);
   const [savingArcaSettings, setSavingArcaSettings] = useState(false);
   const userIsAdmin = isAdminUser(currentUser);
+  const canEditConfiguracion = canPerform(currentUser, "configuracion", "edit");
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -148,6 +150,8 @@ export default function Configuracion({ currentUser }) {
   }, [form.hiddenMenuItems]);
 
   function updateField(field, value) {
+    if (!canEditConfiguracion) return;
+
     const next = {
       ...form,
       [field]: value,
@@ -165,6 +169,8 @@ export default function Configuracion({ currentUser }) {
   }
 
   function updateArcaSettingsField(field, value) {
+    if (!canEditConfiguracion) return;
+
     setArcaSettingsForm((prev) => ({
       ...prev,
       [field]: value,
@@ -176,6 +182,7 @@ export default function Configuracion({ currentUser }) {
   }
 
   function toggleMenuItem(id) {
+    if (!canEditConfiguracion) return;
     if (id === "configuracion") return;
 
     const current = Array.isArray(form.hiddenMenuItems)
@@ -190,6 +197,8 @@ export default function Configuracion({ currentUser }) {
   }
 
   async function handleIconUpload(e, field, folder) {
+    if (!canEditConfiguracion) return;
+
     const file = e.target.files?.[0];
 
     if (!file) return;
@@ -211,6 +220,8 @@ export default function Configuracion({ currentUser }) {
   }
 
   function restoreDefaults() {
+    if (!canEditConfiguracion) return;
+
     setForm(defaultAppConfig);
     setConfig(defaultAppConfig);
     setMessage("");
@@ -219,6 +230,7 @@ export default function Configuracion({ currentUser }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (!canEditConfiguracion) return;
 
     setMessage("");
     setError("");
@@ -244,6 +256,8 @@ export default function Configuracion({ currentUser }) {
   }
 
   async function handleSaveArcaSettings() {
+    if (!canEditConfiguracion || !userIsAdmin) return;
+
     setMessage("");
     setError("");
     setSavingArcaSettings(true);
@@ -315,7 +329,7 @@ export default function Configuracion({ currentUser }) {
             type="button"
             className="secondary-button"
             onClick={restoreDefaults}
-            disabled={savingConfig || uploading}
+            disabled={!canEditConfiguracion || savingConfig || uploading}
           >
             <RotateCcw size={16} />
             Restaurar
@@ -325,7 +339,7 @@ export default function Configuracion({ currentUser }) {
             type="button"
             className="primary-button"
             onClick={handleSubmit}
-            disabled={savingConfig || uploading}
+            disabled={!canEditConfiguracion || savingConfig || uploading}
           >
             <Save size={16} />
             {savingConfig ? "Guardando..." : "Guardar cambios"}
@@ -336,6 +350,12 @@ export default function Configuracion({ currentUser }) {
       {(message || error) && (
         <div className={`config-message ${error ? "error" : "success"}`}>
           {error || message}
+        </div>
+      )}
+
+      {!canEditConfiguracion && (
+        <div className="config-message">
+          Tenes acceso de lectura. Para modificar esta configuracion necesitas configuracion.edit.
         </div>
       )}
 
@@ -460,7 +480,7 @@ export default function Configuracion({ currentUser }) {
                             "platform-icons"
                           )
                         }
-                        disabled={Boolean(uploading)}
+                        disabled={!canEditConfiguracion || Boolean(uploading)}
                       />
                     </label>
                   </div>
@@ -551,7 +571,7 @@ export default function Configuracion({ currentUser }) {
                         onChange={(e) =>
                           handleIconUpload(e, "loginIconUrl", "login-icons")
                         }
-                        disabled={Boolean(uploading)}
+                        disabled={!canEditConfiguracion || Boolean(uploading)}
                       />
                     </label>
                   </div>
@@ -666,7 +686,7 @@ export default function Configuracion({ currentUser }) {
                         className={`visibility-toggle ${hidden ? "hidden" : ""
                           }`}
                         onClick={() => toggleMenuItem(item.id)}
-                        disabled={locked}
+                        disabled={locked || !canEditConfiguracion}
                         title={hidden ? "Mostrar módulo" : "Ocultar módulo"}
                       >
                         {hidden ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -927,7 +947,7 @@ export default function Configuracion({ currentUser }) {
                       onClick={() =>
                         setArcaSettingsForm(buildArcaSettingsForm(arcaSettings))
                       }
-                      disabled={savingArcaSettings}
+                      disabled={!canEditConfiguracion || savingArcaSettings}
                     >
                       Descartar cambios
                     </button>
@@ -936,7 +956,7 @@ export default function Configuracion({ currentUser }) {
                       type="button"
                       className="primary-button"
                       onClick={handleSaveArcaSettings}
-                      disabled={savingArcaSettings}
+                      disabled={!canEditConfiguracion || savingArcaSettings}
                     >
                       <Save size={16} />
                       {savingArcaSettings
@@ -962,7 +982,7 @@ export default function Configuracion({ currentUser }) {
               type="button"
               className="secondary-button"
               onClick={restoreDefaults}
-              disabled={savingConfig || uploading}
+              disabled={!canEditConfiguracion || savingConfig || uploading}
             >
               Restaurar valores por defecto
             </button>
@@ -970,7 +990,7 @@ export default function Configuracion({ currentUser }) {
             <button
               type="submit"
               className="primary-button"
-              disabled={savingConfig || uploading}
+              disabled={!canEditConfiguracion || savingConfig || uploading}
             >
               <Save size={16} />
               {savingConfig ? "Guardando..." : "Guardar configuración"}

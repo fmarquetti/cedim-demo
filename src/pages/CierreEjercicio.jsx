@@ -29,7 +29,7 @@ function BalanceTable({ title, rows }) {
         <h3>{title}</h3>
         <span>{rows.length} cuentas</span>
       </div>
-      <div className="table-wrapper">
+      <div className="table-card">
         <table>
           <thead>
             <tr>
@@ -135,10 +135,10 @@ export default function CierreEjercicio({ selectedSede, sedeId }) {
   ];
 
   return (
-    <div className="page">
+    <section className="page">
       <div className="page-header" data-tour="cierre-ejercicio-header">
         <div>
-          <h1>Cierre de Ejercicio</h1>
+          <h2>Cierre de Ejercicio</h2>
           <p>Cierre anual, resultado del ejercicio y apertura del nuevo período.</p>
           <span className="muted">Sede: {selectedSede?.nombre || selectedSede || "Todas las sedes"}</span>
         </div>
@@ -245,6 +245,6 @@ export default function CierreEjercicio({ selectedSede, sedeId }) {
           </div>
         </>
       )}
-    </div>
+    </section>
   );
 }
