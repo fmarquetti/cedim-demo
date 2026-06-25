@@ -1342,11 +1342,13 @@ td {
 
 .development-notice {
   position: fixed;
-  top: 86px;
-  right: 24px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   z-index: 9000;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.6rem;
   max-width: min(420px, calc(100vw - 32px));
   padding: 0.85rem 1rem;
@@ -1372,10 +1374,12 @@ td {
 
 @media (max-width: 720px) {
   .development-notice {
-    top: auto;
-    right: 12px;
-    left: 12px;
-    bottom: 92px;
+    top: 50%;
+    right: auto;
+    left: 50%;
+    bottom: auto;
+    transform: translate(-50%, -50%);
+    width: calc(100vw - 24px);
     justify-content: center;
     border-radius: 18px;
     text-align: center;
