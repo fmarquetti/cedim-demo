@@ -7,6 +7,32 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const defaultOperatorPermissions = [
+  "dashboard.view",
+  "ingresos.view",
+  "ingresos.create",
+  "ingresos.edit",
+  "egresos.view",
+  "pacientes.view",
+  "pacientes.create",
+  "turnos.view",
+  "turnos.create",
+];
+
+function getInitialPermissions(rol: string, requestedPermissions: unknown) {
+  if (rol === "Administrador") return ["all"];
+
+  if (Array.isArray(requestedPermissions) && requestedPermissions.length > 0) {
+    return requestedPermissions
+      .filter((permiso) => typeof permiso === "string")
+      .filter((permiso) => permiso !== "all");
+  }
+
+  if (rol === "Operador") return defaultOperatorPermissions;
+
+  return [];
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -118,11 +144,7 @@ Deno.serve(async (req) => {
     const rol = body.rol || "Operador";
     const accesoTodasSedes = body.acceso === "Todas las sedes";
     const sedeId = body.sedeId || null;
-    const permisosSolicitados = Array.isArray(body.permisos) ? body.permisos : [];
-    const permisos =
-      rol === "Administrador"
-        ? ["all"]
-        : permisosSolicitados.filter((permiso) => permiso !== "all");
+    const permisos = getInitialPermissions(rol, body.permisos);
 
     if (!nombre || !email || !rol) {
       return new Response(

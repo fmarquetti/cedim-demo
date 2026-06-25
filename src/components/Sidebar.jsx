@@ -31,6 +31,7 @@ import {
     SearchCheck,
     Upload,
     FileClock,
+    Ticket,
 } from "lucide-react";
 
 import logo from "../assets/logo-cedim.png";
@@ -92,6 +93,7 @@ const menuGroups = [
         items: [
             { id: "sedes", label: "Sociedades / Sedes", icon: Building2 },
             { id: "usuarios", label: "Usuarios", icon: UserCog },
+            { id: "tickets", label: "Tickets", icon: Ticket },
             { id: "configuracion", label: "Configuración", icon: Settings },
             { id: "propuestasComerciales", label: "Propuestas", icon: FileText, internalOnly: true },
         ],

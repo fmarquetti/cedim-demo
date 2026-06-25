@@ -192,6 +192,18 @@ export const systemModulesCatalog = [
     screenshotKey: "historialAuditoria",
   },
   {
+    id: "tickets",
+    title: "Tickets de soporte",
+    group: "Administracion",
+    routeKey: "tickets",
+    shortDescription: "Permite reportar problemas, consultas y mejoras desde la plataforma.",
+    businessValue: "Centraliza solicitudes de usuarios, prioriza incidencias y deja trazabilidad de respuestas.",
+    features: ["Creacion de tickets.", "Categorias.", "Prioridades.", "Estados.", "Comentarios.", "Adjuntos opcionales.", "Vista propia o administrativa."],
+    workflow: ["El usuario crea un ticket.", "El administrador revisa prioridad y estado.", "Se responde en el historial.", "El ticket se resuelve o cierra."],
+    integrations: ["Usuarios.", "Storage para adjuntos opcionales."],
+    screenshotKey: "tickets",
+  },
+  {
     id: "configuracionFiscal",
     title: "Configuracion fiscal",
     group: "Fiscal",

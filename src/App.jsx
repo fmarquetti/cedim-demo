@@ -32,6 +32,7 @@ import SetPassword from "./pages/setPassword";
 import Facturacion from "./pages/Facturacion";
 import Importaciones from "./pages/Importaciones";
 import PropuestasComerciales from "./pages/PropuestasComerciales";
+import Tickets from "./pages/Tickets";
 
 import Footer from "./components/Footer";
 import HelpAssistant from "./components/HelpAssistant";
@@ -72,6 +73,7 @@ const appPageIds = [
   "facturacion",
   "importaciones",
   "propuestasComerciales",
+  "tickets",
 ];
 
 function getSedeId(selectedSede) {
@@ -122,6 +124,7 @@ function getPage(activePage, selectedSede, currentUser, setActivePage) {
     facturacion: <Facturacion {...props} />,
     importaciones: <Importaciones {...props} />,
     propuestasComerciales: <PropuestasComerciales {...props} />,
+    tickets: <Tickets {...props} />,
   };
 
   return pages[activePage] || pages.dashboard;
@@ -232,7 +235,11 @@ function AppContent() {
 
         <Footer />
 
-        <HelpAssistant activePage={activePage} setActivePage={setActivePage} />
+        <HelpAssistant
+          activePage={activePage}
+          setActivePage={setActivePage}
+          currentUser={currentUser}
+        />
 
         <FloatingNotice />
 

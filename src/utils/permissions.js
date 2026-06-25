@@ -56,6 +56,7 @@ export const PERMISSION_MODULES = [
     modules: [
       { id: "sedes", label: "Sociedades / Sedes" },
       { id: "usuarios", label: "Usuarios" },
+      { id: "tickets", label: "Tickets", actions: ["view", "create", "edit"] },
       { id: "configuracion", label: "Configuracion", actions: ["view", "edit"] },
     ],
   },
@@ -92,6 +93,7 @@ export function hasPermission(user, permission) {
 
 export function canViewPage(user, pageId) {
   if (!pageId) return false;
+  if (pageId === "tickets") return Boolean(user);
 
   return (
     hasPermission(user, `${pageId}.view`) ||
