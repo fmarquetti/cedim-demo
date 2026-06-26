@@ -10,6 +10,7 @@ import Egresos from "./pages/Egresos";
 import OrdenesPago from "./pages/OrdenesPago";
 import CuentasCorrientes from "./pages/CuentasCorrientes";
 import CuentasCorrientesEntidades from "./pages/CuentasCorrientesEntidades";
+import ClientesProveedores from "./pages/ClientesProveedores";
 import Bancos from "./pages/Bancos";
 import Reportes from "./pages/Reportes";
 import PanelContador from "./pages/PanelContador";
@@ -51,6 +52,7 @@ const appPageIds = [
   "ingresos",
   "egresos",
   "ordenesPago",
+  "clientesProveedores",
   "cuentas",
   "cuentasCorrientesEntidades",
   "bancos",
@@ -103,6 +105,7 @@ function getPage(activePage, selectedSede, currentUser, setActivePage, setCurren
     ingresos: <Ingresos {...props} />,
     egresos: <Egresos {...props} />,
     ordenesPago: <OrdenesPago {...props} />,
+    clientesProveedores: <ClientesProveedores {...props} />,
     cuentas: <CuentasCorrientes {...props} />,
     cuentasCorrientesEntidades: <CuentasCorrientesEntidades {...props} />,
     bancos: <Bancos {...props} />,
