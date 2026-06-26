@@ -18,11 +18,6 @@ export const PERMISSION_MODULES = [
       { id: "ordenesPago", label: "Ordenes de Pago" },
       { id: "clientesProveedores", label: "Clientes / Proveedores" },
       { id: "cuentas", label: "Cuentas corrientes", actions: ["view", "edit"] },
-      {
-        id: "cuentasCorrientesEntidades",
-        label: "CC Clientes/Proveedores",
-        actions: ["view", "edit"],
-      },
       { id: "bancos", label: "Bancos" },
       { id: "reportes", label: "Reportes", actions: ["view"] },
     ],
