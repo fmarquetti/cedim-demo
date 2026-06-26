@@ -1039,7 +1039,7 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
       detalleSheet.columns = [
         { header: "Fecha", key: "fecha", width: 14 },
         { header: "Proveedor", key: "proveedor", width: 30 },
-        { header: "Sociedad", key: "sociedad", width: 28 },
+        { header: "Razón social proveedor", key: "sociedad", width: 28 },
         { header: "Sede", key: "sede", width: 24 },
         { header: "Concepto", key: "concepto", width: 40 },
         { header: "Categoría", key: "categoria", width: 20 },
@@ -1171,7 +1171,7 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
           [
             "Fecha",
             "Proveedor",
-            "Sociedad",
+            "Razón social proveedor",
             "Sede",
             "Concepto",
             "Categoría",
@@ -1295,7 +1295,7 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
 
       <div className="filters-bar" data-tour="egresos-filtros">
         <input
-          placeholder="Buscar por proveedor, sociedad, sede, concepto, categoría o comprobante..."
+          placeholder="Buscar por proveedor, razón social, sede, concepto, categoría o comprobante..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           data-tour="egresos-busqueda"
@@ -1330,7 +1330,7 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
         </label>
 
         <label className="filter-field">
-          <span>Sociedad</span>
+          <span>Razón social proveedor</span>
           <select
             value={sociedadFiltro}
             onChange={(e) => setSociedadFiltro(e.target.value)}
@@ -1424,7 +1424,7 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
               <tr>
                 <th>Fecha</th>
                 <th>Proveedor</th>
-                <th>Sociedad</th>
+                <th>Razón social proveedor</th>
                 <th>Sede</th>
                 <th>Concepto</th>
                 <th>Categoría</th>
@@ -1542,12 +1542,13 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
             </label>
 
             <label>
-              Sociedad
+              Razón social del proveedor
               <input
                 required
                 value={form.sociedad}
                 onChange={(e) => setForm({ ...form, sociedad: e.target.value })}
               />
+              <small>Nombre legal o CUIT asociado al proveedor.</small>
             </label>
 
             <label>
@@ -1728,13 +1729,14 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
             </label>
 
             <label>
-              Sociedad
+              Razón social del proveedor
               <input
                 value={egresoPendiente.sociedad}
                 onChange={(e) =>
                   setEgresoPendiente({ ...egresoPendiente, sociedad: e.target.value })
                 }
               />
+              <small>Nombre legal o CUIT asociado al proveedor.</small>
             </label>
 
             <label>

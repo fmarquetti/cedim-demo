@@ -835,7 +835,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
       ingresosSheet.columns = [
         { header: "Fecha", key: "fecha", width: 14 },
         { header: "Concepto", key: "concepto", width: 42 },
-        { header: "Sociedad", key: "sociedad", width: 28 },
+        { header: "Entidad pagadora", key: "sociedad", width: 28 },
         { header: "Sede", key: "sede", width: 24 },
         { header: "Origen", key: "origen", width: 20 },
         { header: "Importe", key: "importe", width: 18 },
@@ -925,7 +925,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
 
       autoTable(doc, {
         startY: doc.lastAutoTable.finalY + 8,
-        head: [["Fecha", "Concepto", "Sociedad", "Sede", "Origen", "Importe", "Cobro", "Estado"]],
+        head: [["Fecha", "Concepto", "Entidad pagadora", "Sede", "Origen", "Importe", "Cobro", "Estado"]],
         body: ingresosFiltrados.map((item) => [formatDate(getFechaReal(item)), item.concepto, item.sociedad, item.sede, item.origen, formatMoney(item.importe), item.cobro, item.estado]),
         styles: { fontSize: 7 },
         headStyles: { fillColor: [30, 58, 138], textColor: 255 },
@@ -1012,7 +1012,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
       </div>
 
       <div className="filters-bar" data-tour="ingresos-filtros">
-        <input placeholder="Buscar por concepto, sociedad, sede, origen o comprobante..." value={search} onChange={(e) => setSearch(e.target.value)} data-tour="ingresos-busqueda" />
+        <input placeholder="Buscar por concepto, entidad pagadora, sede, origen o comprobante..." value={search} onChange={(e) => setSearch(e.target.value)} data-tour="ingresos-busqueda" />
         <label className="filter-field"><span>Estado</span>
           <select value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)} data-tour="ingresos-filtro-estado">
             <option>Todos</option><option>Cobrado</option><option>Pendiente</option>
@@ -1071,7 +1071,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
           <table>
             <thead>
               <tr>
-                <th>Fecha</th><th>Concepto</th><th>Sociedad</th><th>Sede</th>
+                <th>Fecha</th><th>Concepto</th><th>Entidad pagadora</th><th>Sede</th>
                 <th>Origen</th><th>Importe</th><th>Cobro</th><th>Estado</th>
                 <th>Comprobante</th><th data-tour="ingresos-acciones">Acciones</th>
               </tr>
@@ -1139,7 +1139,11 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
         <Modal title="Nuevo ingreso" onClose={() => setModal(null)}>
           <form className="form-grid" onSubmit={handleCreate}>
             <label>Fecha <input type="date" required value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} /></label>
-            <label>Sociedad <input required value={form.sociedad} onChange={(e) => setForm({ ...form, sociedad: e.target.value })} /></label>
+            <label>
+              Entidad pagadora / Razón social
+              <input required value={form.sociedad} onChange={(e) => setForm({ ...form, sociedad: e.target.value })} />
+              <small>Obra social, prepaga, cliente particular, razón social o CUIT.</small>
+            </label>
             <label>Sede
               <select value={form.sedeId} onChange={(e) => setForm({ ...form, sedeId: e.target.value })} disabled={sedeBloqueada} required>
                 {sedes.map((sede) => <option key={sede.id} value={sede.id}>{sede.nombre}</option>)}
@@ -1150,6 +1154,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
                 <option>Obra Social</option><option>Prepaga</option><option>Particular</option><option>Factura fiscal</option>
               </select>
             </label>
+            <label>Importe <input type="number" step="0.01" min="0" required value={form.importe} onChange={(e) => setForm({ ...form, importe: e.target.value })} /></label>
             <div className="full split-box">
               <div className="split-header">
                 <div>
@@ -1159,7 +1164,11 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
                   </small>
                 </div>
 
-                <button type="button" className="secondary-button" onClick={agregarDistribucion}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={agregarDistribucion}
+                >
                   Agregar sede
                 </button>
               </div>
@@ -1170,7 +1179,9 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
                     <div className="split-row" key={index}>
                       <select
                         value={item.sedeId}
-                        onChange={(e) => actualizarDistribucion(index, "sedeId", e.target.value)}
+                        onChange={(e) =>
+                          actualizarDistribucion(index, "sedeId", e.target.value)
+                        }
                         required
                       >
                         <option value="">Seleccionar sede</option>
@@ -1220,85 +1231,6 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
                 </div>
               )}
             </div>
-            <label>Importe <input type="number" step="0.01" min="0" required value={form.importe} onChange={(e) => setForm({ ...form, importe: e.target.value })} /></label>
-            <div className="full split-box">
-              <div className="split-header">
-                <div>
-                  <strong>Distribución por sedes</strong>
-                  <small>
-                    Opcional. Si no agregás distribución, se aplica el 100% a la sede seleccionada.
-                  </small>
-                </div>
-
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={agregarDistribucionIngresoPendiente}
-                >
-                  Agregar sede
-                </button>
-              </div>
-
-              {ingresoPendiente?.distribuciones?.length > 0 && (
-                <div className="split-table">
-                  {(ingresoPendiente?.distribuciones || []).map((item, index) => (
-                    <div className="split-row" key={index}>
-                      <select
-                        value={item.sedeId}
-                        onChange={(e) =>
-                          actualizarDistribucionIngresoPendiente(index, "sedeId", e.target.value)
-                        }
-                        required
-                      >
-                        <option value="">Seleccionar sede</option>
-                        {getSedesDisponiblesIngresoPendiente(index).map((sede) => (
-                          <option key={sede.id} value={sede.id}>
-                            {sede.nombre}
-                          </option>
-                        ))}
-                      </select>
-
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        placeholder="%"
-                        value={item.porcentaje}
-                        onChange={(e) =>
-                          actualizarDistribucionIngresoPendiente(index, "porcentaje", e.target.value)
-                        }
-                        onBlur={(e) =>
-                          actualizarDistribucionIngresoPendiente(index, "porcentaje", e.target.value || 0)
-                        }
-                        required
-                      />
-
-                      <span>
-                        {formatMoney(calcularImporteDistribuidoIngresoPendiente(item.porcentaje))}
-                      </span>
-
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => eliminarDistribucionIngresoPendiente(index)}
-                      >
-                        Quitar
-                      </button>
-                    </div>
-                  ))}
-
-                  <div className="split-total">
-                    <strong>Total distribuido: {totalDistribucionIngresoPendiente()}%</strong>
-                    <span>
-                      {Math.abs(totalDistribucionIngresoPendiente() - 100) <= 0.01
-                        ? "Correcto"
-                        : "Debe sumar 100%"}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
             <label>Forma de cobro
               <select value={form.cobro} onChange={(e) => setForm({ ...form, cobro: e.target.value })}>
                 <option>Transferencia</option><option>Efectivo</option><option>Tarjeta</option><option>Cheque</option>
@@ -1338,7 +1270,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
             </div>
             <label>Fecha <input type="date" required value={ingresoPendiente.fecha} onChange={(e) => setIngresoPendiente({ ...ingresoPendiente, fecha: e.target.value })} /></label>
             <label>Comprobante <input value={ingresoPendiente.comprobante} disabled /></label>
-            <label>Sociedad / CUIT <input required value={ingresoPendiente.sociedad} onChange={(e) => setIngresoPendiente({ ...ingresoPendiente, sociedad: e.target.value })} /></label>
+            <label>Entidad pagadora / CUIT <input required value={ingresoPendiente.sociedad} onChange={(e) => setIngresoPendiente({ ...ingresoPendiente, sociedad: e.target.value })} /></label>
             <label>Sede
               <select value={ingresoPendiente.sedeId} onChange={(e) => setIngresoPendiente({ ...ingresoPendiente, sedeId: e.target.value })} required>
                 {sedes.map((sede) => <option key={sede.id} value={sede.id}>{sede.nombre}</option>)}
