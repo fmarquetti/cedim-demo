@@ -31,6 +31,7 @@ import { getSedes } from "../services/sedeService";
 import { formatMoney, formatDate, toDate } from "../utils/format";
 import { toast } from "../components/ToastProvider";
 import { canPerform } from "../utils/permissions";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 import ConceptoSelector from "../components/ConceptoSelector";
 import { getConceptoItems } from "../services/conceptoItemService";
@@ -90,7 +91,7 @@ function formatFechaInput(fecha) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export default function Ingresos({ selectedSede, sedeId, currentUser }) {
+export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }) {
   const facturaInputRef = useRef(null);
   const canCreateIngresos = canPerform(currentUser, "ingresos", "create");
   const canEditIngresos = canPerform(currentUser, "ingresos", "edit");
@@ -116,11 +117,13 @@ export default function Ingresos({ selectedSede, sedeId, currentUser }) {
   const [deletingId, setDeletingId] = useState(null);
 
   const [conceptoItems, setConceptoItems] = useState([]);
+  const idSedeActiva = dbSedeId ?? getDbSedeId(sedeId);
+  const sedeBloqueada = Boolean(idSedeActiva);
 
   async function loadData(currentSedeId = sedeId) {
     setLoading(true);
     try {
-      const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
+      const idParaFiltro = getDbSedeId(currentSedeId);
       const [ingresosData, sedesData, conceptoItemsData] = await Promise.all([
         getIngresos(idParaFiltro),
         getSedes(),
@@ -133,7 +136,7 @@ export default function Ingresos({ selectedSede, sedeId, currentUser }) {
 
       setForm((prev) => ({
         ...prev,
-        sedeId: prev.sedeId || sedesData?.[0]?.id || "",
+        sedeId: prev.sedeId || idParaFiltro || sedesData?.[0]?.id || "",
       }));
     } catch (error) {
       toast.error(error.message || "No se pudieron cargar los ingresos.");
@@ -182,6 +185,16 @@ export default function Ingresos({ selectedSede, sedeId, currentUser }) {
   const totalCobrado = ingresosFiltrados.filter((i) => i.estado === "Cobrado").reduce((acc, i) => acc + Number(i.importe || 0), 0);
   const totalPendiente = ingresosFiltrados.filter((i) => i.estado === "Pendiente").reduce((acc, i) => acc + Number(i.importe || 0), 0);
   const ingresosFiscales = ingresosFiltrados.filter((item) => item.datosFiscales?.qrUrl);
+
+  function openNuevoIngreso() {
+    if (!canCreateIngresos) return;
+
+    setForm({
+      ...emptyForm,
+      sedeId: idSedeActiva || sedes[0]?.id || "",
+    });
+    setModal("nuevo");
+  }
 
   const resumenPorOrigen = useMemo(() => {
     const map = {};
@@ -638,7 +651,7 @@ export default function Ingresos({ selectedSede, sedeId, currentUser }) {
     try {
       await createIngreso(form);
       await loadData();
-      setForm({ ...emptyForm, sedeId: sedes[0]?.id || "" });
+      setForm({ ...emptyForm, sedeId: idSedeActiva || sedes[0]?.id || "" });
       setModal(null);
       toast.success("Ingreso guardado correctamente.");
     } catch (error) {
@@ -707,10 +720,8 @@ export default function Ingresos({ selectedSede, sedeId, currentUser }) {
       const puntoVenta = String(datos.ptoVta || "").padStart(4, "0");
       const numeroComprobante = String(datos.nroCmp || "").padStart(8, "0");
 
-      const nombreSede = typeof selectedSede === "object" && selectedSede !== null
-        ? selectedSede.nombre : selectedSede;
-      const sedeDefault = nombreSede && nombreSede !== "Todas las sedes"
-        ? sedes.find((s) => s.nombre === nombreSede)
+      const sedeDefault = idSedeActiva
+        ? sedes.find((s) => s.id === idSedeActiva)
         : sedes[0];
 
       setIngresoPendiente({
@@ -968,7 +979,7 @@ export default function Ingresos({ selectedSede, sedeId, currentUser }) {
           {canCreateIngresos && (
             <button
               className="primary-button"
-              onClick={() => setModal("nuevo")}
+              onClick={openNuevoIngreso}
               data-tour="ingresos-nuevo"
             >
               <Plus size={16} /> Nuevo ingreso
@@ -1130,7 +1141,7 @@ export default function Ingresos({ selectedSede, sedeId, currentUser }) {
             <label>Fecha <input type="date" required value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} /></label>
             <label>Sociedad <input required value={form.sociedad} onChange={(e) => setForm({ ...form, sociedad: e.target.value })} /></label>
             <label>Sede
-              <select value={form.sedeId} onChange={(e) => setForm({ ...form, sedeId: e.target.value })} required>
+              <select value={form.sedeId} onChange={(e) => setForm({ ...form, sedeId: e.target.value })} disabled={sedeBloqueada} required>
                 {sedes.map((sede) => <option key={sede.id} value={sede.id}>{sede.nombre}</option>)}
               </select>
             </label>

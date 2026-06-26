@@ -35,7 +35,7 @@ export async function getAppConfig() {
         .from("configuracion_app")
         .select("valor")
         .eq("clave", "app")
-        .single();
+        .maybeSingle();
 
     if (error) {
         console.error("Error obteniendo configuración:", error);

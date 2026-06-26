@@ -25,6 +25,7 @@ import {
   getCuentasCorrientes,
   marcarCuentaAplicada,
 } from "../services/cuentaCorrienteService";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 const COMPROBANTES_DEUDA = [
   "Factura",
@@ -150,7 +151,7 @@ const getNivelRiesgo = (deudaVencida, cuentasACobrar) => {
   return { label: "Bajo", color: "#10b981", detail: "Situación controlada" };
 };
 
-export default function CuentasCorrientes({ selectedSede, sedeId }) {
+export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
   const [movimientos, setMovimientos] = useState([]);
   const [sedes, setSedes] = useState([]);
 
@@ -172,12 +173,14 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
     typeof selectedSede === "object" && selectedSede !== null
       ? selectedSede.nombre
       : selectedSede || "Todas las sedes";
+  const idSedeActiva = dbSedeId ?? getDbSedeId(sedeId);
+  const sedeBloqueada = Boolean(idSedeActiva);
 
   async function loadData(currentSedeId = sedeId) {
     setLoading(true);
 
     try {
-      const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
+      const idParaFiltro = getDbSedeId(currentSedeId);
 
       const [movimientosData, sedesData] = await Promise.all([
         getCuentasCorrientes(idParaFiltro),
@@ -189,7 +192,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
 
       setForm((prev) => ({
         ...prev,
-        sedeId: prev.sedeId || sedesData?.[0]?.id || "",
+        sedeId: prev.sedeId || idParaFiltro || sedesData?.[0]?.id || "",
       }));
     } catch (error) {
       console.error("Error cargando cuentas corrientes:", error);
@@ -204,6 +207,14 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
   }, [sedeId]);
 
   const movimientosPorSede = movimientos;
+
+  function openNuevoComprobante() {
+    setForm({
+      ...emptyForm,
+      sedeId: idSedeActiva || sedes[0]?.id || "",
+    });
+    setModal("nuevo");
+  }
 
   const entidadesUnicas = useMemo(() => {
     return [...new Set(movimientosPorSede.map((m) => m.entidad))].sort();
@@ -790,7 +801,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
 
       setForm({
         ...emptyForm,
-        sedeId: sedes[0]?.id || "",
+        sedeId: idSedeActiva || sedes[0]?.id || "",
       });
 
       setModal(null);
@@ -835,7 +846,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
           </p>
         </div>
 
-        <button className="primary-button" onClick={() => setModal("nuevo")} data-tour="cuentas-nueva">
+        <button className="primary-button" onClick={openNuevoComprobante} data-tour="cuentas-nueva">
           <Plus size={16} /> Registrar Comprobante
         </button>
       </div>
@@ -1167,6 +1178,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId }) {
               <select
                 value={form.sedeId}
                 onChange={(e) => setForm({ ...form, sedeId: e.target.value })}
+                disabled={sedeBloqueada}
                 required
               >
                 {sedes.map((sede) => (
