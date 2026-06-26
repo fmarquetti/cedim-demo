@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 function formatFecha(fecha) {
   if (!fecha) return "";
@@ -27,7 +28,7 @@ function mapDocumento(row) {
 }
 
 export async function getDocumentos(sedeId = null) {
-  const idParaFiltro = sedeId === "todas" ? null : sedeId;
+  const idParaFiltro = getDbSedeId(sedeId);
 
   let query = supabase
     .from("documentos")
@@ -60,7 +61,7 @@ export async function createDocumento(form) {
       tipo: form.tipo,
       descripcion: form.descripcion,
       asociado_a: form.asociadoA || null,
-      sede_id: form.sedeId || null,
+      sede_id: getDbSedeId(form.sedeId),
       archivo: form.archivo || null,
       archivo_path: form.archivoPath || null,
       archivo_url: form.archivoUrl || null,

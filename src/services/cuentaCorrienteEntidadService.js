@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 export function normalizeText(value) {
   return String(value || "")
@@ -240,7 +241,7 @@ export async function crearMovimientoCuentaCorriente(payload) {
       debe,
       haber,
       estado: payload.estado || "pendiente",
-      sede_id: payload.sedeId && payload.sedeId !== "todas" ? payload.sedeId : null,
+      sede_id: getDbSedeId(payload.sedeId),
       metadata: payload.metadata || {},
     })
     .select("*")
@@ -272,7 +273,8 @@ export async function getMovimientosCuentaCorriente({
   if (tipoEntidad && tipoEntidad !== "todos") query = query.eq("tipo_entidad", tipoEntidad);
   if (desde) query = query.gte("fecha", desde);
   if (hasta) query = query.lte("fecha", hasta);
-  if (sedeId && sedeId !== "todas") query = query.eq("sede_id", sedeId);
+  const idParaFiltro = getDbSedeId(sedeId);
+  if (idParaFiltro) query = query.eq("sede_id", idParaFiltro);
 
   const { data, error } = await query;
   if (error) throw error;

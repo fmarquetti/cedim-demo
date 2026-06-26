@@ -43,6 +43,12 @@ import FloatingNotice from "./components/FloatingNotice";
 import DevelopmentNotice from "./components/DevelopmentNotice";
 import { canAccessInternalTools } from "./utils/internalAccess";
 import { canViewPage, getFirstPermittedPage } from "./utils/permissions";
+import {
+  getDbSedeId,
+  getSedeId as getNormalizedSedeId,
+  resolveEffectiveSede,
+  TODAS_LAS_SEDES,
+} from "./utils/sedeUtils";
 
 import DemoTour from "./components/DemoTour";
 
@@ -78,21 +84,17 @@ const appPageIds = [
 ];
 
 function getSedeId(selectedSede) {
-  if (!selectedSede) return "todas";
-
-  if (typeof selectedSede === "object") {
-    return selectedSede.id || selectedSede.sedeId || "todas";
-  }
-
-  return "todas";
+  return getNormalizedSedeId(selectedSede);
 }
 
 function getPage(activePage, selectedSede, currentUser, setActivePage, setCurrentUser) {
   const sedeId = getSedeId(selectedSede);
+  const dbSedeId = getDbSedeId(selectedSede);
 
   const props = {
     selectedSede,
     sedeId,
+    dbSedeId,
     currentUser,
     setActivePage,
     setCurrentUser,
@@ -132,29 +134,10 @@ function getPage(activePage, selectedSede, currentUser, setActivePage, setCurren
   return pages[activePage] || pages.dashboard;
 }
 
-function getEffectiveSelectedSede(currentUser, selectedSede) {
-  if (currentUser?.access !== "Una sede") {
-    return selectedSede;
-  }
-
-  if (currentUser?.sede && typeof currentUser.sede === "object") {
-    return currentUser.sede;
-  }
-
-  if (currentUser?.sedeId) {
-    return {
-      id: currentUser.sedeId,
-      nombre: currentUser.sede || currentUser.sedeNombre || "Sede asignada",
-    };
-  }
-
-  return selectedSede;
-}
-
 function AppContent() {
   const { config } = useAppConfig();
   const [activePage, setActivePage] = useState("dashboard");
-  const [selectedSede, setSelectedSede] = useState("Todas las sedes");
+  const [selectedSede, setSelectedSede] = useState(TODAS_LAS_SEDES);
   const [currentUser, setCurrentUser] = useState(null);
 
   const pathname = window.location.pathname;
@@ -200,7 +183,7 @@ function AppContent() {
     return <Login onLogin={setCurrentUser} />;
   }
 
-  const effectiveSelectedSede = getEffectiveSelectedSede(currentUser, selectedSede);
+  const effectiveSelectedSede = resolveEffectiveSede(currentUser, selectedSede);
   const activePageAllowed = permittedPageIds.includes(activePage);
 
   return (

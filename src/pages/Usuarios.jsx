@@ -19,6 +19,7 @@ import {
   PERMISSION_MODULES,
 } from "../utils/permissions";
 import { getDevelopmentDisabledPages } from "../utils/developmentFlags";
+import { normalizeSelectedSede } from "../utils/sedeUtils";
 
 function PermissionEditor({ disabled = false, permissions, role, onChange }) {
   const isAdmin = role === "Administrador";
@@ -183,10 +184,11 @@ export default function Usuarios({ selectedSede, currentUser, setCurrentUser }) 
   }, []);
 
   function filterUsuariosBySede(items, selectedSede) {
-    if (!selectedSede || selectedSede === "Todas las sedes") return items;
+    const sede = normalizeSelectedSede(selectedSede);
+    if (sede.id === "todas") return items;
 
     return items.filter((item) => {
-      return item.sede === selectedSede || item.sede === "Todas";
+      return item.sedeId === sede.id || item.sede === sede.nombre || item.sede === "Todas";
     });
   }
 

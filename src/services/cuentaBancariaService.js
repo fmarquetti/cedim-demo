@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 function mapCuenta(row) {
   return {
@@ -12,7 +13,7 @@ function mapCuenta(row) {
 }
 
 export async function getCuentasBancarias(sedeId = null) {
-  const idParaFiltro = sedeId === "todas" ? null : sedeId;
+  const idParaFiltro = getDbSedeId(sedeId);
 
   let query = supabase
     .from("cuentas_bancarias")
@@ -42,7 +43,7 @@ export async function createCuentaBancaria(form) {
     .insert({
       nombre: form.nombre.trim(),
       tipo: form.tipo,
-      sede_id: form.sedeId || null,
+      sede_id: getDbSedeId(form.sedeId),
       activa: true,
     })
     .select(`

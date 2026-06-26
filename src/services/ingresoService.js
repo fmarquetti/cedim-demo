@@ -3,6 +3,7 @@ import { registrarAsientoIngresoCobrado } from "./contabilidadAutomationService"
 import { generarCcDesdeIngresoCobrado } from "./cuentaCorrienteAutomaticaService";
 import { validarPeriodoAbierto } from "./contabilidadService";
 import { registrarAuditoria, registrarCambioSeguro } from "./auditoriaService";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 function formatFecha(fecha) {
   if (!fecha) return "";
@@ -127,7 +128,7 @@ function buildDistribuciones(form, ingresoId) {
     return [
       {
         ingreso_id: ingresoId,
-        sede_id: form.sedeId,
+        sede_id: getDbSedeId(form.sedeId),
         porcentaje: 100,
         importe: importeTotal,
       },
@@ -140,7 +141,7 @@ function buildDistribuciones(form, ingresoId) {
       const porcentaje = Number(item.porcentaje || 0);
       return {
         ingreso_id: ingresoId,
-        sede_id: item.sedeId,
+        sede_id: getDbSedeId(item.sedeId),
         porcentaje,
         importe: Number(((importeTotal * porcentaje) / 100).toFixed(2)),
       };
@@ -170,12 +171,21 @@ function validarDistribuciones(form) {
 }
 
 export async function getIngresos(sedeId = null) {
-  const idParaFiltro =
-    sedeId === "todas"
-      ? null
-      : typeof sedeId === "object"
-        ? sedeId?.id
-        : sedeId;
+  const idParaFiltro = getDbSedeId(sedeId);
+  let idsPorDistribucion = [];
+
+  if (idParaFiltro) {
+    const { data: distribucionesData, error: distribucionesError } = await supabase
+      .from("ingreso_distribuciones")
+      .select("ingreso_id")
+      .eq("sede_id", idParaFiltro);
+
+    if (distribucionesError) throw distribucionesError;
+
+    idsPorDistribucion = [
+      ...new Set((distribucionesData || []).map((item) => item.ingreso_id).filter(Boolean)),
+    ];
+  }
 
   let query = supabase
     .from("ingresos")
@@ -199,16 +209,18 @@ export async function getIngresos(sedeId = null) {
     .order("fecha", { ascending: false });
 
   if (idParaFiltro) {
-    query = query.or(
-      `sede_id.eq.${idParaFiltro},ingreso_distribuciones.sede_id.eq.${idParaFiltro}`
-    );
+    const filtros = [`sede_id.eq.${idParaFiltro}`];
+    if (idsPorDistribucion.length) {
+      filtros.push(`id.in.(${idsPorDistribucion.join(",")})`);
+    }
+    query = query.or(filtros.join(","));
   }
 
   const { data, error } = await query;
 
   if (error) throw error;
 
-  return data.map(mapIngreso).map((item) => {
+  return (data || []).map(mapIngreso).map((item) => {
     if (!idParaFiltro) return item;
 
     const distribucionSede = item.distribuciones.find(
@@ -251,7 +263,7 @@ export async function createIngreso(form) {
       concepto: conceptoResumen,
       conceptos_items: form.conceptosItems || [],
       sociedad: form.sociedad,
-      sede_id: form.sedeId,
+      sede_id: getDbSedeId(form.sedeId),
       origen: form.origen,
       importe: Number(form.importe || 0),
       cobro: form.cobro,

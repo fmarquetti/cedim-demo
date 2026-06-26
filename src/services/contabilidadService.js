@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { getDbSedeId } from "../utils/sedeUtils";
 import { registrarAuditoria, registrarCambioSeguro } from "./auditoriaService";
 
 const CUENTAS_POR_DEFECTO = {
@@ -31,9 +32,7 @@ function toMoney(value) {
 }
 
 function getSedeId(sedeId) {
-  if (!sedeId || sedeId === "todas") return null;
-  if (typeof sedeId === "object") return sedeId.id || null;
-  return sedeId;
+  return getDbSedeId(sedeId);
 }
 
 function mapCuenta(row) {
@@ -1478,10 +1477,11 @@ export async function reabrirEjercicioContable(id, motivo) {
 
 function applyDateAndSedeFilters(query, { desde, hasta, sedeId } = {}, fechaColumn = "fecha") {
   let nextQuery = query;
+  const idParaFiltro = getSedeId(sedeId);
 
   if (desde) nextQuery = nextQuery.gte(fechaColumn, desde);
   if (hasta) nextQuery = nextQuery.lte(fechaColumn, hasta);
-  if (sedeId && sedeId !== "todas") nextQuery = nextQuery.eq("sede_id", sedeId);
+  if (idParaFiltro) nextQuery = nextQuery.eq("sede_id", idParaFiltro);
 
   return nextQuery;
 }

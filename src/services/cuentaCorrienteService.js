@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 function mapMovimiento(row) {
   return {
@@ -18,7 +19,7 @@ function mapMovimiento(row) {
 }
 
 export async function getCuentasCorrientes(sedeId = null) {
-  const idParaFiltro = sedeId === "todas" ? null : sedeId;
+  const idParaFiltro = getDbSedeId(sedeId);
 
   let query = supabase
     .from("cuentas_corrientes")
@@ -49,7 +50,7 @@ export async function createCuentaCorriente(form) {
       fecha: form.fecha,
       entidad: form.entidad,
       tipo_entidad: form.tipoEntidad,
-      sede_id: form.sedeId,
+      sede_id: getDbSedeId(form.sedeId),
       comprobante: form.comprobante,
       numero: form.numero || null,
       concepto: form.concepto,

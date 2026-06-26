@@ -1,5 +1,6 @@
 // src/services/turnosService.js
 import { supabase } from "../lib/supabaseClient";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 function formatFecha(fecha) {
   if (!fecha) return "";
@@ -73,14 +74,15 @@ function buildBaseQuery() {
 
 export async function getTurnosDelDia({ sedeId = null, fecha = null } = {}) {
   const fechaConsulta = fecha || getTodayDbDate();
+  const idParaFiltro = getDbSedeId(sedeId);
 
   let query = buildBaseQuery()
     .eq("fecha", fechaConsulta)
     .order("prioridad", { ascending: false })
     .order("hora_ingreso", { ascending: true });
 
-  if (sedeId) {
-    query = query.eq("sede_id", sedeId);
+  if (idParaFiltro) {
+    query = query.eq("sede_id", idParaFiltro);
   }
 
   const { data, error } = await query;
@@ -92,6 +94,7 @@ export async function getTurnosDelDia({ sedeId = null, fecha = null } = {}) {
 
 export async function getTurnosActivos({ sedeId = null, fecha = null } = {}) {
   const fechaConsulta = fecha || getTodayDbDate();
+  const idParaFiltro = getDbSedeId(sedeId);
 
   let query = buildBaseQuery()
     .eq("fecha", fechaConsulta)
@@ -99,8 +102,8 @@ export async function getTurnosActivos({ sedeId = null, fecha = null } = {}) {
     .order("prioridad", { ascending: false })
     .order("hora_ingreso", { ascending: true });
 
-  if (sedeId) {
-    query = query.eq("sede_id", sedeId);
+  if (idParaFiltro) {
+    query = query.eq("sede_id", idParaFiltro);
   }
 
   const { data, error } = await query;
@@ -117,7 +120,7 @@ export async function createTurno(form) {
 
   const payload = {
     fecha: form.fecha || getTodayDbDate(),
-    sede_id: form.sedeId || null,
+    sede_id: getDbSedeId(form.sedeId),
 
     paciente_id: form.pacienteId || null,
     paciente_nombre: form.pacienteNombre,

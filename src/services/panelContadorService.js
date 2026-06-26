@@ -10,6 +10,7 @@ import { getResumenCuentasCorrientes } from "./cuentaCorrienteEntidadService";
 import { getIngresos } from "./ingresoService";
 import { getEgresos } from "./egresoService";
 import { getMovimientosBancarios } from "./bancoService";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 function toNumber(value) {
   return Number(value || 0);
@@ -44,9 +45,7 @@ function isInRange(value, desde, hasta) {
 }
 
 function getSedeId(sedeId) {
-  if (!sedeId || sedeId === "todas") return null;
-  if (typeof sedeId === "object") return sedeId.id || sedeId.sedeId || null;
-  return sedeId;
+  return getDbSedeId(sedeId);
 }
 
 function countByEstado(items, estado) {

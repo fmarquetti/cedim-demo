@@ -6,6 +6,7 @@ import {
 } from "./contabilidadAutomationService";
 import { validarPeriodoAbierto } from "./contabilidadService";
 import { registrarAuditoria, registrarCambioSeguro } from "./auditoriaService";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 function formatFecha(fecha) {
   if (!fecha) return "";
@@ -106,7 +107,7 @@ async function getEgresoById(id) {
 }
 
 export async function getMovimientosBancarios(sedeId = null) {
-  const idParaFiltro = sedeId === "todas" ? null : sedeId;
+  const idParaFiltro = getDbSedeId(sedeId);
 
   let query = supabase
     .from("movimientos_bancarios")
@@ -164,7 +165,7 @@ export async function getMovimientosBancariosByHashes(hashes = []) {
 function buildMovimientoPayload(form) {
   return {
     fecha: form.fecha,
-    sede_id: form.sedeId || null,
+    sede_id: getDbSedeId(form.sedeId),
     cuenta: form.cuenta,
     tipo: form.tipo,
     descripcion: form.descripcion,

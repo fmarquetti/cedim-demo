@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 function formatFecha(fecha) {
   if (!fecha) return "";
@@ -67,7 +68,7 @@ function getUserMeta(usuario) {
 }
 
 export async function getPacientesEstudios(sedeId = null) {
-  const idParaFiltro = sedeId === "todas" ? null : sedeId;
+  const idParaFiltro = getDbSedeId(sedeId);
 
   let query = supabase
     .from("pacientes_estudios")
@@ -135,7 +136,7 @@ export async function createPacienteEstudio(form, usuario = null) {
       paciente: form.paciente,
       dni: form.dni,
       obra_social: form.obraSocial || null,
-      sede_id: form.sedeId,
+      sede_id: getDbSedeId(form.sedeId),
       estudio: form.estudio,
       prioridad: form.prioridad || "Normal",
       estado: form.estado || "Muestra pendiente",
@@ -186,7 +187,7 @@ export async function updatePacienteEstudio(id, form, usuario = null, detalle = 
       paciente: form.paciente,
       dni: form.dni,
       obra_social: form.obraSocial || null,
-      sede_id: form.sedeId,
+      sede_id: getDbSedeId(form.sedeId),
       estudio: form.estudio,
       prioridad: form.prioridad || "Normal",
       estado: form.estado || "Muestra pendiente",

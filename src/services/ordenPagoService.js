@@ -3,6 +3,7 @@ import { getEgresos, marcarEgresoPagado } from "./egresoService";
 import { crearAsientoSiNoExiste, resolverCuentasPorCodigo, validarPeriodoAbierto } from "./contabilidadService";
 import { generarCcDesdeOrdenPago } from "./cuentaCorrienteAutomaticaService";
 import { registrarAuditoria, registrarCambioSeguro } from "./auditoriaService";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 function toNumber(value) {
   return Number(value || 0);
@@ -113,7 +114,7 @@ async function validarEgresosSeleccionados(egresosIds = [], sedeId) {
     throw new Error("Debe seleccionar al menos un egreso.");
   }
 
-  const egresos = await getEgresos(sedeId === "todas" ? null : sedeId);
+  const egresos = await getEgresos(getDbSedeId(sedeId));
   const selected = egresos.filter((egreso) => ids.includes(egreso.id));
 
   if (selected.length !== ids.length) {
@@ -150,7 +151,8 @@ export async function getOrdenesPago({ desde, hasta, sedeId, estado, proveedor }
 
   if (desde) query = query.gte("fecha", desde);
   if (hasta) query = query.lte("fecha", hasta);
-  if (sedeId && sedeId !== "todas") query = query.eq("sede_id", sedeId);
+  const idParaFiltro = getDbSedeId(sedeId);
+  if (idParaFiltro) query = query.eq("sede_id", idParaFiltro);
   if (estado && estado !== "todos") query = query.eq("estado", estado);
   if (proveedor) query = query.ilike("proveedor", `%${proveedor}%`);
 
@@ -163,7 +165,7 @@ export async function getOrdenesPago({ desde, hasta, sedeId, estado, proveedor }
 
 export async function getEgresosPendientesParaOrdenPago({ sedeId, proveedor } = {}) {
   const [egresos, asociados] = await Promise.all([
-    getEgresos(sedeId === "todas" ? null : sedeId),
+    getEgresos(getDbSedeId(sedeId)),
     getIdsEgresosAsociados(),
   ]);
   const proveedorFiltro = normalizeText(proveedor);
@@ -205,7 +207,7 @@ export async function crearOrdenPago(payload) {
       proveedor: payload.proveedor.trim(),
       proveedor_cuit: payload.proveedorCuit || null,
       sociedad: payload.sociedad || null,
-      sede_id: payload.sedeId && payload.sedeId !== "todas" ? payload.sedeId : null,
+      sede_id: getDbSedeId(payload.sedeId),
       concepto: payload.concepto || null,
       medio_pago: payload.medioPago || null,
       cuenta_pago: payload.cuentaPago || null,

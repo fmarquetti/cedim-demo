@@ -3,6 +3,8 @@ import { getPermissionsForRole } from "../utils/permissions";
 
 function mapUsuario(row) {
     const sedesAsignadas = row.usuario_sedes || [];
+    const accesoTodasSedes = Boolean(row.acceso_todas_sedes);
+    const sedeAsignada = sedesAsignadas[0]?.sedes || null;
 
     return {
         id: row.id,
@@ -10,11 +12,12 @@ function mapUsuario(row) {
         nombre: row.nombre,
         email: row.email,
         rol: row.rol,
-        acceso: row.acceso_todas_sedes ? "Todas las sedes" : "Una sede",
-        sede: row.acceso_todas_sedes
+        acceso: accesoTodasSedes ? "Todas las sedes" : "Una sede",
+        sede: accesoTodasSedes
             ? "Todas"
-            : sedesAsignadas[0]?.sedes?.nombre || "Sin sede",
-        sedeId: sedesAsignadas[0]?.sedes?.id || "",
+            : sedeAsignada?.nombre || "Sin sede",
+        sedeNombre: accesoTodasSedes ? "Todas" : sedeAsignada?.nombre || "Sin sede",
+        sedeId: sedeAsignada?.id || "",
         estado: row.estado,
         permisos: getPermissionsForRole(row.rol, row.permisos || []),
         permissions: getPermissionsForRole(row.rol, row.permisos || []),

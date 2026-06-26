@@ -40,6 +40,7 @@ import {
 } from "../services/userPreferenceService";
 
 import { formatMoney } from "../utils/format";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────
 
@@ -326,7 +327,7 @@ const getInitialWidgetOrder = (currentUser) => {
 
 // ─── COMPONENTE ────────────────────────────────────────────────────────────
 
-export default function Dashboard({ sedeId, currentUser }) {
+export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
   const widgetsStorageKey = getDashboardWidgetsStorageKey(currentUser);
   const [ingresos, setIngresos] = useState([]);
   const [egresos, setEgresos] = useState([]);
@@ -351,20 +352,19 @@ export default function Dashboard({ sedeId, currentUser }) {
   const [metricaComparativa, setMetricaComparativa] = useState("ingresos");
 
   const verTodasSedes = sedeId === "todas" || !sedeId;
+  const effectiveDbSedeId = dbSedeId ?? getDbSedeId(sedeId);
 
   async function loadDashboard() {
     try {
       setLoading(true);
       setError("");
 
-      const dbSedeId = sedeId === "todas" ? null : sedeId;
-
       const [ingresosData, egresosData, movimientosData, cuentasCorrientesData, sedesData] =
         await Promise.all([
-          getIngresos(dbSedeId),
-          getEgresos(dbSedeId),
-          getMovimientosBancarios(dbSedeId),
-          getCuentasCorrientes(dbSedeId),
+          getIngresos(effectiveDbSedeId),
+          getEgresos(effectiveDbSedeId),
+          getMovimientosBancarios(effectiveDbSedeId),
+          getCuentasCorrientes(effectiveDbSedeId),
           getSedes(),
         ]);
 
@@ -383,7 +383,7 @@ export default function Dashboard({ sedeId, currentUser }) {
 
   useEffect(() => {
     loadDashboard();
-  }, [sedeId]);
+  }, [effectiveDbSedeId]);
 
   useEffect(() => {
     let cancelled = false;

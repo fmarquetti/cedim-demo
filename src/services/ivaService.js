@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabaseClient";
 import { calcularTotalesFiscales } from "./fiscalService";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 function toNumber(value) {
   return Number(value || 0);
@@ -71,9 +72,10 @@ function isInDateRange(fecha, desde, hasta) {
 }
 
 function matchesSede(row, sedeId) {
-  if (!sedeId || sedeId === "todas") return true;
+  const idParaFiltro = getDbSedeId(sedeId);
+  if (!idParaFiltro) return true;
   if (!Object.prototype.hasOwnProperty.call(row, "sede_id")) return true;
-  return String(row.sede_id || "") === String(sedeId);
+  return String(row.sede_id || "") === String(idParaFiltro);
 }
 
 function pickFiscalValue(source, keys, fallback = 0) {
@@ -208,7 +210,8 @@ export async function getLibroIvaCompras({ desde, hasta, sedeId } = {}) {
 
   if (desde) query = query.gte("fecha", desde);
   if (hasta) query = query.lte("fecha", hasta);
-  if (sedeId && sedeId !== "todas") query = query.eq("sede_id", sedeId);
+  const idParaFiltro = getDbSedeId(sedeId);
+  if (idParaFiltro) query = query.eq("sede_id", idParaFiltro);
 
   const { data, error } = await query;
 

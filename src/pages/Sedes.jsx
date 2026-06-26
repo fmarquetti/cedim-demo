@@ -9,11 +9,13 @@ import {
   updateSede,
 } from "../services/sedeService";
 import { canPerform } from "../utils/permissions";
+import { normalizeSelectedSede } from "../utils/sedeUtils";
 
 function filterBySede(items, selectedSede) {
-  if (!selectedSede || selectedSede === "Todas las sedes") return items;
+  const sede = normalizeSelectedSede(selectedSede);
+  if (sede.id === "todas") return items;
 
-  return items.filter((item) => item.sede === selectedSede);
+  return items.filter((item) => item.id === sede.id || item.sede === sede.nombre);
 }
 
 const emptyForm = {

@@ -2,6 +2,13 @@ import { supabase } from "../lib/supabaseClient";
 import { getPermissionsForRole } from "../utils/permissions";
 
 function normalizeUser(dbUser) {
+    const accesoTodasSedes = Boolean(dbUser.acceso_todas_sedes);
+    const sedeAsignada = dbUser.usuario_sedes?.[0]?.sedes || null;
+
+    if (!accesoTodasSedes && !sedeAsignada?.id) {
+        throw new Error("El usuario no tiene una sede asignada. Contactá a un administrador.");
+    }
+
     return {
         id: dbUser.id,
         authUserId: dbUser.auth_user_id,
@@ -10,12 +17,13 @@ function normalizeUser(dbUser) {
         email: dbUser.email,
         role: dbUser.rol,
         rol: dbUser.rol,
-        access: dbUser.acceso_todas_sedes ? "Todas las sedes" : "Una sede",
-        acceso: dbUser.acceso_todas_sedes ? "Todas las sedes" : "Una sede",
-        sede: dbUser.acceso_todas_sedes
+        access: accesoTodasSedes ? "Todas las sedes" : "Una sede",
+        acceso: accesoTodasSedes ? "Todas las sedes" : "Una sede",
+        sede: accesoTodasSedes
             ? "Todas las sedes"
-            : dbUser.usuario_sedes?.[0]?.sedes?.nombre || "",
-        sedeId: dbUser.usuario_sedes?.[0]?.sedes?.id || null,
+            : sedeAsignada.nombre,
+        sedeNombre: accesoTodasSedes ? "Todas las sedes" : sedeAsignada.nombre,
+        sedeId: sedeAsignada?.id || null,
         permissions: getPermissionsForRole(dbUser.rol, dbUser.permisos || []),
         permisos: getPermissionsForRole(dbUser.rol, dbUser.permisos || []),
         developmentDisabledPages: dbUser.development_disabled_pages || [],

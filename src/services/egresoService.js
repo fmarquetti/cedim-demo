@@ -15,6 +15,7 @@ import {
   guardarTributosComprobante,
 } from "./fiscalService";
 import { registrarAuditoria, registrarCambioSeguro } from "./auditoriaService";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 function formatFecha(fecha) {
   if (!fecha) return "";
@@ -186,7 +187,7 @@ function buildDistribuciones(form, egresoId) {
     return [
       {
         egreso_id: egresoId,
-        sede_id: form.sedeId,
+        sede_id: getDbSedeId(form.sedeId),
         porcentaje: 100,
         importe: importeTotal,
       },
@@ -199,7 +200,7 @@ function buildDistribuciones(form, egresoId) {
       const porcentaje = Number(item.porcentaje || 0);
       return {
         egreso_id: egresoId,
-        sede_id: item.sedeId,
+        sede_id: getDbSedeId(item.sedeId),
         porcentaje,
         importe: Number(((importeTotal * porcentaje) / 100).toFixed(2)),
       };
@@ -229,7 +230,21 @@ function validarDistribuciones(form) {
 }
 
 export async function getEgresos(sedeId = null) {
-  const idParaFiltro = sedeId === "todas" ? null : sedeId;
+  const idParaFiltro = getDbSedeId(sedeId);
+  let idsPorDistribucion = [];
+
+  if (idParaFiltro) {
+    const { data: distribucionesData, error: distribucionesError } = await supabase
+      .from("egreso_distribuciones")
+      .select("egreso_id")
+      .eq("sede_id", idParaFiltro);
+
+    if (distribucionesError) throw distribucionesError;
+
+    idsPorDistribucion = [
+      ...new Set((distribucionesData || []).map((item) => item.egreso_id).filter(Boolean)),
+    ];
+  }
 
   let query = supabase
     .from("egresos")
@@ -253,16 +268,18 @@ export async function getEgresos(sedeId = null) {
     .order("fecha", { ascending: false });
 
   if (idParaFiltro) {
-    query = query.or(
-      `sede_id.eq.${idParaFiltro},egreso_distribuciones.sede_id.eq.${idParaFiltro}`
-    );
+    const filtros = [`sede_id.eq.${idParaFiltro}`];
+    if (idsPorDistribucion.length) {
+      filtros.push(`id.in.(${idsPorDistribucion.join(",")})`);
+    }
+    query = query.or(filtros.join(","));
   }
 
   const { data, error } = await query;
 
   if (error) throw error;
 
-  return data.map(mapEgreso).map((item) => {
+  return (data || []).map(mapEgreso).map((item) => {
     if (!idParaFiltro) return item;
 
     const distribucionSede = item.distribuciones.find(
@@ -304,7 +321,7 @@ export async function createEgreso(form) {
       fecha: form.fecha,
       proveedor: form.proveedor,
       sociedad: form.sociedad,
-      sede_id: form.sedeId,
+      sede_id: getDbSedeId(form.sedeId),
       concepto: conceptoResumen,
       conceptos_items: form.conceptosItems || [],
       importe: Number(form.importe || 0),

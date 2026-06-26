@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bell, Search, LogOut } from "lucide-react";
 import { getSedes } from "../services/sedeService";
+import { normalizeSelectedSede, TODAS_LAS_SEDES } from "../utils/sedeUtils";
 
 export default function Header({
   selectedSede,
@@ -12,36 +13,52 @@ export default function Header({
   const isAdmin = currentUser?.access === "Todas las sedes";
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadSedes() {
       try {
         const data = await getSedes();
-        setSedes(data.filter((sede) => sede.estado === "Activa"));
+        if (cancelled) return;
+        setSedes((data || []).filter((sede) => sede.estado === "Activa"));
       } catch (error) {
         console.error("Error cargando sedes en Header:", error);
+        if (!cancelled) setSedes([]);
       }
     }
 
     if (isAdmin) {
       loadSedes();
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const normalized = normalizeSelectedSede(selectedSede);
+    if (normalized.id === "todas") return;
+    if (!sedes.length) return;
+
+    const sedeActiva = sedes.some((sede) => sede.id === normalized.id);
+    if (!sedeActiva) {
+      setSelectedSede(TODAS_LAS_SEDES);
+    }
+  }, [isAdmin, selectedSede, sedes, setSelectedSede]);
 
   function handleChangeSede(e) {
     const valor = e.target.value;
-    console.log("valor seleccionado:", valor);
-    console.log("sedes disponibles:", sedes);
     if (valor === "todas") {
-      setSelectedSede({ id: "todas", nombre: "Todas las sedes" });
+      setSelectedSede(TODAS_LAS_SEDES);
     } else {
       const sede = sedes.find((s) => s.id === valor);
-      console.log("sede encontrada:", sede);
       if (sede) setSelectedSede({ id: sede.id, nombre: sede.nombre });
     }
   }
-  // selectedSede puede ser objeto { id, nombre } o string legacy
-  const valorActual = typeof selectedSede === "object" && selectedSede !== null
-    ? selectedSede.id
-    : "todas";
+
+  const selectedSedeNormalizada = normalizeSelectedSede(selectedSede);
+  const valorActual = selectedSedeNormalizada.id;
 
   return (
     <header className="topbar">
