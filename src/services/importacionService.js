@@ -5,10 +5,10 @@ import { createMovimientosBancariosBulk } from "./bancoService";
 import { upsertEntidadCuentaCorriente } from "./cuentaCorrienteEntidadService";
 import { registrarAuditoria } from "./auditoriaService";
 import { parseDate, parseMoney } from "../utils/importUtils";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 const money = (value) => Number(Number(value || 0).toFixed(2));
 const clean = (value) => String(value || "").trim();
-const sede = (sedeId) => (sedeId && sedeId !== "todas" ? sedeId : "");
 
 function result(errores, warnings, data, resumen = {}) {
   return { valid: errores.length === 0, errores, warnings, data, resumen };
@@ -125,7 +125,7 @@ export function validarImportacionEgresos(rows, { sedeId } = {}) {
       fecha,
       proveedor: clean(row.proveedor),
       sociedad: clean(row.sociedad) || "CEDIM",
-      sedeId: sede(sedeId),
+      sedeId: getDbSedeId(sedeId) || "",
       concepto: clean(row.concepto),
       conceptosItems: [],
       categoria: clean(row.categoria) || "Insumos",
@@ -197,7 +197,7 @@ export function validarImportacionMovimientosBancarios(rows, { sedeId } = {}) {
     const importe = parseMoney(row.importe);
     const item = {
       fecha,
-      sedeId: sede(sedeId) || null,
+      sedeId: getDbSedeId(sedeId),
       cuenta: clean(row.cuenta),
       tipo: clean(row.tipo),
       descripcion: clean(row.descripcion),
