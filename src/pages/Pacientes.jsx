@@ -27,6 +27,7 @@ import {
   getSignedArchivoUrl,
   deleteArchivo,
 } from "../services/storageService";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 const emptyForm = {
   fecha: new Date().toISOString().split("T")[0],
@@ -93,7 +94,7 @@ function formFromPaciente(paciente) {
   };
 }
 
-export default function Pacientes({ selectedSede, sedeId, currentUser }) {
+export default function Pacientes({ selectedSede, dbSedeId, currentUser }) {
   const adjuntoInputRef = useRef(null);
   const editAdjuntoInputRef = useRef(null);
 
@@ -124,18 +125,16 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
   const [updatingId, setUpdatingId] = useState(null);
   const [openingId, setOpeningId] = useState(null);
 
-  const selectedSedeName =
-    typeof selectedSede === "object" && selectedSede !== null
-      ? selectedSede.nombre
-      : selectedSede || "Todas las sedes";
+  const selectedSedeName = selectedSede?.nombre || "Todas las sedes";
 
-  const sedeBloqueada = sedeId && sedeId !== "todas";
+  const idSedeActiva = dbSedeId ?? getDbSedeId(selectedSede);
+  const sedeBloqueada = Boolean(idSedeActiva);
 
-  async function loadData(currentSedeId = sedeId) {
+  async function loadData(currentSedeId = idSedeActiva) {
     setLoading(true);
 
     try {
-      const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
+      const idParaFiltro = getDbSedeId(currentSedeId);
 
       const [pacientesData, sedesData] = await Promise.all([
         getPacientesEstudios(idParaFiltro),
@@ -158,9 +157,9 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
   }
 
   useEffect(() => {
-    loadData(sedeId);
+    queueMicrotask(() => loadData(idSedeActiva));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sedeId]);
+  }, [idSedeActiva]);
 
   const pacientesPorSede = pacientes;
 
@@ -233,7 +232,7 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
     setForm({
       ...emptyForm,
       fecha: new Date().toISOString().split("T")[0],
-      sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+      sedeId: sedeBloqueada ? idSedeActiva : sedes[0]?.id || "",
     });
 
     setFormFile(null);
@@ -343,12 +342,12 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
         currentUser
       );
 
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
 
       setForm({
         ...emptyForm,
         fecha: new Date().toISOString().split("T")[0],
-        sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+        sedeId: sedeBloqueada ? idSedeActiva : sedes[0]?.id || "",
       });
 
       setFormFile(null);
@@ -407,7 +406,7 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
         await deleteArchivo(oldArchivoPath);
       }
 
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
 
       setSelectedPaciente(null);
       setEditForm(emptyForm);
@@ -435,7 +434,7 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
         await deleteArchivo(paciente.archivoPath);
       }
 
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
     } catch (error) {
       console.error("Error eliminando orden:", error);
       alert(error.message || "No se pudo eliminar la orden.");
@@ -458,7 +457,7 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
 
     try {
       await updateEstadoPacienteEstudio(id, nuevoEstado, currentUser);
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
     } catch (error) {
       console.error("Error actualizando estado:", error);
       alert(error.message || "No se pudo actualizar el estado.");
@@ -509,7 +508,7 @@ export default function Pacientes({ selectedSede, sedeId, currentUser }) {
         <div className="header-actions">
           <button
             className="secondary-button"
-            onClick={() => loadData(sedeId)}
+            onClick={() => loadData(idSedeActiva)}
             disabled={loading}
           >
             <RefreshCw size={16} /> Actualizar

@@ -12,11 +12,15 @@ function mapUsuario(row) {
         nombre: row.nombre,
         email: row.email,
         rol: row.rol,
+        allSedesAccess: accesoTodasSedes,
+        acceso_todas_sedes: accesoTodasSedes,
+        accessScope: accesoTodasSedes ? "all" : "single",
+        access: accesoTodasSedes ? "Todas las sedes" : "Una sede",
         acceso: accesoTodasSedes ? "Todas las sedes" : "Una sede",
         sede: accesoTodasSedes
-            ? "Todas"
+            ? "Todas las sedes"
             : sedeAsignada?.nombre || "Sin sede",
-        sedeNombre: accesoTodasSedes ? "Todas" : sedeAsignada?.nombre || "Sin sede",
+        sedeNombre: accesoTodasSedes ? "Todas las sedes" : sedeAsignada?.nombre || "Sin sede",
         sedeId: sedeAsignada?.id || "",
         estado: row.estado,
         permisos: getPermissionsForRole(row.rol, row.permisos || []),
@@ -65,7 +69,11 @@ export async function createUsuario(form) {
         const json = JSON.parse(text);
         throw new Error(json.error || "No se pudo crear el usuario.");
       } catch (parseError) {
-        throw new Error(text || "No se pudo crear el usuario.");
+        if (parseError instanceof SyntaxError) {
+          throw new Error(text || "No se pudo crear el usuario.", { cause: parseError });
+        }
+
+        throw parseError;
       }
     }
 

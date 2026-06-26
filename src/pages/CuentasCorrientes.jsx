@@ -169,10 +169,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
-  const selectedSedeName =
-    typeof selectedSede === "object" && selectedSede !== null
-      ? selectedSede.nombre
-      : selectedSede || "Todas las sedes";
+  const selectedSedeName = selectedSede?.nombre || "Todas las sedes";
   const idSedeActiva = dbSedeId ?? getDbSedeId(sedeId);
   const sedeBloqueada = Boolean(idSedeActiva);
 
@@ -203,8 +200,8 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
   }
 
   useEffect(() => {
-    loadData(sedeId);
-  }, [sedeId]);
+    queueMicrotask(() => loadData(idSedeActiva));
+  }, [idSedeActiva]);
 
   const movimientosPorSede = movimientos;
 

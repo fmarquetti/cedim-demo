@@ -47,6 +47,7 @@ import {
   parseBankStatement,
   buildBankMovementHash,
 } from "../utils/bankStatementParser";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 const emptyForm = {
   fecha: new Date().toISOString().split("T")[0],
@@ -246,7 +247,7 @@ function findCuentaCompatible(cuentas, parsed, cuentaFiltro) {
   return cuentaEncontrada?.nombre || nombreSugerido;
 }
 
-export default function Bancos({ selectedSede, sedeId }) {
+export default function Bancos({ selectedSede, dbSedeId }) {
   const extractoInputRef = useRef(null);
 
   const [movimientos, setMovimientos] = useState([]);
@@ -282,18 +283,16 @@ export default function Bancos({ selectedSede, sedeId }) {
 
   const [autoConciliando, setAutoConciliando] = useState(false);
 
-  const selectedSedeName =
-    typeof selectedSede === "object" && selectedSede !== null
-      ? selectedSede.nombre
-      : selectedSede || "Todas las sedes";
+  const selectedSedeName = selectedSede?.nombre || "Todas las sedes";
 
-  const sedeBloqueada = sedeId && sedeId !== "todas";
+  const idSedeActiva = dbSedeId ?? getDbSedeId(selectedSede);
+  const sedeBloqueada = Boolean(idSedeActiva);
 
-  async function loadData(currentSedeId = sedeId) {
+  async function loadData(currentSedeId = idSedeActiva) {
     setLoading(true);
 
     try {
-      const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
+      const idParaFiltro = getDbSedeId(currentSedeId);
 
       const [
         movimientosData,
@@ -339,9 +338,9 @@ export default function Bancos({ selectedSede, sedeId }) {
   }
 
   useEffect(() => {
-    loadData(sedeId);
+    queueMicrotask(() => loadData(idSedeActiva));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sedeId]);
+  }, [idSedeActiva]);
 
   const cuentasPorSede = useMemo(() => {
     return cuentas.filter((cuenta) => cuenta.activa);
@@ -595,7 +594,7 @@ export default function Bancos({ selectedSede, sedeId }) {
   function openNuevoMovimiento() {
     setForm({
       ...emptyForm,
-      sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+      sedeId: sedeBloqueada ? idSedeActiva : sedes[0]?.id || "",
       cuenta: cuentasPorSede[0]?.nombre || cuentas[0]?.nombre || "",
     });
 
@@ -605,7 +604,7 @@ export default function Bancos({ selectedSede, sedeId }) {
   function openNuevaCuenta() {
     setCuentaForm({
       ...emptyCuentaForm,
-      sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+      sedeId: sedeBloqueada ? idSedeActiva : sedes[0]?.id || "",
     });
 
     setModal("nuevaCuenta");
@@ -665,7 +664,7 @@ export default function Bancos({ selectedSede, sedeId }) {
         });
       }
 
-      const sedeSugerida = sedeBloqueada ? sedeId : "";
+      const sedeSugerida = sedeBloqueada ? idSedeActiva : "";
 
       const previewBase = (parsed.movimientos || []).map((mov, index) => ({
         ...mov,
@@ -875,7 +874,7 @@ export default function Bancos({ selectedSede, sedeId }) {
         await createMovimientosBancariosBulk(movimientosParaCrear);
       }
 
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
 
       setExtractoPendiente(null);
       setExtractoParseado(null);
@@ -936,7 +935,7 @@ export default function Bancos({ selectedSede, sedeId }) {
         );
       }
 
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
       setModal(null);
       setMovimientoAConciliar(null);
       setComprobanteSeleccionadoId("");
@@ -973,7 +972,7 @@ export default function Bancos({ selectedSede, sedeId }) {
         }
       }
 
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
       alert(`Conciliación automática finalizada: ${aplicables.length} movimientos conciliados.`);
     } catch (error) {
       console.error("Error conciliando automáticamente:", error);
@@ -989,7 +988,7 @@ export default function Bancos({ selectedSede, sedeId }) {
 
     try {
       await desconciliarMovimientoBancario(mov.id);
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
     } catch (error) {
       alert(error.message || "No se pudo desconciliar el movimiento.");
     }
@@ -1002,11 +1001,11 @@ export default function Bancos({ selectedSede, sedeId }) {
 
     try {
       await createMovimientoBancario(form);
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
 
       setForm({
         ...emptyForm,
-        sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+        sedeId: sedeBloqueada ? idSedeActiva : sedes[0]?.id || "",
         cuenta: cuentasPorSede[0]?.nombre || cuentas[0]?.nombre || "",
       });
 
@@ -1030,7 +1029,7 @@ export default function Bancos({ selectedSede, sedeId }) {
 
     try {
       await deleteMovimientoBancario(id);
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
     } catch (error) {
       alert(error.message || "No se pudo eliminar el movimiento.");
     } finally {
@@ -1045,11 +1044,11 @@ export default function Bancos({ selectedSede, sedeId }) {
 
     try {
       await createCuentaBancaria(cuentaForm);
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
 
       setCuentaForm({
         ...emptyCuentaForm,
-        sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+        sedeId: sedeBloqueada ? idSedeActiva : sedes[0]?.id || "",
       });
 
       setModal(null);
@@ -1317,7 +1316,7 @@ export default function Bancos({ selectedSede, sedeId }) {
 
           <button
             className="secondary-button"
-            onClick={() => loadData(sedeId)}
+            onClick={() => loadData(idSedeActiva)}
             disabled={loading}
           >
             <RefreshCw size={16} /> Actualizar

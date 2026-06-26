@@ -32,6 +32,7 @@ import { formatMoney, formatDate, toDate } from "../utils/format";
 import { toast } from "../components/ToastProvider";
 import { canPerform } from "../utils/permissions";
 import { getDbSedeId } from "../utils/sedeUtils";
+import { loadSafeBatch, notifyLoadErrors } from "../utils/loadSafe";
 
 import ConceptoSelector from "../components/ConceptoSelector";
 import { getConceptoItems } from "../services/conceptoItemService";
@@ -120,33 +121,40 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
   const idSedeActiva = dbSedeId ?? getDbSedeId(sedeId);
   const sedeBloqueada = Boolean(idSedeActiva);
 
-  async function loadData(currentSedeId = sedeId) {
+  async function loadData(currentSedeId = idSedeActiva) {
     setLoading(true);
-    try {
-      const idParaFiltro = getDbSedeId(currentSedeId);
-      const [ingresosData, sedesData, conceptoItemsData] = await Promise.all([
-        getIngresos(idParaFiltro),
-        getSedes(),
-        getConceptoItems("ingreso"),
-      ]);
+    const idParaFiltro = getDbSedeId(currentSedeId);
+    const results = await loadSafeBatch({
+      ingresos: {
+        label: "ingresos",
+        promise: getIngresos(idParaFiltro),
+        fallback: [],
+      },
+      sedes: {
+        label: "sedes para ingresos",
+        promise: getSedes(),
+        fallback: [],
+      },
+      conceptos: {
+        label: "conceptos de ingresos",
+        promise: getConceptoItems("ingreso"),
+        fallback: [],
+      },
+    });
 
-      setIngresos(ingresosData || []);
-      setSedes(sedesData || []);
-      setConceptoItems(conceptoItemsData || []);
-
-      setForm((prev) => ({
-        ...prev,
-        sedeId: prev.sedeId || idParaFiltro || sedesData?.[0]?.id || "",
-      }));
-    } catch (error) {
-      toast.error(error.message || "No se pudieron cargar los ingresos.");
-    } finally {
-      setLoading(false);
-    }
+    setIngresos(results.ingresos.data || []);
+    setSedes(results.sedes.data || []);
+    setConceptoItems(results.conceptos.data || []);
+    setForm((prev) => ({
+      ...prev,
+      sedeId: prev.sedeId || idParaFiltro || results.sedes.data?.[0]?.id || "",
+    }));
+    notifyLoadErrors(results, toast.error);
+    setLoading(false);
   }
   useEffect(() => {
-    loadData(sedeId);
-  }, [sedeId]);
+    queueMicrotask(() => loadData(idSedeActiva));
+  }, [idSedeActiva]);
 
   const origenes = useMemo(() => {
     return [...new Set(ingresos.map((item) => item.origen).filter(Boolean))].sort();
@@ -210,9 +218,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
   }, [ingresosFiltrados]);
 
   const nombreArchivo = useMemo(() => {
-    const sede = typeof selectedSede === "object" && selectedSede !== null
-      ? selectedSede.nombre
-      : selectedSede || "Todas las sedes";
+    const sede = selectedSede?.nombre || "Todas las sedes";
     const periodo = desde || hasta
       ? `${desde || "inicio"}_${hasta || "actual"}`
       : "todos_los_periodos";
@@ -803,7 +809,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
       const workbook = new ExcelJS.Workbook();
       workbook.creator = "CEDIM - TECNEW";
       workbook.created = new Date();
-      const sedeName = typeof selectedSede === "object" ? selectedSede?.nombre : selectedSede || "Todas las sedes";
+      const sedeName = selectedSede?.nombre || "Todas las sedes";
 
       const resumenSheet = workbook.addWorksheet("Resumen");
       resumenSheet.columns = [
@@ -891,7 +897,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
       const doc = new jsPDF("landscape", "mm", "a4");
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
-      const sedeName = typeof selectedSede === "object" ? selectedSede?.nombre : selectedSede || "Todas las sedes";
+      const sedeName = selectedSede?.nombre || "Todas las sedes";
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(22);

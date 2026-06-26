@@ -387,6 +387,61 @@ select {
   color: #9a6b00;
 }
 
+.page-state {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 28px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  color: var(--text);
+  text-align: center;
+}
+
+.page-state h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.page-state p {
+  max-width: 640px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.page-state-icon {
+  color: var(--primary);
+}
+
+.page-state--error .page-state-icon {
+  color: #b42318;
+}
+
+.page-state--permission .page-state-icon {
+  color: #92400e;
+}
+
+.page-state-icon--spin {
+  animation: page-state-spin 0.9s linear infinite;
+}
+
+@keyframes page-state-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.table-state-cell {
+  padding: 18px;
+}
+
+.table-state-cell .page-state {
+  box-shadow: none;
+}
+
 .table-card {
   overflow: hidden;
 }
@@ -6657,7 +6712,7 @@ td {
   .topbar-actions {
     width: 100%;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 40px 40px;
+    grid-template-columns: minmax(0, 1fr) 40px;
     gap: 8px;
     align-items: center;
   }
@@ -6953,7 +7008,7 @@ td {
   }
 
   .topbar-actions {
-    grid-template-columns: minmax(0, 1fr) 38px 38px;
+    grid-template-columns: minmax(0, 1fr) 38px;
     gap: 6px;
   }
 

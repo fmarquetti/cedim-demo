@@ -19,7 +19,7 @@ import {
   PERMISSION_MODULES,
 } from "../utils/permissions";
 import { getDevelopmentDisabledPages } from "../utils/developmentFlags";
-import { normalizeSelectedSede } from "../utils/sedeUtils";
+import { normalizeSelectedSede, userHasAllSedesAccess } from "../utils/sedeUtils";
 
 function PermissionEditor({ disabled = false, permissions, role, onChange }) {
   const isAdmin = role === "Administrador";
@@ -180,7 +180,7 @@ export default function Usuarios({ selectedSede, currentUser, setCurrentUser }) 
   }
 
   useEffect(() => {
-    loadData();
+    queueMicrotask(() => loadData());
   }, []);
 
   function filterUsuariosBySede(items, selectedSede) {
@@ -188,7 +188,7 @@ export default function Usuarios({ selectedSede, currentUser, setCurrentUser }) 
     if (sede.id === "todas") return items;
 
     return items.filter((item) => {
-      return item.sedeId === sede.id || item.sede === sede.nombre || item.sede === "Todas";
+      return item.sedeId === sede.id || item.sede === sede.nombre || userHasAllSedesAccess(item);
     });
   }
 
@@ -209,8 +209,8 @@ export default function Usuarios({ selectedSede, currentUser, setCurrentUser }) 
 
   const activos = usuariosPorSede.filter((u) => u.estado === "Activo").length;
   const suspendidos = usuariosPorSede.filter((u) => u.estado === "Suspendido").length;
-  const multisede = usuariosPorSede.filter((u) => u.acceso === "Todas las sedes").length;
-  const sedeUnica = usuariosPorSede.filter((u) => u.acceso === "Una sede").length;
+  const multisede = usuariosPorSede.filter(userHasAllSedesAccess).length;
+  const sedeUnica = usuariosPorSede.filter((u) => !userHasAllSedesAccess(u)).length;
 
   async function handleCreate(e) {
     e.preventDefault();

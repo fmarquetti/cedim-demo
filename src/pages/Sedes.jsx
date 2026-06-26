@@ -10,6 +10,8 @@ import {
 } from "../services/sedeService";
 import { canPerform } from "../utils/permissions";
 import { normalizeSelectedSede } from "../utils/sedeUtils";
+import { EmptyState, PageLoader } from "../components/PageStates";
+import { toast } from "../components/ToastProvider";
 
 function filterBySede(items, selectedSede) {
   const sede = normalizeSelectedSede(selectedSede);
@@ -51,7 +53,7 @@ export default function Sedes({ selectedSede, currentUser }) {
       setSedes(data);
     } catch (error) {
       console.error("Error cargando sedes:", error);
-      alert(error.message || "No se pudieron cargar las sedes.");
+      toast.error(error.message || "No se pudo cargar sedes.");
     } finally {
       setLoading(false);
     }
@@ -64,7 +66,7 @@ export default function Sedes({ selectedSede, currentUser }) {
         setSedes(data);
       } catch (error) {
         console.error("Error cargando sedes:", error);
-        alert(error.message || "No se pudieron cargar las sedes.");
+        toast.error(error.message || "No se pudo cargar sedes.");
       } finally {
         setLoading(false);
       }
@@ -135,7 +137,7 @@ export default function Sedes({ selectedSede, currentUser }) {
         editingSede ? "Error editando sede:" : "Error creando sede:",
         error
       );
-      alert(
+      toast.error(
         error.message ||
           (editingSede ? "No se pudo editar la sede." : "No se pudo crear la sede.")
       );
@@ -152,7 +154,7 @@ export default function Sedes({ selectedSede, currentUser }) {
       await loadSedes();
     } catch (error) {
       console.error("Error actualizando sede:", error);
-      alert(error.message || "No se pudo actualizar la sede.");
+      toast.error(error.message || "No se pudo actualizar la sede.");
     }
   }
 
@@ -170,7 +172,7 @@ export default function Sedes({ selectedSede, currentUser }) {
       await loadSedes();
     } catch (error) {
       console.error("Error eliminando sede:", error);
-      alert(
+      toast.error(
         error.message ||
           "No se pudo eliminar la sede. Verificá que no tenga usuarios asociados."
       );
@@ -294,7 +296,12 @@ export default function Sedes({ selectedSede, currentUser }) {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan="8">Cargando sedes...</td>
+                <td colSpan="8" className="table-state-cell">
+                  <PageLoader
+                    title="Cargando sedes"
+                    message="Estamos consultando sociedades y sedes activas."
+                  />
+                </td>
               </tr>
             )}
 
@@ -344,7 +351,12 @@ export default function Sedes({ selectedSede, currentUser }) {
 
             {!loading && sedesFiltradas.length === 0 && (
               <tr>
-                <td colSpan="8">No se encontraron sedes.</td>
+                <td colSpan="8" className="table-state-cell">
+                  <EmptyState
+                    title="Sin datos"
+                    message="No hay sedes para mostrar con los filtros actuales."
+                  />
+                </td>
               </tr>
             )}
           </tbody>

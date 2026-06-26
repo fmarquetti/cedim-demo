@@ -41,6 +41,7 @@ import {
 
 import { formatMoney } from "../utils/format";
 import { getDbSedeId } from "../utils/sedeUtils";
+import { loadSafeBatch } from "../utils/loadSafe";
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────
 
@@ -336,6 +337,7 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
   const [sedes, setSedes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [loadWarnings, setLoadWarnings] = useState([]);
   const [widgetOrder, setWidgetOrder] = useState(() => getInitialWidgetOrder(currentUser));
   const [draggedWidgetId, setDraggedWidgetId] = useState("");
   const [dragOverWidgetId, setDragOverWidgetId] = useState("");
@@ -351,28 +353,56 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
   const [vistaComparativa, setVistaComparativa] = useState(false);
   const [metricaComparativa, setMetricaComparativa] = useState("ingresos");
 
-  const verTodasSedes = sedeId === "todas" || !sedeId;
   const effectiveDbSedeId = dbSedeId ?? getDbSedeId(sedeId);
+  const verTodasSedes = !effectiveDbSedeId;
 
   async function loadDashboard() {
     try {
       setLoading(true);
       setError("");
+      setLoadWarnings([]);
 
-      const [ingresosData, egresosData, movimientosData, cuentasCorrientesData, sedesData] =
-        await Promise.all([
-          getIngresos(effectiveDbSedeId),
-          getEgresos(effectiveDbSedeId),
-          getMovimientosBancarios(effectiveDbSedeId),
-          getCuentasCorrientes(effectiveDbSedeId),
-          getSedes(),
-        ]);
+      const results = await loadSafeBatch({
+        ingresos: {
+          label: "ingresos del dashboard",
+          promise: getIngresos(effectiveDbSedeId),
+          fallback: [],
+        },
+        egresos: {
+          label: "egresos del dashboard",
+          promise: getEgresos(effectiveDbSedeId),
+          fallback: [],
+        },
+        movimientos: {
+          label: "movimientos bancarios del dashboard",
+          promise: getMovimientosBancarios(effectiveDbSedeId),
+          fallback: [],
+        },
+        cuentasCorrientes: {
+          label: "cuentas corrientes del dashboard",
+          promise: getCuentasCorrientes(effectiveDbSedeId),
+          fallback: [],
+        },
+        sedes: {
+          label: "sedes del dashboard",
+          promise: getSedes(),
+          fallback: [],
+        },
+      });
 
-      setIngresos(ingresosData || []);
-      setEgresos(egresosData || []);
-      setMovimientos(movimientosData || []);
-      setCuentasCorrientes(cuentasCorrientesData || []);
-      setSedes(sedesData || []);
+      setIngresos(results.ingresos.data || []);
+      setEgresos(results.egresos.data || []);
+      setMovimientos(results.movimientos.data || []);
+      setCuentasCorrientes(results.cuentasCorrientes.data || []);
+      setSedes(results.sedes.data || []);
+      setLoadWarnings(
+        Object.entries(results)
+          .filter(([, result]) => result.error)
+          .map(([label, result]) => ({
+            label,
+            message: result.error?.message || "Error desconocido",
+          }))
+      );
     } catch (err) {
       console.error("Error cargando dashboard:", err);
       setError("No se pudo cargar la información del dashboard.");
@@ -1006,6 +1036,15 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
       </div>
 
       {/* ── Filtros de período ── */}
+      {loadWarnings.length > 0 && (
+        <div className="empty-state">
+          Algunos datos no pudieron cargarse.{" "}
+          {loadWarnings
+            .map((warning) => `${warning.label}: ${warning.message}`)
+            .join(" | ")}
+        </div>
+      )}
+
       <div className="filters-bar">
         <label className="filter-field">
           <span>Período</span>

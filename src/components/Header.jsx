@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
-import { Bell, Search, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { getSedes } from "../services/sedeService";
-import { normalizeSelectedSede, TODAS_LAS_SEDES } from "../utils/sedeUtils";
+import {
+  getUserDefaultSede,
+  normalizeSelectedSede,
+  TODAS_LAS_SEDES,
+  userHasAllSedesAccess,
+} from "../utils/sedeUtils";
 
 export default function Header({
   selectedSede,
@@ -10,42 +15,64 @@ export default function Header({
   onLogout,
 }) {
   const [sedes, setSedes] = useState([]);
-  const isAdmin = currentUser?.access === "Todas las sedes";
+  const [sedesLoading, setSedesLoading] = useState(false);
+  const [sedesError, setSedesError] = useState("");
+  const canSelectSede = userHasAllSedesAccess(currentUser);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadSedes() {
+      setSedesLoading(true);
+      setSedesError("");
       try {
         const data = await getSedes();
         if (cancelled) return;
         setSedes((data || []).filter((sede) => sede.estado === "Activa"));
       } catch (error) {
         console.error("Error cargando sedes en Header:", error);
-        if (!cancelled) setSedes([]);
+        if (!cancelled) {
+          setSedes([]);
+          setSedesError("No se pudieron cargar las sedes");
+        }
+      } finally {
+        if (!cancelled) setSedesLoading(false);
       }
     }
 
-    if (isAdmin) {
+    if (canSelectSede) {
       loadSedes();
+    } else {
+      queueMicrotask(() => {
+        setSedes([]);
+        setSedesLoading(false);
+        setSedesError("");
+      });
     }
 
     return () => {
       cancelled = true;
     };
-  }, [isAdmin]);
+  }, [canSelectSede]);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canSelectSede) {
+      const defaultSede = getUserDefaultSede(currentUser);
+      if (normalizeSelectedSede(selectedSede).id !== defaultSede.id) {
+        queueMicrotask(() => setSelectedSede(defaultSede));
+      }
+      return;
+    }
+
     const normalized = normalizeSelectedSede(selectedSede);
     if (normalized.id === "todas") return;
     if (!sedes.length) return;
 
     const sedeActiva = sedes.some((sede) => sede.id === normalized.id);
     if (!sedeActiva) {
-      setSelectedSede(TODAS_LAS_SEDES);
+      queueMicrotask(() => setSelectedSede(TODAS_LAS_SEDES));
     }
-  }, [isAdmin, selectedSede, sedes, setSelectedSede]);
+  }, [canSelectSede, currentUser, selectedSede, sedes, setSelectedSede]);
 
   function handleChangeSede(e) {
     const valor = e.target.value;
@@ -68,14 +95,19 @@ export default function Header({
       </div>*/}
 
       <div className="topbar-actions">
-        <div className="search-box">
-          <Search size={16} />
-          <input placeholder="Buscar..." data-tour="global-search" />
-        </div>
-
-        {isAdmin ? (
-          <select value={valorActual} onChange={handleChangeSede} data-tour="dashboard-sede-selector">
-            <option value="todas">Todas las sedes</option>
+        {canSelectSede ? (
+          <select
+            value={valorActual}
+            onChange={handleChangeSede}
+            disabled={sedesLoading || Boolean(sedesError) || sedes.length === 0}
+            title={sedesError || (sedes.length === 0 ? "No hay sedes activas" : "Seleccionar sede")}
+            data-tour="dashboard-sede-selector"
+          >
+            <option value="todas">
+              {sedesLoading
+                ? "Cargando sedes..."
+                : sedesError || (sedes.length === 0 ? "Sin sedes activas" : "Todas las sedes")}
+            </option>
             {sedes.map((sede) => (
               <option key={sede.id} value={sede.id}>
                 {sede.nombre}
@@ -83,12 +115,14 @@ export default function Header({
             ))}
           </select>
         ) : (
-          <span className="sede-indicator" data-tour="dashboard-sede-selector">Vista: {currentUser.sede}</span>
+          <span
+            className="sede-indicator"
+            title="Sede asignada por tu rol"
+            data-tour="dashboard-sede-selector"
+          >
+            Vista: {currentUser.sede}
+          </span>
         )}
-
-        <button className="icon-button">
-          <Bell size={18} />
-        </button>
 
         <button
           className="secondary-button"

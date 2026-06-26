@@ -6,7 +6,7 @@ function normalizeUser(dbUser) {
     const sedeAsignada = dbUser.usuario_sedes?.[0]?.sedes || null;
 
     if (!accesoTodasSedes && !sedeAsignada?.id) {
-        throw new Error("El usuario no tiene una sede asignada. Contactá a un administrador.");
+        throw new Error("El usuario no tiene una sede asignada. Contacta a un administrador.");
     }
 
     return {
@@ -17,6 +17,9 @@ function normalizeUser(dbUser) {
         email: dbUser.email,
         role: dbUser.rol,
         rol: dbUser.rol,
+        allSedesAccess: accesoTodasSedes,
+        acceso_todas_sedes: accesoTodasSedes,
+        accessScope: accesoTodasSedes ? "all" : "single",
         access: accesoTodasSedes ? "Todas las sedes" : "Una sede",
         acceso: accesoTodasSedes ? "Todas las sedes" : "Una sede",
         sede: accesoTodasSedes
@@ -32,19 +35,7 @@ function normalizeUser(dbUser) {
     };
 }
 
-export async function loginWithEmail(email, password) {
-    const { data: authData, error: authError } =
-        await supabase.auth.signInWithPassword({
-            email,
-            password,
-        });
-
-    await supabase.rpc("link_current_user_profile");
-
-    if (authError) {
-        throw new Error("Usuario o contraseña incorrectos.");
-    }
-
+async function getProfileForAuthUser(authUserId, messages = {}) {
     const { data: userData, error: userError } = await supabase
         .from("usuarios")
         .select(`
@@ -57,20 +48,37 @@ export async function loginWithEmail(email, password) {
         )
       )
     `)
-        .eq("auth_user_id", authData.user.id)
+        .eq("auth_user_id", authUserId)
         .single();
 
     if (userError || !userData) {
         await supabase.auth.signOut();
-        throw new Error("El usuario no está autorizado para ingresar.");
+        throw new Error(messages.unauthorizedMessage || "Sesion no autorizada.");
     }
 
     if (userData.estado !== "Activo") {
         await supabase.auth.signOut();
-        throw new Error("El usuario se encuentra suspendido.");
+        throw new Error(messages.suspendedMessage || "Sesion suspendida.");
     }
 
     return normalizeUser(userData);
+}
+
+export async function loginWithEmail(email, password) {
+    const { data: authData, error: authError } =
+        await supabase.auth.signInWithPassword({
+            email,
+            password,
+        });
+
+    if (authError || !authData?.user) {
+        throw new Error("Usuario o contrasena incorrectos.");
+    }
+
+    return getProfileForAuthUser(authData.user.id, {
+        unauthorizedMessage: "El usuario no esta autorizado para ingresar.",
+        suspendedMessage: "El usuario se encuentra suspendido.",
+    });
 }
 
 export async function logout() {
@@ -78,26 +86,20 @@ export async function logout() {
 }
 
 export async function getCurrentUserProfile() {
-    const { data: sessionData } = await supabase.auth.getSession();
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+    if (sessionError) {
+        console.error("Error leyendo sesion activa:", sessionError);
+        await supabase.auth.signOut();
+        return null;
+    }
 
     if (!sessionData.session?.user) return null;
 
-    const { data, error } = await supabase
-        .from("usuarios")
-        .select(`
-      *,
-      usuario_sedes (
-        sede_id,
-        sedes (
-          id,
-          nombre
-        )
-      )
-    `)
-        .eq("auth_user_id", sessionData.session.user.id)
-        .single();
-
-    if (error || !data || data.estado !== "Activo") return null;
-
-    return normalizeUser(data);
+    try {
+        return await getProfileForAuthUser(sessionData.session.user.id);
+    } catch (error) {
+        console.error("Error recuperando perfil de sesion activa:", error);
+        return null;
+    }
 }

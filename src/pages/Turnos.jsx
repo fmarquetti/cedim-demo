@@ -26,6 +26,7 @@ import {
     marcarAusenteTurno,
     subscribeTurnos,
 } from "../services/turnosService";
+import { getDbSedeId } from "../utils/sedeUtils";
 
 const estadoOptions = [
     "Todos",
@@ -157,7 +158,7 @@ function sortTurnosByField(a, b, field, direction) {
     return sortTurnos(a, b);
 }
 
-export default function Turnos({ selectedSede, sedeId }) {
+export default function Turnos({ selectedSede, dbSedeId }) {
     const tvRef = useRef(null);
 
     const [turnos, setTurnos] = useState([]);
@@ -178,12 +179,9 @@ export default function Turnos({ selectedSede, sedeId }) {
 
     const [form, setForm] = useState(initialForm);
 
-    const selectedSedeName =
-        typeof selectedSede === "object" && selectedSede !== null
-            ? selectedSede.nombre
-            : selectedSede || "Todas las sedes";
+    const selectedSedeName = selectedSede?.nombre || "Todas las sedes";
 
-    const activeSedeId = sedeId === "todas" ? null : sedeId;
+    const activeSedeId = dbSedeId ?? getDbSedeId(selectedSede);
 
     const sedeBloqueada = Boolean(activeSedeId);
 
@@ -221,7 +219,7 @@ export default function Turnos({ selectedSede, sedeId }) {
     }
 
     useEffect(() => {
-        cargarDatos(activeSedeId);
+        queueMicrotask(() => cargarDatos(activeSedeId));
 
         const unsubscribe = subscribeTurnos(() => {
             cargarDatos(activeSedeId);

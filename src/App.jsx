@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
+import { PageLoader, PermissionDeniedState } from "./components/PageStates";
 
 import Login from "./pages/Login";
 
@@ -43,11 +44,15 @@ import FloatingNotice from "./components/FloatingNotice";
 import DevelopmentNotice from "./components/DevelopmentNotice";
 import { canAccessInternalTools } from "./utils/internalAccess";
 import { canViewPage, getFirstPermittedPage } from "./utils/permissions";
+import { getCurrentUserProfile, logout } from "./services/authService";
 import {
   getDbSedeId,
+  getUserDefaultSede,
   getSedeId as getNormalizedSedeId,
+  normalizeSelectedSede,
   resolveEffectiveSede,
   TODAS_LAS_SEDES,
+  userHasAllSedesAccess,
 } from "./utils/sedeUtils";
 
 import DemoTour from "./components/DemoTour";
@@ -139,10 +144,41 @@ function AppContent() {
   const [activePage, setActivePage] = useState("dashboard");
   const [selectedSede, setSelectedSede] = useState(TODAS_LAS_SEDES);
   const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   const pathname = window.location.pathname;
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCurrentSession() {
+      if (pathname.includes("/set-password")) {
+        setAuthLoading(false);
+        return;
+      }
+
+      setAuthLoading(true);
+
+      try {
+        const user = await getCurrentUserProfile();
+        if (!cancelled) setCurrentUser(user);
+      } catch (error) {
+        console.error("Error iniciando sesion desde Supabase:", error);
+        await logout();
+        if (!cancelled) setCurrentUser(null);
+      } finally {
+        if (!cancelled) setAuthLoading(false);
+      }
+    }
+
+    loadCurrentSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   const permittedPageIds = useMemo(() => {
     const hiddenMenuItems = Array.isArray(config.hiddenMenuItems)
@@ -163,6 +199,22 @@ function AppContent() {
 
   useEffect(() => {
     if (!currentUser) return;
+
+    const nextSelectedSede = userHasAllSedesAccess(currentUser)
+      ? normalizeSelectedSede(selectedSede)
+      : getUserDefaultSede(currentUser);
+
+    const normalizedCurrent = normalizeSelectedSede(selectedSede);
+    if (
+      normalizedCurrent.id !== nextSelectedSede.id ||
+      normalizedCurrent.nombre !== nextSelectedSede.nombre
+    ) {
+      queueMicrotask(() => setSelectedSede(nextSelectedSede));
+    }
+  }, [currentUser, selectedSede]);
+
+  useEffect(() => {
+    if (!currentUser) return;
     if (permittedPageIds.includes(activePage)) return;
 
     const fallbackPage =
@@ -177,6 +229,16 @@ function AppContent() {
 
   if (pathname.includes("/set-password")) {
     return <SetPassword />;
+  }
+
+  if (authLoading) {
+    return (
+      <main className="login-page">
+        <section className="login-card">
+          <PageLoader title="Validando sesion" message="Estamos comprobando tu acceso." />
+        </section>
+      </main>
+    );
   }
 
   if (!currentUser) {
@@ -202,7 +264,10 @@ function AppContent() {
           selectedSede={effectiveSelectedSede}
           setSelectedSede={setSelectedSede}
           currentUser={currentUser}
-          onLogout={() => setCurrentUser(null)}
+          onLogout={async () => {
+            await logout();
+            setCurrentUser(null);
+          }}
         />
 
         <DemoTour activePage={activePage} currentUser={currentUser} />
@@ -213,9 +278,7 @@ function AppContent() {
             getPage(activePage, effectiveSelectedSede, currentUser, setActivePage, setCurrentUser)
           ) : (
             <section className="page">
-              <div className="empty-state">
-                No tenes permisos para acceder a esta seccion.
-              </div>
+              <PermissionDeniedState />
             </section>
           )}
         </div>

@@ -1,6 +1,15 @@
 export const TODAS_LAS_SEDES_ID = "todas";
 export const TODAS_LAS_SEDES = { id: TODAS_LAS_SEDES_ID, nombre: "Todas las sedes" };
 
+export function userHasAllSedesAccess(user) {
+  return Boolean(
+    user?.allSedesAccess ||
+      user?.acceso_todas_sedes ||
+      user?.accesoTodasSedes ||
+      user?.accessScope === "all"
+  );
+}
+
 export function isTodasLasSedes(value) {
   if (!value) return true;
   if (value === TODAS_LAS_SEDES_ID || value === TODAS_LAS_SEDES.nombre) return true;
@@ -12,7 +21,7 @@ export function isTodasLasSedes(value) {
 }
 
 export function normalizeSelectedSede(value) {
-  if (isTodasLasSedes(value)) return TODAS_LAS_SEDES;
+  if (isTodasLasSedes(value)) return { ...TODAS_LAS_SEDES };
 
   if (typeof value === "object") {
     return {
@@ -34,21 +43,25 @@ export function getDbSedeId(value) {
   return value || null;
 }
 
-export function resolveEffectiveSede(currentUser, selectedSede) {
-  if (currentUser?.access !== "Una sede" && currentUser?.acceso !== "Una sede") {
-    return normalizeSelectedSede(selectedSede);
+export function getUserDefaultSede(user) {
+  if (user?.sede && typeof user.sede === "object") {
+    return normalizeSelectedSede(user.sede);
   }
 
-  if (currentUser?.sede && typeof currentUser.sede === "object") {
-    return normalizeSelectedSede(currentUser.sede);
-  }
-
-  if (currentUser?.sedeId) {
+  if (user?.sedeId) {
     return {
-      id: currentUser.sedeId,
-      nombre: currentUser.sedeNombre || currentUser.sede || "Sede asignada",
+      id: user.sedeId,
+      nombre: user.sedeNombre || user.sede || "Sede asignada",
     };
   }
 
   return TODAS_LAS_SEDES;
+}
+
+export function resolveEffectiveSede(currentUser, selectedSede) {
+  if (userHasAllSedesAccess(currentUser)) {
+    return normalizeSelectedSede(selectedSede);
+  }
+
+  return getUserDefaultSede(currentUser);
 }

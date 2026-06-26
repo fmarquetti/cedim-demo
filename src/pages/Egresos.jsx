@@ -31,6 +31,8 @@ import { getSedes } from "../services/sedeService";
 import { formatMoney, formatDate, toDate } from "../utils/format";
 import { toast } from "../components/ToastProvider";
 import { canPerform } from "../utils/permissions";
+import { getDbSedeId } from "../utils/sedeUtils";
+import { loadSafeBatch, notifyLoadErrors } from "../utils/loadSafe";
 
 import ConceptoSelector from "../components/ConceptoSelector";
 import { getConceptoItems } from "../services/conceptoItemService";
@@ -145,7 +147,7 @@ function detalleFiscalDesdeDatos(datos, importe) {
   };
 }
 
-export default function Egresos({ selectedSede, sedeId, currentUser }) {
+export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
   const facturaInputRef = useRef(null);
   const canCreateEgresos = canPerform(currentUser, "egresos", "create");
   const canEditEgresos = canPerform(currentUser, "egresos", "edit");
@@ -172,44 +174,47 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
 
   const [conceptoItems, setConceptoItems] = useState([]);
 
-  const selectedSedeName =
-    typeof selectedSede === "object" && selectedSede !== null
-      ? selectedSede.nombre
-      : selectedSede || "Todas las sedes";
+  const selectedSedeName = selectedSede?.nombre || "Todas las sedes";
 
-  const sedeBloqueada = sedeId && sedeId !== "todas";
+  const idSedeActiva = dbSedeId ?? getDbSedeId(selectedSede);
+  const sedeBloqueada = Boolean(idSedeActiva);
 
-  async function loadData(currentSedeId = sedeId) {
+  async function loadData(currentSedeId = idSedeActiva) {
     setLoading(true);
+    const idParaFiltro = getDbSedeId(currentSedeId);
+    const results = await loadSafeBatch({
+      egresos: {
+        label: "egresos",
+        promise: getEgresos(idParaFiltro),
+        fallback: [],
+      },
+      sedes: {
+        label: "sedes para egresos",
+        promise: getSedes(),
+        fallback: [],
+      },
+      conceptos: {
+        label: "conceptos de egresos",
+        promise: getConceptoItems("egreso"),
+        fallback: [],
+      },
+    });
 
-    try {
-      const idParaFiltro = currentSedeId === "todas" ? null : currentSedeId;
-
-      const [egresosData, sedesData, conceptoItemsData] = await Promise.all([
-        getEgresos(idParaFiltro),
-        getSedes(),
-        getConceptoItems("egreso"),
-      ]);
-
-      setEgresos(egresosData || []);
-      setSedes(sedesData || []);
-      setConceptoItems(conceptoItemsData || []);
-
-      setForm((prev) => ({
-        ...prev,
-        sedeId: prev.sedeId || idParaFiltro || sedesData?.[0]?.id || "",
-      }));
-    } catch (error) {
-      toast.error(error.message || "No se pudieron cargar los egresos.");
-    } finally {
-      setLoading(false);
-    }
+    setEgresos(results.egresos.data || []);
+    setSedes(results.sedes.data || []);
+    setConceptoItems(results.conceptos.data || []);
+    setForm((prev) => ({
+      ...prev,
+      sedeId: prev.sedeId || idParaFiltro || results.sedes.data?.[0]?.id || "",
+    }));
+    notifyLoadErrors(results, toast.error);
+    setLoading(false);
   }
 
   useEffect(() => {
-    loadData(sedeId);
+    queueMicrotask(() => loadData(idSedeActiva));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sedeId]);
+  }, [idSedeActiva]);
 
   const categorias = useMemo(() => {
     return [...new Set(egresos.map((item) => item.categoria).filter(Boolean))].sort();
@@ -344,7 +349,7 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
     setForm({
       ...emptyForm,
       fecha: new Date().toISOString().split("T")[0],
-      sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+      sedeId: sedeBloqueada ? idSedeActiva : sedes[0]?.id || "",
     });
 
     setModal("nuevo");
@@ -770,10 +775,10 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
 
     try {
       await createEgreso(form);
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
       setForm({
         ...emptyForm,
-        sedeId: sedeBloqueada ? sedeId : sedes[0]?.id || "",
+        sedeId: sedeBloqueada ? idSedeActiva : sedes[0]?.id || "",
       });
       setModal(null);
       toast.success("Egreso guardado correctamente.");
@@ -793,7 +798,7 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
 
     try {
       await deleteEgreso(id);
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
       toast.success("Egreso eliminado.");
     } catch (error) {
       toast.error(error.message || "No se pudo eliminar el egreso.");
@@ -807,7 +812,7 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
 
     try {
       await marcarEgresoPagado(id);
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
       toast.success("Egreso marcado como pagado.");
     } catch (error) {
       toast.error(error.message || "No se pudo marcar como pagado.");
@@ -867,7 +872,7 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
 
       const sedeDefault =
         sedeBloqueada
-          ? sedes.find((s) => s.id === sedeId)
+          ? sedes.find((s) => s.id === idSedeActiva)
           : sedes[0];
 
       setEgresoPendiente({
@@ -940,7 +945,7 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
 
     try {
       await createEgreso(egresoPendiente);
-      await loadData(sedeId);
+      await loadData(idSedeActiva);
       setEgresoPendiente(null);
       setModal(null);
       toast.success("Factura importada y guardada correctamente.");
@@ -1232,7 +1237,7 @@ export default function Egresos({ selectedSede, sedeId, currentUser }) {
 
           <button
             className="secondary-button"
-            onClick={() => loadData(sedeId)}
+            onClick={() => loadData(idSedeActiva)}
             disabled={loading}
             data-tour="egresos-actualizar"
           >
