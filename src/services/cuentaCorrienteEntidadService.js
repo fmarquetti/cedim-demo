@@ -73,7 +73,7 @@ export async function getEntidadesCuentaCorriente({ tipo, search, activa } = {})
   if (typeof activa === "boolean") query = query.eq("activa", activa);
   if (search?.trim()) {
     const term = search.trim();
-    query = query.or(`nombre.ilike.%${term}%,documento.ilike.%${term}%`);
+    query = query.or(`nombre.ilike.%${term}%,documento.ilike.%${term}%,email.ilike.%${term}%,telefono.ilike.%${term}%`);
   }
 
   const { data, error } = await query;
@@ -87,6 +87,29 @@ export async function upsertEntidadCuentaCorriente(payload) {
   const documento = normalizeDocument(payload?.documento) || null;
 
   if (!nombre) throw new Error("El nombre de la entidad es requerido.");
+
+  const dbPayload = {
+    tipo,
+    nombre,
+    documento,
+    condicion_iva: payload?.condicionIva || null,
+    email: payload?.email || null,
+    telefono: payload?.telefono || null,
+    domicilio: payload?.domicilio || null,
+    activa: payload?.activa ?? true,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (payload?.id) {
+    const { data, error } = await supabase
+      .from("entidades_cuenta_corriente")
+      .update(dbPayload)
+      .eq("id", payload.id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return mapEntidad(data);
+  }
 
   let existente = null;
   if (documento) {
@@ -107,18 +130,6 @@ export async function upsertEntidadCuentaCorriente(payload) {
     existente = (data || []).find((item) => normalizeText(item.nombre) === normalizeText(nombre));
   }
 
-  const dbPayload = {
-    tipo,
-    nombre,
-    documento,
-    condicion_iva: payload?.condicionIva || null,
-    email: payload?.email || null,
-    telefono: payload?.telefono || null,
-    domicilio: payload?.domicilio || null,
-    activa: true,
-    updated_at: new Date().toISOString(),
-  };
-
   if (existente?.id) {
     const { data, error } = await supabase
       .from("entidades_cuenta_corriente")
@@ -133,6 +144,20 @@ export async function upsertEntidadCuentaCorriente(payload) {
   const { data, error } = await supabase
     .from("entidades_cuenta_corriente")
     .insert(dbPayload)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return mapEntidad(data);
+}
+
+export async function setEntidadCuentaCorrienteActiva(id, activa) {
+  if (!id) throw new Error("La entidad es requerida.");
+
+  const { data, error } = await supabase
+    .from("entidades_cuenta_corriente")
+    .update({ activa: Boolean(activa), updated_at: new Date().toISOString() })
+    .eq("id", id)
     .select("*")
     .single();
 

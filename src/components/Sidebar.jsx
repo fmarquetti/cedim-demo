@@ -34,6 +34,7 @@ import {
     Upload,
     FileClock,
     Ticket,
+    Handshake,
 } from "lucide-react";
 
 import { useState } from "react";
@@ -58,6 +59,7 @@ const menuGroups = [
             { id: "ingresos", label: "Ingresos", icon: ArrowDownCircle },
             { id: "egresos", label: "Egresos", icon: ArrowUpCircle },
             { id: "ordenesPago", label: "Órdenes de Pago", icon: ClipboardCheck },
+            { id: "clientesProveedores", label: "Clientes / Proveedores", icon: Handshake },
             { id: "cuentas", label: "Cuentas corrientes", icon: Wallet },
             { id: "cuentasCorrientesEntidades", label: "CC Clientes/Proveedores", icon: UsersRound },
             { id: "bancos", label: "Bancos", icon: Landmark },
@@ -78,7 +80,7 @@ const menuGroups = [
             { id: "historialAuditoria", label: "Historial de Auditoría", icon: FileClock },
             { id: "importaciones", label: "Importaciones", icon: Upload },
             { id: "iva", label: "IVA", icon: Percent },
-            { id: "configuracionFiscal", label: "ConfiguraciÃ³n Fiscal", icon: ReceiptText },
+            { id: "configuracionFiscal", label: "Configuración Fiscal", icon: ReceiptText },
             { id: "documentos", label: "Documentos", icon: FileText },
             { id: "facturacion", label: "Facturación", icon: ReceiptText },
         ],

@@ -16,6 +16,7 @@ export const PERMISSION_MODULES = [
       { id: "ingresos", label: "Ingresos" },
       { id: "egresos", label: "Egresos" },
       { id: "ordenesPago", label: "Ordenes de Pago" },
+      { id: "clientesProveedores", label: "Clientes / Proveedores" },
       { id: "cuentas", label: "Cuentas corrientes", actions: ["view", "edit"] },
       {
         id: "cuentasCorrientesEntidades",
