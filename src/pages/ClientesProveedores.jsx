@@ -41,6 +41,9 @@ export default function ClientesProveedores({ currentUser }) {
   const [error, setError] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [sortConfig, setSortConfig] = useState({ key: "nombre", direction: "asc" });
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
   const canCreate = canPerform(currentUser, "clientesProveedores", "create");
   const canEdit = canPerform(currentUser, "clientesProveedores", "edit");
@@ -88,6 +91,37 @@ export default function ClientesProveedores({ currentUser }) {
     });
   }, [entidades, search]);
 
+  const entidadesOrdenadas = useMemo(() => {
+    const getSortValue = (entidad, key) => {
+      if (key === "estado") return entidad.activa ? "activo" : "inactivo";
+      if (key === "tipo") return tipoLabels[entidad.tipo] || entidad.tipo || "";
+      return entidad[key] || "";
+    };
+
+    return entidadesFiltradas
+      .map((entidad, index) => ({ entidad, index }))
+      .sort((left, right) => {
+        const leftValue = normalizeSearch(getSortValue(left.entidad, sortConfig.key));
+        const rightValue = normalizeSearch(getSortValue(right.entidad, sortConfig.key));
+        const comparison = leftValue.localeCompare(rightValue, "es", { sensitivity: "base" });
+
+        if (comparison !== 0) {
+          return sortConfig.direction === "asc" ? comparison : -comparison;
+        }
+
+        return left.index - right.index;
+      })
+      .map((item) => item.entidad);
+  }, [entidadesFiltradas, sortConfig]);
+
+  const totalPages = Math.max(1, Math.ceil(entidadesOrdenadas.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  const entidadesPaginadas = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return entidadesOrdenadas.slice(start, start + pageSize);
+  }, [safeCurrentPage, entidadesOrdenadas]);
+
   const metricas = useMemo(() => {
     return {
       total: entidades.length,
@@ -101,6 +135,11 @@ export default function ClientesProveedores({ currentUser }) {
     setForm({ ...emptyForm, tipo });
     setFormOpen(true);
     setError("");
+  }
+
+  function closeForm() {
+    setFormOpen(false);
+    setForm(emptyForm);
   }
 
   function openEdit(entidad) {
@@ -120,6 +159,28 @@ export default function ClientesProveedores({ currentUser }) {
 
   function updateForm(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleSort(key) {
+    setCurrentPage(1);
+    setSortConfig((current) => {
+      if (current.key === key) {
+        return { key, direction: current.direction === "asc" ? "desc" : "asc" };
+      }
+
+      return { key, direction: "asc" };
+    });
+  }
+
+  function renderSortLabel(label, key) {
+    const indicator = sortConfig.key === key ? (sortConfig.direction === "asc" ? " \u2191" : " \u2193") : "";
+
+    return (
+      <button className="table-sort-button" type="button" onClick={() => handleSort(key)}>
+        {label}
+        {indicator}
+      </button>
+    );
   }
 
   async function handleSubmit(event) {
@@ -209,13 +270,25 @@ export default function ClientesProveedores({ currentUser }) {
       </div>
 
       <div className="filters-bar" data-tour="clientes-proveedores-filtros">
-        <select value={tipoFiltro} onChange={(event) => setTipoFiltro(event.target.value)}>
+        <select
+          value={tipoFiltro}
+          onChange={(event) => {
+            setTipoFiltro(event.target.value);
+            setCurrentPage(1);
+          }}
+        >
           <option value="todos">Clientes y proveedores</option>
           <option value="cliente">Solo clientes</option>
           <option value="proveedor">Solo proveedores</option>
         </select>
 
-        <select value={estadoFiltro} onChange={(event) => setEstadoFiltro(event.target.value)}>
+        <select
+          value={estadoFiltro}
+          onChange={(event) => {
+            setEstadoFiltro(event.target.value);
+            setCurrentPage(1);
+          }}
+        >
           <option value="activos">Activos</option>
           <option value="inactivos">Inactivos</option>
           <option value="todos">Todos</option>
@@ -224,7 +297,10 @@ export default function ClientesProveedores({ currentUser }) {
         <input
           placeholder="Buscar por nombre, CUIT, email o teléfono..."
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setCurrentPage(1);
+          }}
         />
 
         <button className="secondary-button" type="button" onClick={loadData}>
@@ -235,19 +311,21 @@ export default function ClientesProveedores({ currentUser }) {
       {error && <div className="alert error">{error}</div>}
 
       {formOpen && (
-        <div className="panel" data-tour="clientes-proveedores-form">
-          <div className="page-header" style={{ marginBottom: 12 }}>
-            <div>
-              <h3>{form.id ? "Editar entidad" : "Nueva entidad"}</h3>
-              <p>Completá los datos fiscales y de contacto básicos.</p>
+        <div className="modal-backdrop" data-tour="clientes-proveedores-form">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="entidad-modal-title">
+            <div className="modal-header">
+              <div>
+                <h3 id="entidad-modal-title">{form.id ? "Editar entidad" : "Nueva entidad"}</h3>
+                <p>Completá los datos fiscales y de contacto básicos.</p>
+              </div>
+              <button type="button" onClick={closeForm} aria-label="Cerrar">
+                <X size={18} />
+              </button>
             </div>
-            <button className="secondary-button" type="button" onClick={() => setFormOpen(false)}>
-              <X size={15} /> Cancelar
-            </button>
-          </div>
 
-          <form onSubmit={handleSubmit}>
-            <div className="form-grid">
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body">
+                <div className="form-grid">
               <label>
                 Tipo
                 <select value={form.tipo} onChange={(event) => updateForm("tipo", event.target.value)} required>
@@ -308,7 +386,7 @@ export default function ClientesProveedores({ currentUser }) {
                 />
               </label>
 
-              <label style={{ gridColumn: "1 / -1" }}>
+              <label className="full">
                 Domicilio
                 <input
                   value={form.domicilio}
@@ -316,14 +394,19 @@ export default function ClientesProveedores({ currentUser }) {
                   placeholder="Domicilio fiscal o comercial"
                 />
               </label>
-            </div>
+                </div>
+              </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
-              <button className="primary-button" type="submit" disabled={saving || !canManage}>
-                <Save size={16} /> {saving ? "Guardando..." : "Guardar entidad"}
-              </button>
-            </div>
-          </form>
+              <div className="modal-actions">
+                <button className="secondary-button" type="button" onClick={closeForm}>
+                  <X size={15} /> Cancelar
+                </button>
+                <button className="primary-button" type="submit" disabled={saving || !canManage}>
+                  <Save size={16} /> {saving ? "Guardando..." : "Guardar entidad"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -333,13 +416,13 @@ export default function ClientesProveedores({ currentUser }) {
           <table>
             <thead>
               <tr>
-                <th>Tipo</th>
-                <th>Razón social / Nombre</th>
-                <th>CUIT / Documento</th>
-                <th>Condición IVA</th>
+                <th>{renderSortLabel("Tipo", "tipo")}</th>
+                <th>{renderSortLabel("Razón social / Nombre", "nombre")}</th>
+                <th>{renderSortLabel("CUIT / Documento", "documento")}</th>
+                <th>{renderSortLabel("Condición IVA", "condicionIva")}</th>
                 <th>Email</th>
                 <th>Teléfono</th>
-                <th>Estado</th>
+                <th>{renderSortLabel("Estado", "estado")}</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -350,7 +433,7 @@ export default function ClientesProveedores({ currentUser }) {
                 </tr>
               )}
 
-              {!loading && entidadesFiltradas.map((entidad) => (
+              {!loading && entidadesPaginadas.map((entidad) => (
                 <tr key={entidad.id}>
                   <td>{tipoLabels[entidad.tipo] || entidad.tipo}</td>
                   <td>
@@ -380,7 +463,7 @@ export default function ClientesProveedores({ currentUser }) {
                 </tr>
               ))}
 
-              {!loading && entidadesFiltradas.length === 0 && (
+              {!loading && entidadesOrdenadas.length === 0 && (
                 <tr>
                   <td colSpan="8">No hay clientes o proveedores para los filtros seleccionados.</td>
                 </tr>
@@ -388,6 +471,27 @@ export default function ClientesProveedores({ currentUser }) {
             </tbody>
           </table>
         </div>
+        {!loading && entidadesOrdenadas.length > 0 && (
+          <div className="pagination-controls">
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={safeCurrentPage === 1}
+            >
+              Anterior
+            </button>
+            <span>Página {safeCurrentPage} de {totalPages}</span>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={safeCurrentPage === totalPages}
+            >
+              Siguiente
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );

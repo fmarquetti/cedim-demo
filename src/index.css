@@ -5730,6 +5730,20 @@ td {
   color: var(--muted, #64748b);
 }
 
+.pagination-controls {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.pagination-controls span {
+  font-weight: 700;
+  color: var(--muted, #64748b);
+}
+
 .facturacion-page .modal-backdrop {
   position: fixed;
   inset: 0;
