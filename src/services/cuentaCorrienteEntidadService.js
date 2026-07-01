@@ -54,6 +54,7 @@ function mapMovimiento(row, saldoAcumulado = null) {
     origenId: row.origen_id,
     descripcion: row.descripcion,
     comprobante: row.comprobante,
+    fechaVencimiento: row.metadata?.fecha_vencimiento || row.metadata?.fechaVencimiento || "",
     debe: round2(row.debe),
     haber: round2(row.haber),
     saldo: saldoAcumulado === null ? round2(row.saldo) : round2(saldoAcumulado),
@@ -112,7 +113,7 @@ export async function upsertEntidadCuentaCorriente(payload) {
     return mapEntidad(data);
   }
 
-  let existente = null;
+  let existente;
   if (documento) {
     const { data, error } = await supabase
       .from("entidades_cuenta_corriente")

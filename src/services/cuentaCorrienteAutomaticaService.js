@@ -144,6 +144,11 @@ export async function generarCcDesdeEgreso(egreso) {
       concepto: egreso.concepto,
       categoria: egreso.categoria,
       sociedad: egreso.sociedad,
+      fecha_vencimiento:
+        egreso.fechaVencimiento ||
+        egreso.fecha_vencimiento ||
+        egreso.vencimiento ||
+        null,
     },
   });
 }

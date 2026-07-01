@@ -68,7 +68,8 @@ export default function CuentasCorrientesEntidades({ selectedSede, sedeId }) {
   }
 
   useEffect(() => {
-    loadData();
+    queueMicrotask(() => loadData());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipoEntidad, desde, hasta, sedeId]);
 
   const resumenFiltrado = useMemo(() => {
@@ -132,6 +133,7 @@ export default function CuentasCorrientesEntidades({ selectedSede, sedeId }) {
       { header: "Tipo", key: "tipoMovimiento", width: 18 },
       { header: "Descripcion", key: "descripcion", width: 42 },
       { header: "Comprobante", key: "comprobante", width: 22 },
+      { header: "Vencimiento", key: "fechaVencimiento", width: 14 },
       { header: "Debe", key: "debe", width: 16 },
       { header: "Haber", key: "haber", width: 16 },
       { header: "Saldo", key: "saldo", width: 16 },
@@ -320,6 +322,7 @@ export default function CuentasCorrientesEntidades({ selectedSede, sedeId }) {
                     <th>Tipo movimiento</th>
                     <th>Descripcion</th>
                     <th>Comprobante</th>
+                    <th>Vencimiento</th>
                     <th>Debe</th>
                     <th>Haber</th>
                     <th>Saldo acumulado</th>
@@ -330,7 +333,7 @@ export default function CuentasCorrientesEntidades({ selectedSede, sedeId }) {
                 <tbody>
                   {loadingDetalle && (
                     <tr>
-                      <td colSpan="9">Cargando movimientos...</td>
+                      <td colSpan="10">Cargando movimientos...</td>
                     </tr>
                   )}
                   {!loadingDetalle &&
@@ -340,6 +343,7 @@ export default function CuentasCorrientesEntidades({ selectedSede, sedeId }) {
                         <td>{mov.tipoMovimiento}</td>
                         <td>{mov.descripcion}</td>
                         <td>{mov.comprobante || "-"}</td>
+                        <td>{formatDate(mov.fechaVencimiento)}</td>
                         <td>{mov.debe ? formatMoney(mov.debe) : "-"}</td>
                         <td>{mov.haber ? formatMoney(mov.haber) : "-"}</td>
                         <td><strong>{formatMoney(mov.saldo)}</strong></td>
@@ -353,7 +357,7 @@ export default function CuentasCorrientesEntidades({ selectedSede, sedeId }) {
                     ))}
                   {!loadingDetalle && movimientosDetalle.length === 0 && (
                     <tr>
-                      <td colSpan="9">No hay movimientos para esta entidad.</td>
+                      <td colSpan="10">No hay movimientos para esta entidad.</td>
                     </tr>
                   )}
                 </tbody>

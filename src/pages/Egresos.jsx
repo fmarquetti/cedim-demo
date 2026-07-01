@@ -37,6 +37,7 @@ import { loadSafeBatch, notifyLoadErrors } from "../utils/loadSafe";
 import ConceptoSelector from "../components/ConceptoSelector";
 import { getConceptoItems } from "../services/conceptoItemService";
 import { extraerFiscalDesdeDatosFiscales } from "../services/fiscalService";
+import { getEntidadesCuentaCorriente, normalizeDocument, normalizeText } from "../services/cuentaCorrienteEntidadService";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -52,7 +53,9 @@ const CATEGORIAS = [
 const emptyForm = {
   fecha: new Date().toISOString().split("T")[0],
   proveedor: "",
+  proveedorCuit: "",
   sociedad: "",
+  fechaVencimiento: "",
   sedeId: "",
   concepto: "",
   conceptosItems: [],
@@ -155,6 +158,7 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
 
   const [egresos, setEgresos] = useState([]);
   const [sedes, setSedes] = useState([]);
+  const [proveedores, setProveedores] = useState([]);
 
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
@@ -198,11 +202,17 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
         promise: getConceptoItems("egreso"),
         fallback: [],
       },
+      proveedores: {
+        label: "proveedores",
+        promise: getEntidadesCuentaCorriente({ tipo: "proveedor", activa: true }),
+        fallback: [],
+      },
     });
 
     setEgresos(results.egresos.data || []);
     setSedes(results.sedes.data || []);
     setConceptoItems(results.conceptos.data || []);
+    setProveedores(results.proveedores.data || []);
     setForm((prev) => ({
       ...prev,
       sedeId: prev.sedeId || idParaFiltro || results.sedes.data?.[0]?.id || "",
@@ -878,7 +888,9 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
       setEgresoPendiente({
         fecha: formatFechaInput(datos.fecha),
         proveedor: `CUIT ${datos.cuit}`,
+        proveedorCuit: datos.cuit || "",
         sociedad: "",
+        fechaVencimiento: "",
         sedeId: sedeDefault?.id || "",
         concepto: "",
         conceptosItems: [],
@@ -954,6 +966,43 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  function findProveedor(value) {
+    const term = normalizeText(value);
+    const documento = normalizeDocument(value);
+    if (!term && !documento) return null;
+
+    return proveedores.find((proveedor) => {
+      const nombre = normalizeText(proveedor.nombre);
+      const doc = normalizeDocument(proveedor.documento);
+      return (
+        nombre === term ||
+        nombre.startsWith(term) ||
+        (documento && doc === documento) ||
+        (documento && doc.startsWith(documento))
+      );
+    });
+  }
+
+  function applyProveedorToForm(current, proveedor) {
+    if (!proveedor) return current;
+    return {
+      ...current,
+      proveedor: proveedor.nombre,
+      sociedad: proveedor.nombre,
+      proveedorCuit: proveedor.documento || current.proveedorCuit || "",
+    };
+  }
+
+  function updateProveedorManual(value) {
+    setForm((prev) => applyProveedorToForm({ ...prev, proveedor: value }, findProveedor(value)));
+  }
+
+  function updateProveedorImportado(value) {
+    setEgresoPendiente((prev) =>
+      applyProveedorToForm({ ...prev, proveedor: value }, findProveedor(value))
+    );
   }
 
   function renderDetalleFiscal(value, onChange) {
@@ -1109,7 +1158,7 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
       );
 
       toast.success("Excel exportado correctamente.");
-    } catch (error) {
+    } catch {
       toast.error("No se pudo exportar a Excel.");
     }
   };
@@ -1213,7 +1262,7 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
 
       doc.save(`${nombreArchivo}.pdf`);
       toast.success("PDF exportado correctamente.");
-    } catch (error) {
+    } catch {
       toast.error("No se pudo exportar a PDF.");
     }
   };
@@ -1263,6 +1312,16 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
           )}
         </div>
       </div>
+
+      <datalist id="proveedores-egresos-lista">
+        {proveedores.map((proveedor) => (
+          <option
+            key={proveedor.id}
+            value={proveedor.nombre}
+            label={proveedor.documento || ""}
+          />
+        ))}
+      </datalist>
 
       <div className="stats-grid small">
         <div className="stat-card" data-tour="egresos-resumen-total">
@@ -1541,8 +1600,9 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
               Proveedor
               <input
                 required
+                list="proveedores-egresos-lista"
                 value={form.proveedor}
-                onChange={(e) => setForm({ ...form, proveedor: e.target.value })}
+                onChange={(e) => updateProveedorManual(e.target.value)}
               />
             </label>
 
@@ -1554,6 +1614,21 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
                 onChange={(e) => setForm({ ...form, sociedad: e.target.value })}
               />
               <small>Nombre legal o CUIT asociado al proveedor.</small>
+            </label>
+
+            <label>
+              CUIT proveedor
+              <input
+                value={form.proveedorCuit}
+                onChange={(e) =>
+                  setForm((prev) =>
+                    applyProveedorToForm(
+                      { ...prev, proveedorCuit: e.target.value },
+                      findProveedor(e.target.value)
+                    )
+                  )
+                }
+              />
             </label>
 
             <label>
@@ -1605,6 +1680,15 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
                 step="0.01"
                 value={form.importe}
                 onChange={(e) => setForm({ ...form, importe: e.target.value })}
+              />
+            </label>
+
+            <label>
+              Fecha de vencimiento
+              <input
+                type="date"
+                value={form.fechaVencimiento}
+                onChange={(e) => setForm({ ...form, fechaVencimiento: e.target.value })}
               />
             </label>
 
@@ -1726,10 +1810,9 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
               Proveedor
               <input
                 required
+                list="proveedores-egresos-lista"
                 value={egresoPendiente.proveedor}
-                onChange={(e) =>
-                  setEgresoPendiente({ ...egresoPendiente, proveedor: e.target.value })
-                }
+                onChange={(e) => updateProveedorImportado(e.target.value)}
               />
             </label>
 
@@ -1742,6 +1825,21 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
                 }
               />
               <small>Nombre legal o CUIT asociado al proveedor.</small>
+            </label>
+
+            <label>
+              CUIT proveedor
+              <input
+                value={egresoPendiente.proveedorCuit || ""}
+                onChange={(e) =>
+                  setEgresoPendiente((prev) =>
+                    applyProveedorToForm(
+                      { ...prev, proveedorCuit: e.target.value },
+                      findProveedor(e.target.value)
+                    )
+                  )
+                }
+              />
             </label>
 
             <label>
@@ -1802,6 +1900,20 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
                   setEgresoPendiente({
                     ...egresoPendiente,
                     importe: e.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              Fecha de vencimiento
+              <input
+                type="date"
+                value={egresoPendiente.fechaVencimiento || ""}
+                onChange={(e) =>
+                  setEgresoPendiente({
+                    ...egresoPendiente,
+                    fechaVencimiento: e.target.value,
                   })
                 }
               />

@@ -154,6 +154,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
   }
   useEffect(() => {
     queueMicrotask(() => loadData(idSedeActiva));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idSedeActiva]);
 
   const origenes = useMemo(() => {
@@ -440,6 +441,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
     return (importe * Number(porcentaje || 0)) / 100;
   }
 
+  /* eslint-disable no-unused-vars */
   function totalDistribucionIngresoPendiente() {
     return totalDistribucion(ingresoPendiente?.distribuciones || []);
   }
@@ -621,6 +623,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
     const importe = Number(ingresoPendiente?.importe || 0);
     return (importe * Number(porcentaje || 0)) / 100;
   }
+  /* eslint-enable no-unused-vars */
 
   async function handleCreate(e) {
     e.preventDefault();
@@ -887,7 +890,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
       const buffer = await workbook.xlsx.writeBuffer();
       saveAs(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${nombreArchivo}.xlsx`);
       toast.success("Excel exportado correctamente.");
-    } catch (error) {
+    } catch {
       toast.error("No se pudo exportar a Excel.");
     }
   };
@@ -950,7 +953,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
 
       doc.save(`${nombreArchivo}.pdf`);
       toast.success("PDF exportado correctamente.");
-    } catch (error) {
+    } catch {
       toast.error("No se pudo exportar a PDF.");
     }
   };
