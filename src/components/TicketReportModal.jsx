@@ -84,7 +84,6 @@ export default function TicketReportModal({
       );
 
       let screenshotPath = "";
-      let hasWarning = false;
       const screenshotBlob = screenshot ? await editorRef.current?.toBlob() : null;
 
       if (screenshotBlob) {
@@ -103,7 +102,7 @@ export default function TicketReportModal({
             browserInfo: navigator.userAgent,
           });
         } catch (screenshotError) {
-          hasWarning = true;
+          console.warn("El ticket fue creado, pero no se pudo guardar la captura:", screenshotError);
           setWarning(
             screenshotError.message ||
               "El ticket fue creado, pero no se pudo guardar la captura."
@@ -117,10 +116,7 @@ export default function TicketReportModal({
       }
 
       await onCreated?.({ ...ticket, screenshotPath });
-
-      if (!hasWarning) {
-        onClose();
-      }
+      onClose();
     } catch (submitError) {
       setError(submitError.message || "No se pudo crear el ticket.");
     } finally {

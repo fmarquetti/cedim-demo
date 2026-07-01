@@ -9,6 +9,7 @@ function isMissingTableError(error) {
     error?.code === "42P01" ||
     error?.code === "PGRST205" ||
     error?.code === "PGRST202" ||
+    error?.status === 404 ||
     message.includes("does not exist") ||
     message.includes("schema cache") ||
     message.includes("could not find the function")
@@ -29,6 +30,34 @@ function userName(user) {
 
 function userEmail(user) {
   return user?.email || "";
+}
+
+function createFallbackTicketRow(form, currentUser, id = crypto.randomUUID()) {
+  const now = new Date().toISOString();
+
+  return {
+    id,
+    codigo: "",
+    titulo: form.titulo,
+    descripcion: form.descripcion,
+    categoria: form.categoria,
+    prioridad: form.prioridad,
+    prioridad_interna: form.prioridad,
+    estado: "Abierto",
+    creado_por: userId(currentUser),
+    usuario_id: userId(currentUser),
+    usuario_nombre: userName(currentUser),
+    usuario_email: userEmail(currentUser),
+    sede_id: currentUser?.sedeId || null,
+    screenshot_path: form.screenshotPath || "",
+    page_url: form.pageUrl || "",
+    page_path: form.pagePath || "",
+    browser_info: form.browserInfo || "",
+    created_at: now,
+    updated_at: now,
+    ticket_comentarios: [],
+    ticket_adjuntos: [],
+  };
 }
 
 function formatTicketCode(value) {
@@ -77,7 +106,7 @@ function mapTicket(row) {
 
   return {
     id: row.id,
-    codigo: row.codigo || formatTicketCode(row.numero),
+    codigo: row.codigo || (row.numero ? formatTicketCode(row.numero) : ""),
     numero: row.numero,
     titulo: row.titulo || "",
     descripcion: row.descripcion || "",
@@ -179,6 +208,7 @@ export async function createTicket(form, currentUser) {
   return withLocalFallback(
     async () => {
       let data;
+      const fallbackId = crypto.randomUUID();
       const { data: rpcData, error: rpcError } = await supabase.rpc("create_ticket_report", {
         ticket_titulo: form.titulo,
         ticket_descripcion: form.descripcion,
@@ -194,26 +224,24 @@ export async function createTicket(form, currentUser) {
       if (rpcError && !isMissingTableError(rpcError)) throw rpcError;
 
       if (rpcError) {
-        const { data: insertData, error: insertError } = await supabase
-          .from("tickets")
-          .insert({
-            titulo: form.titulo,
-            descripcion: form.descripcion,
-            categoria: form.categoria,
-            prioridad: form.prioridad,
-            estado: "Abierto",
-            creado_por: userId(currentUser),
-            sede_id: currentUser?.sedeId || null,
-            screenshot_path: form.screenshotPath || null,
-            page_url: form.pageUrl || null,
-            page_path: form.pagePath || null,
-            browser_info: form.browserInfo || null,
-          })
-          .select()
-          .single();
+        const fallbackRow = createFallbackTicketRow(form, currentUser, fallbackId);
+        const { error: insertError } = await supabase.from("tickets").insert({
+          id: fallbackRow.id,
+          titulo: fallbackRow.titulo,
+          descripcion: fallbackRow.descripcion,
+          categoria: fallbackRow.categoria,
+          prioridad: fallbackRow.prioridad,
+          estado: fallbackRow.estado,
+          creado_por: fallbackRow.creado_por,
+          sede_id: fallbackRow.sede_id,
+          screenshot_path: fallbackRow.screenshot_path || null,
+          page_url: fallbackRow.page_url || null,
+          page_path: fallbackRow.page_path || null,
+          browser_info: fallbackRow.browser_info || null,
+        });
 
         if (insertError) throw insertError;
-        data = insertData;
+        data = fallbackRow;
       } else {
         data = rpcData;
       }
@@ -230,7 +258,12 @@ export async function createTicket(form, currentUser) {
         if (adjuntoError) throw adjuntoError;
       }
 
-      await addTicketComment(data.id, form.descripcion, currentUser);
+      try {
+        await addTicketComment(data.id, form.descripcion, currentUser);
+      } catch (commentError) {
+        console.warn("No se pudo crear el comentario inicial del ticket:", commentError);
+      }
+
       return mapTicket({ ...data, ticket_comentarios: [] });
     },
     () => {
