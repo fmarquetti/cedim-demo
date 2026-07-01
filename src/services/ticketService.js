@@ -407,16 +407,7 @@ export async function updateTicketScreenshot(ticketId, payload) {
       });
 
       if (!rpcError) return mapTicket(rpcData || { id: ticketId, ...nextValues });
-
-      const { data, error } = await supabase
-        .from("tickets")
-        .update(nextValues)
-        .eq("id", ticketId)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return mapTicket(data);
+      throw rpcError;
     },
     () => {
       const tickets = readLocalTickets();
