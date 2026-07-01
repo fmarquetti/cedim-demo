@@ -8,8 +8,10 @@ function isMissingTableError(error) {
   return (
     error?.code === "42P01" ||
     error?.code === "PGRST205" ||
+    error?.code === "PGRST202" ||
     message.includes("does not exist") ||
-    message.includes("schema cache")
+    message.includes("schema cache") ||
+    message.includes("could not find the function")
   );
 }
 
@@ -176,25 +178,45 @@ export async function getTickets(currentUser) {
 export async function createTicket(form, currentUser) {
   return withLocalFallback(
     async () => {
-      const { data, error } = await supabase
-        .from("tickets")
-        .insert({
-          titulo: form.titulo,
-          descripcion: form.descripcion,
-          categoria: form.categoria,
-          prioridad: form.prioridad,
-          estado: "Abierto",
-          creado_por: userId(currentUser),
-          sede_id: currentUser?.sedeId || null,
-          screenshot_path: form.screenshotPath || null,
-          page_url: form.pageUrl || null,
-          page_path: form.pagePath || null,
-          browser_info: form.browserInfo || null,
-        })
-        .select()
-        .single();
+      let data;
+      const { data: rpcData, error: rpcError } = await supabase.rpc("create_ticket_report", {
+        ticket_titulo: form.titulo,
+        ticket_descripcion: form.descripcion,
+        ticket_categoria: form.categoria,
+        ticket_prioridad: form.prioridad,
+        ticket_sede_id: currentUser?.sedeId || null,
+        ticket_screenshot_path: form.screenshotPath || null,
+        ticket_page_url: form.pageUrl || null,
+        ticket_page_path: form.pagePath || null,
+        ticket_browser_info: form.browserInfo || null,
+      });
 
-      if (error) throw error;
+      if (rpcError && !isMissingTableError(rpcError)) throw rpcError;
+
+      if (rpcError) {
+        const { data: insertData, error: insertError } = await supabase
+          .from("tickets")
+          .insert({
+            titulo: form.titulo,
+            descripcion: form.descripcion,
+            categoria: form.categoria,
+            prioridad: form.prioridad,
+            estado: "Abierto",
+            creado_por: userId(currentUser),
+            sede_id: currentUser?.sedeId || null,
+            screenshot_path: form.screenshotPath || null,
+            page_url: form.pageUrl || null,
+            page_path: form.pagePath || null,
+            browser_info: form.browserInfo || null,
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+        data = insertData;
+      } else {
+        data = rpcData;
+      }
 
       if (form.adjuntoPath) {
         const { error: adjuntoError } = await supabase.from("ticket_adjuntos").insert({
