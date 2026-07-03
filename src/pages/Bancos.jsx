@@ -3,6 +3,7 @@ import {
   Upload,
   GitCompare,
   Plus,
+  Pencil,
   Trash2,
   RefreshCw,
   FileText,
@@ -39,7 +40,9 @@ import {
 
 import {
   createCuentaBancaria,
+  deleteCuentaBancaria,
   getCuentasBancarias,
+  updateCuentaBancaria,
 } from "../services/cuentaBancariaService";
 
 import {
@@ -267,6 +270,7 @@ export default function Bancos({ selectedSede, dbSedeId }) {
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [cuentaForm, setCuentaForm] = useState(emptyCuentaForm);
+  const [cuentaEditando, setCuentaEditando] = useState(null);
   const [movimientoAConciliar, setMovimientoAConciliar] = useState(null);
   const [comprobanteSeleccionadoId, setComprobanteSeleccionadoId] = useState("");
   const [extractoPendiente, setExtractoPendiente] = useState(null);
@@ -602,12 +606,33 @@ export default function Bancos({ selectedSede, dbSedeId }) {
   }
 
   function openNuevaCuenta() {
+    setCuentaEditando(null);
     setCuentaForm({
       ...emptyCuentaForm,
       sedeId: sedeBloqueada ? idSedeActiva : sedes[0]?.id || "",
     });
 
-    setModal("nuevaCuenta");
+    setModal("gestionarCuentas");
+  }
+
+  function openEditarCuenta(cuenta) {
+    setCuentaEditando(cuenta);
+    setCuentaForm({
+      nombre: cuenta.nombre || "",
+      tipo: cuenta.tipo || "Banco",
+      sedeId: cuenta.sedeId || "",
+      activa: cuenta.activa,
+    });
+
+    setModal("gestionarCuentas");
+  }
+
+  function cancelarEdicionCuenta() {
+    setCuentaEditando(null);
+    setCuentaForm({
+      ...emptyCuentaForm,
+      sedeId: sedeBloqueada ? idSedeActiva : sedes[0]?.id || "",
+    });
   }
 
   function openConciliacion(mov) {
@@ -1050,12 +1075,54 @@ export default function Bancos({ selectedSede, dbSedeId }) {
         ...emptyCuentaForm,
         sedeId: sedeBloqueada ? idSedeActiva : sedes[0]?.id || "",
       });
-
-      setModal(null);
     } catch (error) {
       alert(error.message || "No se pudo crear la cuenta bancaria.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleUpdateCuenta(e) {
+    e.preventDefault();
+    if (!cuentaEditando) return;
+
+    setSaving(true);
+
+    try {
+      await updateCuentaBancaria(cuentaEditando.id, cuentaForm);
+      await loadData(idSedeActiva);
+
+      setCuentaEditando(null);
+      setCuentaForm({
+        ...emptyCuentaForm,
+        sedeId: sedeBloqueada ? idSedeActiva : sedes[0]?.id || "",
+      });
+    } catch (error) {
+      alert(error.message || "No se pudo modificar la cuenta bancaria.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteCuenta(cuenta) {
+    const ok = window.confirm(
+      `¿Eliminar la cuenta bancaria "${cuenta.nombre}"? Si tiene movimientos cargados, se desactivará para conservar el historial.`
+    );
+    if (!ok) return;
+
+    setDeletingId(cuenta.id);
+
+    try {
+      const result = await deleteCuentaBancaria(cuenta.id);
+      await loadData(idSedeActiva);
+
+      if (result.deactivated) {
+        alert(`La cuenta tenía ${result.movimientos} movimiento(s), por eso quedó desactivada.`);
+      }
+    } catch (error) {
+      alert(error.message || "No se pudo eliminar la cuenta bancaria.");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -1351,7 +1418,7 @@ export default function Bancos({ selectedSede, dbSedeId }) {
           </button>
 
           <button className="secondary-button" onClick={openNuevaCuenta}>
-            <Plus size={16} /> Nueva cuenta
+            <Plus size={16} /> Gestionar cuentas
           </button>
 
           <button className="primary-button" onClick={openNuevoMovimiento} data-tour="bancos-nuevo">
@@ -1813,9 +1880,77 @@ export default function Bancos({ selectedSede, dbSedeId }) {
         </Modal>
       )}
 
-      {modal === "nuevaCuenta" && (
-        <Modal title="Nueva cuenta bancaria" onClose={() => setModal(null)}>
-          <form className="form-grid" onSubmit={handleCreateCuenta}>
+      {modal === "gestionarCuentas" && (
+        <Modal title="Gestionar cuentas bancarias" size="wide" onClose={() => setModal(null)}>
+          <div className="table-card" style={{ marginBottom: 18 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Tipo</th>
+                  <th>Sede</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {cuentas.map((cuenta) => (
+                  <tr key={cuenta.id}>
+                    <td>
+                      <strong>{cuenta.nombre}</strong>
+                    </td>
+                    <td>{cuenta.tipo}</td>
+                    <td>{cuenta.sede}</td>
+                    <td>
+                      <span className={`status-badge ${cuenta.activa ? "aplicado" : "pendiente"}`}>
+                        {cuenta.activa ? "Activa" : "Inactiva"}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="table-actions">
+                        <button type="button" title="Editar cuenta" onClick={() => openEditarCuenta(cuenta)}>
+                          <Pencil size={16} />
+                        </button>
+
+                        <button
+                          type="button"
+                          title="Eliminar cuenta"
+                          onClick={() => handleDeleteCuenta(cuenta)}
+                          disabled={deletingId === cuenta.id}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+
+                {!loading && cuentas.length === 0 && (
+                  <tr>
+                    <td colSpan="5">No hay cuentas bancarias cargadas.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <form
+            className="form-grid"
+            onSubmit={cuentaEditando ? handleUpdateCuenta : handleCreateCuenta}
+          >
+            <div className="full split-header">
+              <div>
+                <strong>{cuentaEditando ? "Editar cuenta" : "Nueva cuenta"}</strong>
+              </div>
+
+              {cuentaEditando && (
+                <button type="button" className="secondary-button" onClick={cancelarEdicionCuenta}>
+                  Nueva cuenta
+                </button>
+              )}
+            </div>
+
             <label>
               Nombre
               <input
@@ -1859,6 +1994,20 @@ export default function Bancos({ selectedSede, dbSedeId }) {
               </select>
             </label>
 
+            <label>
+              Estado
+              <select
+                value={cuentaForm.activa ? "activa" : "inactiva"}
+                onChange={(e) =>
+                  setCuentaForm({ ...cuentaForm, activa: e.target.value === "activa" })
+                }
+              >
+                <option value="activa">Activa</option>
+                <option value="inactiva">Inactiva</option>
+              </select>
+            </label>
+            {!cuentaEditando && <span />}
+
             <div className="modal-actions">
               <button
                 type="button"
@@ -1869,7 +2018,11 @@ export default function Bancos({ selectedSede, dbSedeId }) {
               </button>
 
               <button type="submit" className="primary-button" disabled={saving}>
-                {saving ? "Guardando..." : "Crear cuenta"}
+                {saving
+                  ? "Guardando..."
+                  : cuentaEditando
+                    ? "Guardar cambios"
+                    : "Crear cuenta"}
               </button>
             </div>
           </form>
