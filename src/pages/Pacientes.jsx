@@ -811,7 +811,7 @@ export default function Pacientes({ selectedSede, dbSedeId, currentUser }) {
               </button>
 
               {form.archivo && (
-                <small style={{ display: "block", marginTop: 8 }}>
+                <small className="form-note form-note-spaced">
                   Archivo seleccionado: {form.archivo} · {formatFileSize(form.archivoSize)}
                 </small>
               )}
@@ -950,7 +950,7 @@ export default function Pacientes({ selectedSede, dbSedeId, currentUser }) {
                 onChange={handleEditAdjunto}
               />
 
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div className="row-actions-wrap">
                 <button
                   type="button"
                   className="secondary-button"
@@ -971,14 +971,14 @@ export default function Pacientes({ selectedSede, dbSedeId, currentUser }) {
               </div>
 
               {editForm.archivo && (
-                <small style={{ display: "block", marginTop: 8 }}>
+                <small className="form-note form-note-spaced">
                   Archivo actual/seleccionado: {editForm.archivo} ·{" "}
                   {formatFileSize(editForm.archivoSize)}
                 </small>
               )}
 
               {removeEditFile && (
-                <small style={{ display: "block", marginTop: 8, color: "#b42318" }}>
+                <small className="form-note form-note-spaced form-note-danger">
                   El adjunto será eliminado al guardar.
                 </small>
               )}
@@ -1105,19 +1105,19 @@ export default function Pacientes({ selectedSede, dbSedeId, currentUser }) {
 
               {!loadingHistorial &&
                 historial.map((item) => (
-                  <div key={item.id} style={{ marginTop: 10 }}>
+                  <div key={item.id} className="timeline-item">
                     <strong>{item.accion}</strong>
-                    <small style={{ display: "block", color: "var(--muted)" }}>
+                    <small className="table-cell-note">
                       {item.createdAtText} · {item.usuarioNombre || "Usuario"}
                       {item.usuarioEmail ? ` (${item.usuarioEmail})` : ""}
                     </small>
                     {item.estadoAnterior || item.estadoNuevo ? (
-                      <small style={{ display: "block", color: "var(--muted)" }}>
+                      <small className="table-cell-note">
                         Estado: {item.estadoAnterior || "-"} → {item.estadoNuevo || "-"}
                       </small>
                     ) : null}
                     {item.detalle && (
-                      <small style={{ display: "block", color: "var(--muted)" }}>
+                      <small className="table-cell-note">
                         {item.detalle}
                       </small>
                     )}

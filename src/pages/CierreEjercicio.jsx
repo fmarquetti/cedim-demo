@@ -107,7 +107,9 @@ export default function CierreEjercicio({ selectedSede, sedeId }) {
   }, [anio, sedeFiltro]);
 
   useEffect(() => {
-    cargar();
+    queueMicrotask(() => {
+      void cargar();
+    });
   }, [cargar]);
 
   async function ejecutar(action) {

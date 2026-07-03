@@ -226,7 +226,7 @@ export default function OrdenesPago({ selectedSede, sedeId, currentUser }) {
         </div>
       </div>
 
-      <div className="filters-bar" data-tour="ordenes-pago-filtros">
+      <div className="filters-bar ordenes-pago-filters" data-tour="ordenes-pago-filtros">
         <input type="date" value={desde} onChange={(event) => setDesde(event.target.value)} />
         <input type="date" value={hasta} onChange={(event) => setHasta(event.target.value)} />
         <select value={estado} onChange={(event) => setEstado(event.target.value)}>
@@ -322,7 +322,7 @@ export default function OrdenesPago({ selectedSede, sedeId, currentUser }) {
                       </span>
                     </td>
                     <td>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      <div className="row-actions-wrap">
                         <button className="secondary-button" onClick={() => { setSelectedOrden(orden); setModal("detalle"); }}>
                           <Eye size={14} /> Ver
                         </button>
@@ -422,7 +422,7 @@ export default function OrdenesPago({ selectedSede, sedeId, currentUser }) {
               </label>
             </div>
 
-            <div className="filters-bar" style={{ marginTop: 14 }}>
+            <div className="filters-bar ordenes-egresos-filter">
               <input
                 type="search"
                 placeholder="Buscar egresos por proveedor, concepto o comprobante"
@@ -432,7 +432,7 @@ export default function OrdenesPago({ selectedSede, sedeId, currentUser }) {
               <strong>Total seleccionado: {formatMoney(totalSeleccionado)}</strong>
             </div>
 
-            <div className="table-card" style={{ marginTop: 12 }}>
+            <div className="table-card ordenes-egresos-table">
               <table>
                 <thead>
                   <tr>
@@ -488,7 +488,7 @@ export default function OrdenesPago({ selectedSede, sedeId, currentUser }) {
 
       {modal === "detalle" && selectedOrden && (
         <Modal title={`Detalle ${selectedOrden.numeroFormateado}`} onClose={() => setModal(null)} size="large">
-          <div className="modal-actions" style={{ marginTop: 0, marginBottom: 12 }}>
+          <div className="modal-actions detail-modal-actions">
             <button className="primary-button" onClick={() => generarOrdenPagoPdf(selectedOrden)}>
               <FileText size={16} /> Descargar PDF
             </button>
@@ -505,7 +505,7 @@ export default function OrdenesPago({ selectedSede, sedeId, currentUser }) {
             <div><span>Pagada</span><strong>{selectedOrden.paidAt ? formatDate(selectedOrden.paidAt) : "-"}</strong></div>
           </div>
 
-          <div className="table-card" style={{ marginTop: 16 }}>
+          <div className="table-card detail-table-card">
             <table>
               <thead>
                 <tr>

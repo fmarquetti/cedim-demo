@@ -5,7 +5,6 @@ import {
   LockKeyhole,
   Mail,
   ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 
 import logo from "../assets/logo-cedim.png";
@@ -32,7 +31,7 @@ export default function Login({ onLogin }) {
       const user = await loginWithEmail(email.trim(), password);
       onLogin(user);
     } catch (err) {
-      setError(err.message || "No se pudo iniciar sesión.");
+      setError(err.message || "No se pudo iniciar sesion.");
     } finally {
       setLoading(false);
     }
@@ -53,15 +52,12 @@ export default function Login({ onLogin }) {
 
               <div>
                 <strong>{config.platformName || "CEDIM"}</strong>
-                <span>{config.platformSubtitle || "Sistema de gestión"}</span>
+                <span>{config.platformSubtitle || "Sistema de gestion"}</span>
               </div>
             </div>
 
             <div className="login-hero-title">
-              <span className="login-kicker">
-                <Sparkles size={15} />
-                Plataforma administrativa
-              </span>
+              <span className="login-kicker">Plataforma administrativa</span>
 
               <h1>{config.loginTitle || "CEDIM"}</h1>
 
@@ -79,7 +75,7 @@ export default function Login({ onLogin }) {
 
               <div>
                 <LockKeyhole size={18} />
-                <span>Gestión centralizada y protegida</span>
+                <span>Gestion centralizada y protegida</span>
               </div>
             </div>
           </div>
@@ -88,8 +84,8 @@ export default function Login({ onLogin }) {
         <section className="login-card">
           <div className="login-card-header">
             <span>Bienvenido</span>
-            <h2>Iniciar sesión</h2>
-            <p>Ingresá tus credenciales para acceder al panel principal.</p>
+            <h2>Iniciar sesion</h2>
+            <p>Ingresa tus credenciales para acceder al panel principal.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="login-form">
@@ -110,7 +106,7 @@ export default function Login({ onLogin }) {
             </label>
 
             <label className="login-field">
-              <span>Contraseña</span>
+              <span>Contrasena</span>
 
               <div className="login-input-wrap">
                 <LockKeyhole size={18} />
@@ -119,7 +115,7 @@ export default function Login({ onLogin }) {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   autoComplete="current-password"
-                  placeholder="Ingresá tu contraseña"
+                  placeholder="Ingresa tu contrasena"
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
@@ -129,7 +125,7 @@ export default function Login({ onLogin }) {
                   className="login-password-toggle"
                   onClick={() => setShowPassword((prev) => !prev)}
                   aria-label={
-                    showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+                    showPassword ? "Ocultar contrasena" : "Mostrar contrasena"
                   }
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -145,7 +141,7 @@ export default function Login({ onLogin }) {
           </form>
 
           <div className="login-footer">
-            <span>{config.loginFooterText || "CEDIM · Versión"}</span>
+            <span>{config.loginFooterText || "CEDIM - Version"}</span>
             <strong>{config.loginFooterHighlight || "SUPABASE"}</strong>
           </div>
         </section>

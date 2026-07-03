@@ -7,7 +7,6 @@ const secondary = [58, 115, 185];
 const text = [19, 34, 56];
 const muted = [100, 116, 139];
 const border = [222, 229, 239];
-const surface = [248, 251, 253];
 
 const value = (input, fallback = "-") => String(input || fallback);
 const splitLines = (input) => String(input || "").split("\n").map((line) => line.trim()).filter(Boolean);

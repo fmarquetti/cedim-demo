@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Eye, UserCheck, UserX } from "lucide-react";
 import Modal from "../components/Modal";
 import {
@@ -159,7 +159,7 @@ export default function Usuarios({ selectedSede, currentUser, setCurrentUser }) 
   const canEditUsuarios = canPerform(currentUser, "usuarios", "edit");
   const canDeleteUsuarios = canPerform(currentUser, "usuarios", "delete");
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
 
     try {
@@ -171,17 +171,21 @@ export default function Usuarios({ selectedSede, currentUser, setCurrentUser }) 
       setUsuarios(usuariosData);
       setSedes(sedesData);
 
-      if (!form.sedeId && sedesData.length > 0) {
-        setForm((prev) => ({ ...prev, sedeId: sedesData[0].id }));
-      }
+      setForm((prev) =>
+        prev.sedeId || sedesData.length === 0
+          ? prev
+          : { ...prev, sedeId: sedesData[0].id }
+      );
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    queueMicrotask(() => loadData());
-  }, []);
+    queueMicrotask(() => {
+      void loadData();
+    });
+  }, [loadData]);
 
   function filterUsuariosBySede(items, selectedSede) {
     const sede = normalizeSelectedSede(selectedSede);

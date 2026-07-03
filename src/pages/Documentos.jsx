@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   Trash2,
@@ -147,7 +147,7 @@ export default function Documentos({ selectedSede, sedeId }) {
 
   const sedeBloqueada = sedeId && sedeId !== "todas";
 
-  async function loadData(currentSedeId = sedeId) {
+  const loadData = useCallback(async (currentSedeId = sedeId) => {
     setLoading(true);
 
     try {
@@ -171,12 +171,13 @@ export default function Documentos({ selectedSede, sedeId }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [sedeId]);
 
   useEffect(() => {
-    loadData(sedeId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sedeId]);
+    queueMicrotask(() => {
+      void loadData(sedeId);
+    });
+  }, [loadData, sedeId]);
 
   const documentosPorSede = documentos;
 

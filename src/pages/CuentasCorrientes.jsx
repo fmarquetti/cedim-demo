@@ -1,5 +1,5 @@
 // src/pages/CuentasCorrientes.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Plus,
   Trash2,
@@ -173,7 +173,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
   const idSedeActiva = dbSedeId ?? getDbSedeId(sedeId);
   const sedeBloqueada = Boolean(idSedeActiva);
 
-  async function loadData(currentSedeId = sedeId) {
+  const loadData = useCallback(async (currentSedeId = idSedeActiva) => {
     setLoading(true);
 
     try {
@@ -197,11 +197,11 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [idSedeActiva]);
 
   useEffect(() => {
     queueMicrotask(() => loadData(idSedeActiva));
-  }, [idSedeActiva]);
+  }, [idSedeActiva, loadData]);
 
   const movimientosPorSede = movimientos;
 
@@ -392,7 +392,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
         : "todos_los_periodos";
 
     return `Cuentas_Corrientes_${safeFileName(sede)}_${safeFileName(periodo)}`;
-  }, [selectedSede, desde, hasta]);
+  }, [selectedSedeName, desde, hasta]);
 
   const exportarReporteExcel = async () => {
     const workbook = new ExcelJS.Workbook();
@@ -523,7 +523,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
     // ===== HEADER =====
     try {
       doc.addImage(logo, "PNG", 14, 10, 22, 22);
-    } catch (e) {
+    } catch {
       console.warn("Logo no cargado");
     }
 
@@ -828,7 +828,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
     try {
       await marcarCuentaAplicada(id);
       await loadData();
-    } catch (error) {
+    } catch {
       alert("No se pudo marcar como aplicado.");
     }
   }
@@ -868,11 +868,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
         <div className="stat-card">
           <div>
             <span>Deuda vencida</span>
-            <strong
-              style={{
-                color: deudaTotalVencida > 0 ? "#ef4444" : "inherit",
-              }}
-            >
+            <strong className={deudaTotalVencida > 0 ? "money-negative" : undefined}>
               {formatMoney(deudaTotalVencida)}
             </strong>
             <small>Comprobantes fuera de término</small>
@@ -882,7 +878,15 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
         <div className="stat-card">
           <div>
             <span>Riesgo financiero</span>
-            <strong style={{ color: riesgoFinanciero.color }}>
+            <strong
+              className={`risk-value ${
+                riesgoFinanciero.color === "#ef4444"
+                  ? "risk-value--critical"
+                  : riesgoFinanciero.color === "#f59e0b"
+                    ? "risk-value--warning"
+                    : "risk-value--low"
+              }`}
+            >
               {riesgoFinanciero.label}
             </strong>
             <small>{riesgoFinanciero.detail}</small>
@@ -890,7 +894,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
         </div>
       </div>
 
-      <div className="filters-bar" data-tour="cuentas-filtros">
+      <div className="filters-bar cuentas-filters" data-tour="cuentas-filtros">
         <input
           placeholder="Buscar por entidad, sede, concepto, comprobante o número..."
           value={search}
@@ -943,7 +947,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
         </button>
       </div>
 
-      <div className="panel" style={{ marginBottom: 18 }}>
+      <div className="panel">
         <h3>Aging de deuda pendiente</h3>
 
         <div className="table-card">
@@ -1005,43 +1009,34 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
                     <td>{item.cantidadMovimientos}</td>
                     <td>
                       <strong
-                        style={{
-                          color:
-                            item.tipoEntidad === "Proveedor" && item.saldoTotal > 0
-                              ? "#ef4444"
-                              : "#10b981",
-                        }}
+                        className={
+                          item.tipoEntidad === "Proveedor" && item.saldoTotal > 0
+                            ? "money-negative"
+                            : "money-positive"
+                        }
                       >
                         {formatMoney(item.saldoTotal)}
                       </strong>
                     </td>
                     <td>
                       {item.deudaVencida > 0 ? (
-                        <span
-                          style={{
-                            color: "#ef4444",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px",
-                          }}
-                        >
+                        <span className="inline-alert">
                           <AlertTriangle size={14} />{" "}
                           {formatMoney(item.deudaVencida)}
                         </span>
                       ) : (
-                        <span style={{ color: "#6b7280" }}>Al día</span>
+                        <span className="muted-inline">Al día</span>
                       )}
                     </td>
                     <td>
                       <button
-                        className="secondary-button"
-                        style={{ padding: "4px 8px", fontSize: "12px" }}
+                        className="secondary-button compact-button"
                         onClick={() => {
                           setSelectedMayor(item);
                           setModal("mayor");
                         }}
                       >
-                        <Eye size={14} style={{ marginRight: 4 }} /> Ver Mayor
+                        <Eye size={14} /> Ver Mayor
                       </button>
                     </td>
                   </tr>
@@ -1057,7 +1052,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: 18 }} data-tour="cuentas-tabla">
+      <div className="panel" data-tour="cuentas-tabla">
         <h3>Historial de movimientos</h3>
 
         <div className="table-card">
@@ -1242,7 +1237,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
               />
             </label>
 
-            <div className="modal-actions" style={{ gridColumn: "1 / -1" }}>
+            <div className="modal-actions full">
               <button
                 type="button"
                 className="secondary-button"
@@ -1264,22 +1259,14 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
           title={`Libro Mayor: ${selectedMayor.entidad}`}
           onClose={() => setModal(null)}
         >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 10,
-              marginBottom: 10,
-              flexWrap: "wrap",
-            }}
-          >
+          <div className="mayor-header">
             <div>
               <strong>{selectedMayor.tipoEntidad}</strong>
               <br />
               <small>{selectedMayor.sede}</small>
             </div>
 
-            <div style={{ display: "flex", gap: 8 }}>
+            <div className="mayor-actions">
               <button className="secondary-button" onClick={exportarMayorExcel}>
                 <Download size={14} /> Excel
               </button>
@@ -1290,29 +1277,17 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
             </div>
           </div>
 
-          <div
-            className="table-card"
-            style={{
-              overflowX: "auto",
-              margin: "0 -10px",
-              padding: "0 10px",
-            }}
-          >
-            <table style={{ minWidth: "900px", width: "100%" }}>
+          <div className="table-card mayor-table-wrap">
+            <table className="mayor-table">
               <thead>
                 <tr>
                   <th>Fecha</th>
                   <th>Comprobante</th>
                   <th>Concepto</th>
                   <th>Vencimiento</th>
-                  <th style={{ textAlign: "right" }}>Debe</th>
-                  <th style={{ textAlign: "right" }}>Haber</th>
-                  <th
-                    style={{
-                      textAlign: "right",
-                      borderLeft: "2px solid #e5e7eb",
-                    }}
-                  >
+                  <th className="text-right">Debe</th>
+                  <th className="text-right">Haber</th>
+                  <th className="text-right mayor-balance-cell">
                     Saldo acum.
                   </th>
                   <th>Estado</th>
@@ -1329,23 +1304,23 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
 
                   return (
                     <tr key={item.id}>
-                      <td style={{ whiteSpace: "nowrap" }}>
+                      <td className="nowrap-cell">
                         {formatDate(item.fecha)}
                       </td>
 
-                      <td style={{ whiteSpace: "nowrap" }}>
+                      <td className="nowrap-cell">
                         <strong>{item.comprobante}</strong>
                         <br />
-                        <small style={{ color: "#6b7280" }}>
+                        <small className="table-cell-note">
                           {item.numero || "-"}
                         </small>
                       </td>
 
                       <td>{item.concepto}</td>
 
-                      <td style={{ whiteSpace: "nowrap" }}>
+                      <td className="nowrap-cell">
                         {vencido ? (
-                          <span style={{ color: "#ef4444", fontWeight: "bold" }}>
+                          <span className="money-negative strong-inline">
                             {formatDate(item.vencimiento)} (Vencido)
                           </span>
                         ) : (
@@ -1353,22 +1328,15 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
                         )}
                       </td>
 
-                      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <td className="text-right nowrap-cell">
                         {item.debe > 0 ? formatMoney(item.debe) : "-"}
                       </td>
 
-                      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <td className="text-right nowrap-cell">
                         {item.haber > 0 ? formatMoney(item.haber) : "-"}
                       </td>
 
-                      <td
-                        style={{
-                          textAlign: "right",
-                          borderLeft: "2px solid #e5e7eb",
-                          fontWeight: "bold",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
+                      <td className="text-right nowrap-cell mayor-balance-cell strong-inline">
                         {formatMoney(item.saldoAcumulado)}
                       </td>
 

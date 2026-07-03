@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Save, X } from "lucide-react";
 
 import { supabase } from "../lib/supabaseClient";
@@ -31,7 +31,7 @@ export default function ConfiguracionFiscal() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [tiposData, cuentasData] = await Promise.all([
@@ -45,11 +45,13 @@ export default function ConfiguracionFiscal() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    queueMicrotask(() => {
+      void loadData();
+    });
+  }, [loadData]);
 
   function editTributo(item) {
     setForm({

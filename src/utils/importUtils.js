@@ -158,6 +158,6 @@ export async function downloadTemplate(filename, rows) {
     saveAs(new Blob([buffer]), filename);
   } catch (error) {
     console.error("Error descargando plantilla:", error);
-    throw new Error("No se pudo descargar la plantilla.");
+    throw new Error("No se pudo descargar la plantilla.", { cause: error });
   }
 }

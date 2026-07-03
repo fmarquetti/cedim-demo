@@ -551,9 +551,12 @@ export default function Bancos({ selectedSede, dbSedeId }) {
 
   useEffect(() => {
     const sugerido = candidatosConciliacion.find((item) => item.sugerido);
-    setComprobanteSeleccionadoId(
-      sugerido?.id || candidatosConciliacion[0]?.id || ""
-    );
+
+    queueMicrotask(() => {
+      setComprobanteSeleccionadoId(
+        sugerido?.id || candidatosConciliacion[0]?.id || ""
+      );
+    });
   }, [candidatosConciliacion]);
 
   const nombreArchivo = useMemo(() => {
@@ -1465,7 +1468,7 @@ export default function Bancos({ selectedSede, dbSedeId }) {
         </div>
       </div>
 
-      <div className="filters-bar" data-tour="bancos-filtros">
+      <div className="filters-bar bancos-filters" data-tour="bancos-filtros">
         <input
           placeholder="Buscar por cuenta, descripción, sede u origen..."
           value={search}
@@ -1584,7 +1587,7 @@ export default function Bancos({ selectedSede, dbSedeId }) {
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: 18 }} data-tour="bancos-tabla">
+      <div className="panel" data-tour="bancos-tabla">
         <h3>Movimientos bancarios</h3>
 
         <div className="table-card">
@@ -1628,7 +1631,7 @@ export default function Bancos({ selectedSede, dbSedeId }) {
                         <div>
                           {mov.descripcion}
                           {sugerenciaAuto && (
-                            <small style={{ display: "block", color: "var(--muted)", marginTop: 4 }}>
+                            <small className="table-cell-note">
                               Sugerido:{" "}
                               {sugerenciaAuto.candidato.concepto ||
                                 sugerenciaAuto.candidato.proveedor ||
@@ -1702,7 +1705,7 @@ export default function Bancos({ selectedSede, dbSedeId }) {
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: 18 }}>
+      <div className="panel">
         <h3>Extractos bancarios adjuntos</h3>
 
         <div className="table-card">
@@ -1882,7 +1885,7 @@ export default function Bancos({ selectedSede, dbSedeId }) {
 
       {modal === "gestionarCuentas" && (
         <Modal title="Gestionar cuentas bancarias" size="wide" onClose={() => setModal(null)}>
-          <div className="table-card" style={{ marginBottom: 18 }}>
+          <div className="table-card table-card-spaced">
             <table>
               <thead>
                 <tr>

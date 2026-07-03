@@ -171,7 +171,7 @@ export default function CuentasCorrientesEntidades({ selectedSede, sedeId }) {
         </button>
       </div>
 
-      <div className="filters-bar" data-tour="cc-entidades-filtros">
+      <div className="filters-bar cc-entidades-filters" data-tour="cc-entidades-filtros">
         <select value={tipoEntidad} onChange={(e) => setTipoEntidad(e.target.value)}>
           <option value="cliente">Clientes</option>
           <option value="proveedor">Proveedores</option>
@@ -256,7 +256,7 @@ export default function CuentasCorrientesEntidades({ selectedSede, sedeId }) {
                     <td>{formatMoney(item.totalDebe)}</td>
                     <td>{formatMoney(item.totalHaber)}</td>
                     <td>
-                      <strong style={{ color: item.saldo > 0 ? "#b91c1c" : "#047857" }}>
+                      <strong className={item.saldo > 0 ? "money-negative" : "money-positive"}>
                         {formatMoney(item.saldo)}
                       </strong>
                     </td>
@@ -281,7 +281,7 @@ export default function CuentasCorrientesEntidades({ selectedSede, sedeId }) {
       {detalle && (
         <Modal title={`Cuenta corriente: ${detalle.nombre}`} onClose={() => setDetalle(null)}>
           <div data-tour="cc-entidades-detalle">
-            <div className="stats-grid small" style={{ marginBottom: 12 }}>
+            <div className="stats-grid small detail-stats-grid">
               <div className="stat-card">
                 <div>
                   <span>Entidad</span>
@@ -305,7 +305,7 @@ export default function CuentasCorrientesEntidades({ selectedSede, sedeId }) {
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginBottom: 10 }}>
+            <div className="detail-actions">
               <button className="secondary-button" type="button" onClick={exportarDetalleExcel}>
                 <Download size={14} /> Excel
               </button>
@@ -314,8 +314,8 @@ export default function CuentasCorrientesEntidades({ selectedSede, sedeId }) {
               </button>
             </div>
 
-            <div className="table-card" style={{ overflowX: "auto" }}>
-              <table style={{ minWidth: 980 }}>
+            <div className="table-card detail-table-wrap">
+              <table className="detail-table">
                 <thead>
                   <tr>
                     <th>Fecha</th>

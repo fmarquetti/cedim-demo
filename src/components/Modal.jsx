@@ -1,13 +1,13 @@
-// src/components/Modal.jsx
+import { X } from "lucide-react";
 
 export default function Modal({ title, children, onClose, size = "normal" }) {
   return (
-    <div className="modal-backdrop">
-      <div className={`modal modal-${size}`}>
+    <div className="modal-backdrop" role="presentation">
+      <div className={`modal modal-${size}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-header">
           <h3>{title}</h3>
-          <button type="button" onClick={onClose}>
-            ×
+          <button type="button" onClick={onClose} aria-label="Cerrar">
+            <X size={18} />
           </button>
         </div>
 

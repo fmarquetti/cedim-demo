@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -27,7 +28,7 @@ export function AppConfigProvider({ children }) {
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);
 
-  async function refreshConfig() {
+  const refreshConfig = useCallback(async () => {
     setLoadingConfig(true);
 
     try {
@@ -38,9 +39,9 @@ export function AppConfigProvider({ children }) {
     } finally {
       setLoadingConfig(false);
     }
-  }
+  }, []);
 
-  async function updateConfig(nextConfig) {
+  const updateConfig = useCallback(async (nextConfig) => {
     setSavingConfig(true);
 
     try {
@@ -51,11 +52,13 @@ export function AppConfigProvider({ children }) {
     } finally {
       setSavingConfig(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    refreshConfig();
-  }, []);
+    queueMicrotask(() => {
+      void refreshConfig();
+    });
+  }, [refreshConfig]);
 
   useEffect(() => {
     applyTheme(config);
@@ -70,7 +73,7 @@ export function AppConfigProvider({ children }) {
       refreshConfig,
       updateConfig,
     }),
-    [config, loadingConfig, savingConfig]
+    [config, loadingConfig, refreshConfig, savingConfig, updateConfig]
   );
 
   return (
@@ -80,6 +83,7 @@ export function AppConfigProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAppConfig() {
   const context = useContext(AppConfigContext);
 

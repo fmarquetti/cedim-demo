@@ -104,7 +104,7 @@ const pageIntro = {
       "Esta pantalla permite consultar el IVA ventas, IVA compras y el saldo fiscal estimado del período.",
   },
   configuracionFiscal: {
-    title: "ConfiguraciÃ³n Fiscal",
+    title: "Configuracion Fiscal",
     content:
       "Esta pantalla permite administrar tipos de retenciones, percepciones e impuestos usados por el sistema.",
   },
@@ -1110,8 +1110,8 @@ const tourStepsByPage = {
   configuracionFiscal: [
     {
       target: '[data-tour="configuracion-fiscal-header"]',
-      title: "ConfiguraciÃ³n Fiscal",
-      content: "Desde acÃ¡ se administran los tipos de tributos disponibles.",
+      title: "Configuracion Fiscal",
+      content: "Desde aca se administran los tipos de tributos disponibles.",
       placement: "bottom",
     },
     {
@@ -1121,7 +1121,7 @@ const tourStepsByPage = {
     },
     {
       target: '[data-tour="configuracion-fiscal-formulario"]',
-      title: "Alta o ediciÃ³n",
+      title: "Alta o edicion",
       content: "Desde este formulario se pueden crear o modificar tipos de tributos.",
     },
   ],

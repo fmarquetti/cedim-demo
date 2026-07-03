@@ -496,7 +496,7 @@ function parseGaliciaCuenta(text) {
 }
 
 function extractBbvaAccount(text) {
-    const account = text.match(/CC \$\s*([0-9\-\/]+)\s*\(Cta\.Cte\.Bancaria\)/i);
+    const account = text.match(/CC \$\s*([0-9/-]+)\s*\(Cta\.Cte\.Bancaria\)/i);
     const cbu = text.match(/CBU\s*([0-9 ]{18,30})/i);
 
     return {
@@ -574,8 +574,8 @@ function parseBbvaCuenta(text) {
 }
 
 function extractMacroAccount(text) {
-    const account = text.match(/CUENTA CORRIENTE BANCARIA NRO\.:\s*([0-9\-]+)/i);
-    const cbu = text.match(/Clave Bancaria Uniforme para Debito Directo:\s*([0-9\-]+)/i);
+    const account = text.match(/CUENTA CORRIENTE BANCARIA NRO\.:\s*([0-9-]+)/i);
+    const cbu = text.match(/Clave Bancaria Uniforme para Debito Directo:\s*([0-9-]+)/i);
 
     return {
         cuenta: account?.[1] || "",

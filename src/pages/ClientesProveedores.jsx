@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Edit3, Plus, RefreshCw, Save, ToggleLeft, ToggleRight, X } from "lucide-react";
 import {
   getEntidadesCuentaCorriente,
@@ -49,7 +49,7 @@ export default function ClientesProveedores({ currentUser }) {
   const canEdit = canPerform(currentUser, "clientesProveedores", "edit");
   const canManage = canCreate || canEdit;
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -66,11 +66,13 @@ export default function ClientesProveedores({ currentUser }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [estadoFiltro, tipoFiltro]);
 
   useEffect(() => {
-    loadData();
-  }, [tipoFiltro, estadoFiltro]);
+    queueMicrotask(() => {
+      void loadData();
+    });
+  }, [loadData]);
 
   const entidadesFiltradas = useMemo(() => {
     const term = normalizeSearch(search);
@@ -227,7 +229,7 @@ export default function ClientesProveedores({ currentUser }) {
         </div>
 
         {canCreate && (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div className="header-actions">
             <button className="secondary-button" type="button" onClick={() => openCreate("proveedor")}>
               <Plus size={16} /> Nuevo proveedor
             </button>
@@ -438,7 +440,7 @@ export default function ClientesProveedores({ currentUser }) {
                   <td>{tipoLabels[entidad.tipo] || entidad.tipo}</td>
                   <td>
                     <strong>{entidad.nombre}</strong>
-                    {entidad.domicilio && <small style={{ display: "block" }}>{entidad.domicilio}</small>}
+                    {entidad.domicilio && <small className="table-cell-note">{entidad.domicilio}</small>}
                   </td>
                   <td>{entidad.documento || "-"}</td>
                   <td>{entidad.condicionIva || "-"}</td>
@@ -446,7 +448,7 @@ export default function ClientesProveedores({ currentUser }) {
                   <td>{entidad.telefono || "-"}</td>
                   <td>{entidad.activa ? "Activo" : "Inactivo"}</td>
                   <td>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <div className="row-actions-wrap">
                       {canEdit && (
                         <button className="secondary-button" type="button" onClick={() => openEdit(entidad)}>
                           <Edit3 size={14} /> Editar

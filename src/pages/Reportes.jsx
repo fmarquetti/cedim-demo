@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FileText,
   FileSpreadsheet,
@@ -133,7 +133,7 @@ export default function Reportes({ selectedSede, sedeId }) {
       ? selectedSede.nombre
       : selectedSede || "Todas las sedes";
 
-  async function loadData(currentSedeId = sedeId) {
+  const loadData = useCallback(async (currentSedeId = sedeId) => {
     setLoading(true);
 
     try {
@@ -157,11 +157,13 @@ export default function Reportes({ selectedSede, sedeId }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [sedeId]);
 
   useEffect(() => {
-    loadData(sedeId);
-  }, [sedeId]);
+    queueMicrotask(() => {
+      void loadData(sedeId);
+    });
+  }, [loadData, sedeId]);
 
   const ingresosFiltrados = useMemo(() => {
     return filterByDate(ingresos, desde, hasta);
@@ -626,7 +628,7 @@ export default function Reportes({ selectedSede, sedeId }) {
         </div>
       </div>
 
-      <div className="content-grid" style={{ marginTop: 18 }}>
+      <div className="content-grid reportes-alert-grid">
         <div className="panel">
           <h3>Alertas financieras</h3>
 

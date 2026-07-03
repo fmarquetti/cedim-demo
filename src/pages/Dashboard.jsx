@@ -1,5 +1,5 @@
 // src/pages/Dashboard.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowDownCircle,
@@ -356,7 +356,7 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
   const effectiveDbSedeId = dbSedeId ?? getDbSedeId(sedeId);
   const verTodasSedes = !effectiveDbSedeId;
 
-  async function loadDashboard() {
+  const loadDashboard = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -409,11 +409,13 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [effectiveDbSedeId]);
 
   useEffect(() => {
-    loadDashboard();
-  }, [effectiveDbSedeId]);
+    queueMicrotask(() => {
+      void loadDashboard();
+    });
+  }, [loadDashboard]);
 
   useEffect(() => {
     let cancelled = false;
@@ -452,13 +454,17 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
 
   // Si la sede cambia y deja de ser "todas", apagamos la vista comparativa
   useEffect(() => {
-    if (!verTodasSedes) setVistaComparativa(false);
+    if (!verTodasSedes) {
+      queueMicrotask(() => setVistaComparativa(false));
+    }
   }, [verTodasSedes]);
 
   useEffect(() => {
     if (isMobileWidgetOrdering) {
-      setDraggedWidgetId("");
-      setDragOverWidgetId("");
+      queueMicrotask(() => {
+        setDraggedWidgetId("");
+        setDragOverWidgetId("");
+      });
     }
   }, [isMobileWidgetOrdering]);
 
@@ -855,7 +861,7 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
           <div className="panel-toolbar">
             <h3 className="panel-toolbar-title">
               {vistaComparativa
-                ? `Comparativa por sede Â· ${LABELS_METRICA[metricaComparativa]}`
+                ? `Comparativa por sede - ${LABELS_METRICA[metricaComparativa]}`
                 : "Ingresos vs egresos"}
             </h3>
             <div className="panel-toolbar-controls">
@@ -909,15 +915,15 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
                 <YAxis tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
                 <Tooltip formatter={(value) => formatMoney(value)} />
                 <Legend />
-                <Line type="monotone" dataKey="ingresos" name="Ingresos" stroke="#019cc5" strokeWidth={3} />
-                <Line type="monotone" dataKey="egresos" name="Egresos" stroke="#3a73b9" strokeWidth={3} />
+                <Line type="monotone" dataKey="ingresos" name="Ingresos" stroke="#047f9d" strokeWidth={3} />
+                <Line type="monotone" dataKey="egresos" name="Egresos" stroke="#255f9f" strokeWidth={3} />
               </LineChart>
             )}
           </ResponsiveContainer>
 
           {vistaComparativa && comparativa.sedesActivas.length === 0 && (
-            <p style={{ textAlign: "center", color: "#888", marginTop: 8 }}>
-              No hay datos por sede en el perÃ­odo seleccionado.
+            <p className="dashboard-chart-empty">
+              No hay datos por sede en el periodo seleccionado.
             </p>
           )}
         </div>
@@ -934,7 +940,7 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
               <XAxis dataKey="sede" />
               <YAxis tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
               <Tooltip formatter={(value) => formatMoney(value)} />
-              <Bar dataKey="resultado" fill="#3eb9b1" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="resultado" fill="#2caaa2" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -951,7 +957,7 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
               <XAxis dataKey="periodo" />
               <YAxis tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
               <Tooltip formatter={(value) => formatMoney(value)} />
-              <Bar dataKey="resultado" fill="#028baf" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="resultado" fill="#047f9d" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -968,7 +974,7 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
               <XAxis dataKey="cuenta" />
               <YAxis tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
               <Tooltip formatter={(value) => formatMoney(value)} />
-              <Bar dataKey="saldo" fill="#3a73b9" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="saldo" fill="#255f9f" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -998,7 +1004,7 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
           </div>
           <div className="alert-item warning">
             <strong>{conciliacionesPendientes.length} movimientos sin conciliar</strong>
-            <span>Requieren revisiÃ³n bancaria</span>
+            <span>Requieren revision bancaria</span>
           </div>
           <div className="alert-item info">
             <strong>{cuentasFiltradas.length} registros en cuentas corrientes</strong>
@@ -1045,7 +1051,7 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
         </div>
       )}
 
-      <div className="filters-bar">
+      <div className="filters-bar dashboard-filters">
         <label className="filter-field">
           <span>Período</span>
           <select value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
@@ -1241,15 +1247,15 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
                 <YAxis tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
                 <Tooltip formatter={(value) => formatMoney(value)} />
                 <Legend />
-                <Line type="monotone" dataKey="ingresos" name="Ingresos" stroke="#019cc5" strokeWidth={3} />
-                <Line type="monotone" dataKey="egresos" name="Egresos" stroke="#3a73b9" strokeWidth={3} />
+                <Line type="monotone" dataKey="ingresos" name="Ingresos" stroke="#047f9d" strokeWidth={3} />
+                <Line type="monotone" dataKey="egresos" name="Egresos" stroke="#255f9f" strokeWidth={3} />
               </LineChart>
             )}
           </ResponsiveContainer>
 
           {vistaComparativa && comparativa.sedesActivas.length === 0 && (
-            <p style={{ textAlign: "center", color: "#888", marginTop: 8 }}>
-              No hay datos por sede en el período seleccionado.
+            <p className="dashboard-chart-empty">
+              No hay datos por sede en el periodo seleccionado.
             </p>
           )}
         </div>
@@ -1262,7 +1268,7 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
               <XAxis dataKey="sede" />
               <YAxis tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
               <Tooltip formatter={(value) => formatMoney(value)} />
-              <Bar dataKey="resultado" fill="#3eb9b1" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="resultado" fill="#2caaa2" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -1277,7 +1283,7 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
               <XAxis dataKey="periodo" />
               <YAxis tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
               <Tooltip formatter={(value) => formatMoney(value)} />
-              <Bar dataKey="resultado" fill="#028baf" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="resultado" fill="#047f9d" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -1290,7 +1296,7 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
               <XAxis dataKey="cuenta" />
               <YAxis tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
               <Tooltip formatter={(value) => formatMoney(value)} />
-              <Bar dataKey="saldo" fill="#3a73b9" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="saldo" fill="#255f9f" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -1322,7 +1328,7 @@ export default function Dashboard({ sedeId, dbSedeId, currentUser }) {
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: 18 }}>
+      <div className="panel">
         <h3>Saldos bancarios por cuenta</h3>
         <DataTable columns={["Cuenta", "Saldo", "Pendientes"]} rows={bancosRows} />
       </div>

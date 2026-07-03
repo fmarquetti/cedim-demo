@@ -101,7 +101,7 @@ export async function updateCuentaBancaria(id, form) {
 
   if (error) {
     if (error.code === "42501") {
-      throw new Error("No tenÃ©s permisos para modificar cuentas bancarias. RevisÃ¡ las polÃ­ticas RLS de cuentas_bancarias.");
+      throw new Error("No tenes permisos para modificar cuentas bancarias. Revisa las politicas RLS de cuentas_bancarias.");
     }
 
     if (error.code === "23505") {

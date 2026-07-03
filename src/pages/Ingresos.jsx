@@ -1020,7 +1020,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
         </div></div>
       </div>
 
-      <div className="filters-bar" data-tour="ingresos-filtros">
+      <div className="filters-bar ingresos-filters" data-tour="ingresos-filtros">
         <input placeholder="Buscar por concepto, entidad pagadora, sede, origen o comprobante..." value={search} onChange={(e) => setSearch(e.target.value)} data-tour="ingresos-busqueda" />
         <label className="filter-field"><span>Estado</span>
           <select value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)} data-tour="ingresos-filtro-estado">
@@ -1074,7 +1074,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: 18 }} data-tour="ingresos-tabla">
+      <div className="panel" data-tour="ingresos-tabla">
         <h3>Detalle de ingresos</h3>
         <div className="table-card">
           <table>
@@ -1105,7 +1105,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
                   <td>
                     {item.sede}
                     {item.porcentajeAplicado && (
-                      <small style={{ display: "block", color: "#64748b" }}>
+                      <small className="table-cell-note">
                         {item.porcentajeAplicado}% de {formatMoney(item.importeOriginal)}
                       </small>
                     )}
@@ -1275,7 +1275,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
         <Modal title="Revisar factura importada" onClose={() => setModal(null)}>
           <form className="form-grid" onSubmit={confirmarIngresoImportado}>
             <div className="full">
-              <p style={{ margin: 0, opacity: 0.75 }}>El sistema leyó los datos fiscales del QR. Completá manualmente el concepto real antes de guardar.</p>
+              <p className="form-note">El sistema leyó los datos fiscales del QR. Completá manualmente el concepto real antes de guardar.</p>
             </div>
             <label>Fecha <input type="date" required value={ingresoPendiente.fecha} onChange={(e) => setIngresoPendiente({ ...ingresoPendiente, fecha: e.target.value })} /></label>
             <label>Comprobante <input value={ingresoPendiente.comprobante} disabled /></label>

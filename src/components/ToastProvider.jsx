@@ -49,6 +49,7 @@ useEffect(() => {
 }
 
 // Función para disparar toasts desde cualquier archivo
+// eslint-disable-next-line react-refresh/only-export-components
 export const toast = {
   error:   (msg) => window.dispatchEvent(new CustomEvent("genetics:error",   { detail: msg })),
   success: (msg) => window.dispatchEvent(new CustomEvent("genetics:success", { detail: msg })),

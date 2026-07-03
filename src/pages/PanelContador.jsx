@@ -68,7 +68,7 @@ function KpiCard({ label, value, detail, icon: Icon = Gauge }) {
 }
 
 export default function PanelContador({ selectedSede, sedeId, setActivePage }) {
-  const now = new Date();
+  const now = useMemo(() => new Date(), []);
   const [anio, setAnio] = useState(now.getFullYear());
   const [mes, setMes] = useState(now.getMonth() + 1);
   const [data, setData] = useState(null);

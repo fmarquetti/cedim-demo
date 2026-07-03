@@ -622,10 +622,18 @@ export default function Configuracion({ currentUser }) {
                   />
                 </label>
 
-                <div className="config-color-preview">
-                  <span style={{ background: form.primaryColor }} />
-                  <span style={{ background: form.secondaryColor }} />
-                  <span style={{ background: form.accentColor }} />
+                <div
+                  className="config-color-preview"
+                  ref={(node) => {
+                    if (!node) return;
+                    node.style.setProperty("--preview-primary", form.primaryColor);
+                    node.style.setProperty("--preview-secondary", form.secondaryColor);
+                    node.style.setProperty("--preview-accent", form.accentColor);
+                  }}
+                >
+                  <span className="config-color-preview-primary" />
+                  <span className="config-color-preview-secondary" />
+                  <span className="config-color-preview-accent" />
                 </div>
               </div>
 

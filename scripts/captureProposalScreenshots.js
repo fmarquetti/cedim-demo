@@ -2,6 +2,8 @@ import { chromium } from "playwright";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+/* global process */
+
 const baseUrl = process.env.PROPOSAL_CAPTURE_URL || "http://localhost:5173";
 const email = process.env.PROPOSAL_CAPTURE_EMAIL || "user@mail.com";
 const password = process.env.PROPOSAL_CAPTURE_PASSWORD || "";

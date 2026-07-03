@@ -775,12 +775,12 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
     }
 
     if (form.estado === "Pagado" && !form.medioPago) {
-      toast.error("IndicÃ¡ con quÃ© se pagÃ³ el egreso.");
+      toast.error("Indica con que se pago el egreso.");
       return;
     }
 
     if (form.estado === "Pagado" && form.medioPago !== "Efectivo" && !form.cuentaPago) {
-      toast.error("SeleccionÃ¡ la cuenta usada para el pago.");
+      toast.error("Selecciona la cuenta usada para el pago.");
       return;
     }
 
@@ -860,12 +860,12 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
     if (!canEditEgresos) return;
 
     if (!pagoPendiente?.medioPago) {
-      toast.error("IndicÃ¡ con quÃ© se pagÃ³ el egreso.");
+      toast.error("Indica con que se pago el egreso.");
       return;
     }
 
     if (pagoPendiente.medioPago !== "Efectivo" && !pagoPendiente.cuentaPago) {
-      toast.error("SeleccionÃ¡ la cuenta usada para el pago.");
+      toast.error("Selecciona la cuenta usada para el pago.");
       return;
     }
 
@@ -991,12 +991,12 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
     }
 
     if (egresoPendiente.estado === "Pagado" && !egresoPendiente.medioPago) {
-      toast.error("IndicÃ¡ con quÃ© se pagÃ³ el egreso.");
+      toast.error("Indica con que se pago el egreso.");
       return;
     }
 
     if (egresoPendiente.estado === "Pagado" && egresoPendiente.medioPago !== "Efectivo" && !egresoPendiente.cuentaPago) {
-      toast.error("SeleccionÃ¡ la cuenta usada para el pago.");
+      toast.error("Selecciona la cuenta usada para el pago.");
       return;
     }
 
@@ -1426,7 +1426,7 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
         </div>
       </div>
 
-      <div className="filters-bar" data-tour="egresos-filtros">
+      <div className="filters-bar egresos-filters" data-tour="egresos-filtros">
         <input
           placeholder="Buscar por proveedor, razón social, sede, concepto, categoría o comprobante..."
           value={search}
@@ -1548,7 +1548,7 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: 18 }} data-tour="egresos-tabla">
+      <div className="panel" data-tour="egresos-tabla">
         <h3>Detalle de egresos</h3>
 
         <div className="table-card">
@@ -1583,7 +1583,7 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
                     <td>
                       {item.sede}
                       {item.porcentajeAplicado && (
-                        <small style={{ display: "block", color: "#64748b" }}>
+                        <small className="table-cell-note">
                           {item.porcentajeAplicado}% de {formatMoney(item.importeOriginal)}
                         </small>
                       )}
