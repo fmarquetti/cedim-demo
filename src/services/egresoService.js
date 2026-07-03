@@ -133,6 +133,8 @@ function mapEgreso(row) {
     archivo: row.archivo,
     comprobante: row.comprobante,
     datosFiscales: row.datos_fiscales,
+    medioPago: row.datos_fiscales?.medioPago || row.datos_fiscales?.medio_pago || "",
+    cuentaPago: row.datos_fiscales?.cuentaPago || row.datos_fiscales?.cuenta_pago || "",
     conceptosFiscales,
     tributos,
     totalesFiscales,
@@ -316,6 +318,17 @@ export async function createEgreso(form) {
   await validarPeriodoAbierto(form.fecha);
   const factura = await validarFacturaDuplicada(form);
   const conceptoResumen = buildConceptoResumen(form);  
+  const datosFiscalesBase = form.detalleFiscal
+    ? { ...(form.datosFiscales || {}), detalleFiscal: form.detalleFiscal }
+    : form.datosFiscales || null;
+  const datosFiscalesConPago =
+    form.estado === "Pagado"
+      ? {
+          ...(datosFiscalesBase || {}),
+          medioPago: form.medioPago || "",
+          cuentaPago: form.cuentaPago || "",
+        }
+      : datosFiscalesBase;
 
   const { data, error } = await supabase
     .from("egresos")
@@ -333,9 +346,7 @@ export async function createEgreso(form) {
       estado: form.estado || "Pendiente",
       archivo: form.archivo || null,
       comprobante: form.comprobante || null,
-      datos_fiscales: form.detalleFiscal
-        ? { ...(form.datosFiscales || {}), detalleFiscal: form.detalleFiscal }
-        : form.datosFiscales || null,
+      datos_fiscales: datosFiscalesConPago,
       factura_cuit: factura.factura_cuit,
       factura_tipo: factura.factura_tipo,
       factura_punto_venta: factura.factura_punto_venta,
@@ -406,7 +417,8 @@ export async function createEgreso(form) {
         sociedad: egreso.sociedad,
         sedeId: egreso.sedeId,
         importeTotal: egreso.importe,
-        medioPago: "Pago directo",
+        medioPago: egreso.medioPago || form.medioPago || "Pago directo",
+        cuentaPago: egreso.cuentaPago || form.cuentaPago || "",
       });
     } catch (ccError) {
       console.error("Egreso pagado, pero no se pudo generar pago en cuenta corriente:", ccError);
@@ -449,7 +461,7 @@ export async function deleteEgreso(id) {
   });
 }
 
-export async function marcarEgresoPagado(id) {
+export async function marcarEgresoPagado(id, pago = {}) {
   const { data: egresoActual, error: actualError } = await supabase
     .from("egresos")
     .select("*")
@@ -464,6 +476,11 @@ export async function marcarEgresoPagado(id) {
     .from("egresos")
     .update({
       estado: "Pagado",
+      datos_fiscales: {
+        ...(egresoActual.datos_fiscales || {}),
+        medioPago: pago.medioPago || "",
+        cuentaPago: pago.cuentaPago || "",
+      },
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -484,9 +501,27 @@ export async function marcarEgresoPagado(id) {
 
   if (egresoError) throw egresoError;
 
-  await registrarAsientoEgresoPagado(
-    mapEgreso({ ...egresoData, egreso_distribuciones: [] })
-  );
+  const egreso = mapEgreso({ ...egresoData, egreso_distribuciones: [] });
+
+  await registrarAsientoEgresoPagado(egreso);
+
+  try {
+    await generarCcDesdeOrdenPago({
+      id: egreso.id,
+      fecha: egreso.fechaDb || egreso.fecha,
+      numero: 0,
+      numeroFormateado: egreso.comprobante || `Egreso ${egreso.id}`,
+      proveedor: egreso.proveedor,
+      proveedorCuit: egreso.proveedorCuit,
+      sociedad: egreso.sociedad,
+      sedeId: egreso.sedeId,
+      importeTotal: egreso.importe,
+      medioPago: egreso.medioPago || pago.medioPago || "Pago directo",
+      cuentaPago: egreso.cuentaPago || pago.cuentaPago || "",
+    });
+  } catch (ccError) {
+    console.error("Egreso pagado, pero no se pudo generar pago en cuenta corriente:", ccError);
+  }
 
   await registrarCambioSeguro({
     modulo: "Egresos",

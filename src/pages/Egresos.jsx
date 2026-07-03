@@ -28,6 +28,7 @@ import {
   marcarEgresoPagado,
 } from "../services/egresoService";
 import { getSedes } from "../services/sedeService";
+import { getCuentasBancarias } from "../services/cuentaBancariaService";
 import { formatMoney, formatDate, toDate } from "../utils/format";
 import { toast } from "../components/ToastProvider";
 import { canPerform } from "../utils/permissions";
@@ -75,6 +76,8 @@ const emptyForm = {
     retencionIibb: "",
     otrosTributos: "",
   },
+  medioPago: "",
+  cuentaPago: "",
 };
 
 const getFechaReal = (item) => item?.fechaDb || item?.fecha;
@@ -158,6 +161,7 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
 
   const [egresos, setEgresos] = useState([]);
   const [sedes, setSedes] = useState([]);
+  const [cuentasBancarias, setCuentasBancarias] = useState([]);
   const [proveedores, setProveedores] = useState([]);
 
   const [search, setSearch] = useState("");
@@ -170,6 +174,7 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
   const [modal, setModal] = useState(null);
   const [importandoFactura, setImportandoFactura] = useState(false);
   const [egresoPendiente, setEgresoPendiente] = useState(null);
+  const [pagoPendiente, setPagoPendiente] = useState(null);
   const [form, setForm] = useState(emptyForm);
 
   const [loading, setLoading] = useState(true);
@@ -197,6 +202,11 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
         promise: getSedes(),
         fallback: [],
       },
+      cuentasBancarias: {
+        label: "cuentas bancarias para egresos",
+        promise: getCuentasBancarias(idParaFiltro),
+        fallback: [],
+      },
       conceptos: {
         label: "conceptos de egresos",
         promise: getConceptoItems("egreso"),
@@ -211,6 +221,7 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
 
     setEgresos(results.egresos.data || []);
     setSedes(results.sedes.data || []);
+    setCuentasBancarias(results.cuentasBancarias.data || []);
     setConceptoItems(results.conceptos.data || []);
     setProveedores(results.proveedores.data || []);
     setForm((prev) => ({
@@ -233,6 +244,10 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
   const sociedades = useMemo(() => {
     return [...new Set(egresos.map((item) => item.sociedad).filter(Boolean))].sort();
   }, [egresos]);
+
+  const cuentasPagoActivas = useMemo(() => {
+    return (cuentasBancarias || []).filter((cuenta) => cuenta.activa);
+  }, [cuentasBancarias]);
 
   const egresosFiltrados = useMemo(() => {
     const searchValue = search.toLowerCase().trim();
@@ -759,6 +774,16 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
       return;
     }
 
+    if (form.estado === "Pagado" && !form.medioPago) {
+      toast.error("IndicÃ¡ con quÃ© se pagÃ³ el egreso.");
+      return;
+    }
+
+    if (form.estado === "Pagado" && form.medioPago !== "Efectivo" && !form.cuentaPago) {
+      toast.error("SeleccionÃ¡ la cuenta usada para el pago.");
+      return;
+    }
+
     if (form.distribuciones?.length) {
       const total = totalDistribucion();
 
@@ -817,15 +842,47 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
     }
   }
 
-  async function marcarPagado(id) {
+  function abrirPagoDirecto(egreso) {
     if (!canEditEgresos) return;
 
+    setPagoPendiente({
+      id: egreso.id,
+      descripcion: egreso.comprobante || egreso.concepto || egreso.proveedor,
+      importe: egreso.importe,
+      medioPago: "",
+      cuentaPago: "",
+    });
+    setModal("pagoDirecto");
+  }
+
+  async function confirmarPagoDirecto(e) {
+    e.preventDefault();
+    if (!canEditEgresos) return;
+
+    if (!pagoPendiente?.medioPago) {
+      toast.error("IndicÃ¡ con quÃ© se pagÃ³ el egreso.");
+      return;
+    }
+
+    if (pagoPendiente.medioPago !== "Efectivo" && !pagoPendiente.cuentaPago) {
+      toast.error("SeleccionÃ¡ la cuenta usada para el pago.");
+      return;
+    }
+
     try {
-      await marcarEgresoPagado(id);
+      setSaving(true);
+      await marcarEgresoPagado(pagoPendiente.id, {
+        medioPago: pagoPendiente.medioPago,
+        cuentaPago: pagoPendiente.cuentaPago,
+      });
       await loadData(idSedeActiva);
+      setPagoPendiente(null);
+      setModal(null);
       toast.success("Egreso marcado como pagado.");
     } catch (error) {
       toast.error(error.message || "No se pudo marcar como pagado.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -897,6 +954,8 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
         importe: Number(datos.importe || 0),
         categoria: "Insumos",
         estado: "Pendiente",
+        medioPago: "",
+        cuentaPago: "",
         archivo: file.name,
         comprobante: `${tipoComprobante} ${puntoVenta}-${numeroComprobante}`,
         datosFiscales,
@@ -928,6 +987,16 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
 
     if (!egresoPendiente?.sedeId) {
       toast.error("Seleccioná una sede.");
+      return;
+    }
+
+    if (egresoPendiente.estado === "Pagado" && !egresoPendiente.medioPago) {
+      toast.error("IndicÃ¡ con quÃ© se pagÃ³ el egreso.");
+      return;
+    }
+
+    if (egresoPendiente.estado === "Pagado" && egresoPendiente.medioPago !== "Efectivo" && !egresoPendiente.cuentaPago) {
+      toast.error("SeleccionÃ¡ la cuenta usada para el pago.");
       return;
     }
 
@@ -1553,7 +1622,7 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
                         {canEditEgresos && item.estado === "Pendiente" && (
                           <button
                             title="Marcar como pagado"
-                            onClick={() => marcarPagado(item.id)}
+                            onClick={() => abrirPagoDirecto(item)}
                           >
                             <CheckCircle size={16} />
                           </button>
@@ -1582,6 +1651,74 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
           </table>
         </div>
       </div>
+
+      {modal === "pagoDirecto" && pagoPendiente && (
+        <Modal title="Registrar pago del egreso" onClose={() => setModal(null)}>
+          <form className="form-grid" onSubmit={confirmarPagoDirecto}>
+            <div className="full document-preview">
+              <strong>{pagoPendiente.descripcion}</strong>
+              <br />
+              Importe: {formatMoney(pagoPendiente.importe)}
+            </div>
+
+            <label>
+              Medio de pago
+              <select
+                required
+                value={pagoPendiente.medioPago}
+                onChange={(e) =>
+                  setPagoPendiente({
+                    ...pagoPendiente,
+                    medioPago: e.target.value,
+                    cuentaPago: e.target.value === "Efectivo" ? "" : pagoPendiente.cuentaPago,
+                  })
+                }
+              >
+                <option value="">Seleccionar medio</option>
+                <option>Efectivo</option>
+                <option>Transferencia</option>
+                <option>Débito</option>
+                <option>Crédito</option>
+                <option>Cheque</option>
+                <option>Mercado Pago</option>
+              </select>
+            </label>
+
+            {pagoPendiente.medioPago !== "Efectivo" && (
+              <label>
+                Cuenta de pago
+                <select
+                  required
+                  value={pagoPendiente.cuentaPago}
+                  onChange={(e) =>
+                    setPagoPendiente({
+                      ...pagoPendiente,
+                      cuentaPago: e.target.value,
+                    })
+                  }
+                >
+                  <option value="">Seleccionar cuenta</option>
+                  {cuentasPagoActivas.map((cuenta) => (
+                    <option key={cuenta.id} value={cuenta.nombre}>
+                      {cuenta.nombre}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={() => setModal(null)}>
+                Cancelar
+              </button>
+
+              <button type="submit" className="primary-button" disabled={saving}>
+                {saving ? "Guardando..." : "Registrar pago"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {modal === "nuevo" && canCreateEgresos && (
         <Modal title="Nuevo egreso" onClose={() => setModal(null)}>
@@ -1670,6 +1807,51 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
                 <option>Pagado</option>
               </select>
             </label>
+
+            {form.estado === "Pagado" && (
+              <>
+                <label>
+                  Medio de pago
+                  <select
+                    required
+                    value={form.medioPago}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        medioPago: e.target.value,
+                        cuentaPago: e.target.value === "Efectivo" ? "" : form.cuentaPago,
+                      })
+                    }
+                  >
+                    <option value="">Seleccionar medio</option>
+                    <option>Efectivo</option>
+                    <option>Transferencia</option>
+                    <option>Débito</option>
+                    <option>Crédito</option>
+                    <option>Cheque</option>
+                    <option>Mercado Pago</option>
+                  </select>
+                </label>
+
+                {form.medioPago !== "Efectivo" && (
+                  <label>
+                    Cuenta de pago
+                    <select
+                      required
+                      value={form.cuentaPago}
+                      onChange={(e) => setForm({ ...form, cuentaPago: e.target.value })}
+                    >
+                      <option value="">Seleccionar cuenta</option>
+                      {cuentasPagoActivas.map((cuenta) => (
+                        <option key={cuenta.id} value={cuenta.nombre}>
+                          {cuenta.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </>
+            )}
 
             <label>
               Importe
@@ -1887,6 +2069,59 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
                 <option>Pagado</option>
               </select>
             </label>
+
+            {egresoPendiente.estado === "Pagado" && (
+              <>
+                <label>
+                  Medio de pago
+                  <select
+                    required
+                    value={egresoPendiente.medioPago || ""}
+                    onChange={(e) =>
+                      setEgresoPendiente({
+                        ...egresoPendiente,
+                        medioPago: e.target.value,
+                        cuentaPago:
+                          e.target.value === "Efectivo"
+                            ? ""
+                            : egresoPendiente.cuentaPago || "",
+                      })
+                    }
+                  >
+                    <option value="">Seleccionar medio</option>
+                    <option>Efectivo</option>
+                    <option>Transferencia</option>
+                    <option>Débito</option>
+                    <option>Crédito</option>
+                    <option>Cheque</option>
+                    <option>Mercado Pago</option>
+                  </select>
+                </label>
+
+                {egresoPendiente.medioPago !== "Efectivo" && (
+                  <label>
+                    Cuenta de pago
+                    <select
+                      required
+                      value={egresoPendiente.cuentaPago || ""}
+                      onChange={(e) =>
+                        setEgresoPendiente({
+                          ...egresoPendiente,
+                          cuentaPago: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="">Seleccionar cuenta</option>
+                      {cuentasPagoActivas.map((cuenta) => (
+                        <option key={cuenta.id} value={cuenta.nombre}>
+                          {cuenta.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </>
+            )}
 
             <label>
               Importe

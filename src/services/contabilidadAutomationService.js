@@ -235,6 +235,9 @@ export async function registrarAsientoEgresoPagado(egreso) {
 
   const importe = toMoney(egreso.importe);
   if (importe <= 0) return null;
+  const medioPago = egreso.medioPago || egreso.medio_pago || egreso.datosFiscales?.medioPago || egreso.datos_fiscales?.medioPago || "";
+  const cuentaPago = egreso.cuentaPago || egreso.cuenta_pago || egreso.datosFiscales?.cuentaPago || egreso.datos_fiscales?.cuentaPago || "";
+  const cuentaFondos = getCuentaCajaOBancos(`${medioPago} ${cuentaPago}`);
 
   return crearAsientoSiNoExiste({
     fecha: dateOnly(egreso.fechaDb || egreso.fecha),
@@ -245,7 +248,7 @@ export async function registrarAsientoEgresoPagado(egreso) {
     estado: "confirmado",
     lineas: [
       await buildLinea("proveedores", "debe", importe, egreso.proveedor || "Proveedor"),
-      await buildLinea("bancos", "haber", importe, "Pago"),
+      await buildLinea(cuentaFondos, "haber", importe, cuentaPago || medioPago || "Pago"),
     ],
   });
 }

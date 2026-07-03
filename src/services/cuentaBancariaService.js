@@ -27,7 +27,7 @@ export async function getCuentasBancarias(sedeId = null) {
     .order("nombre", { ascending: true });
 
   if (idParaFiltro) {
-    query = query.eq("sede_id", idParaFiltro);
+    query = query.or(`sede_id.eq.${idParaFiltro},sede_id.is.null`);
   }
 
   const { data, error } = await query;
@@ -55,7 +55,17 @@ export async function createCuentaBancaria(form) {
     `)
     .single();
 
-  if (error) throw error;
+  if (error) {
+    if (error.code === "42501") {
+      throw new Error("No tenés permisos para crear cuentas bancarias. Revisá las políticas RLS de cuentas_bancarias.");
+    }
+
+    if (error.code === "23505") {
+      throw new Error("Ya existe una cuenta bancaria con ese nombre.");
+    }
+
+    throw error;
+  }
 
   return mapCuenta(data);
 }
