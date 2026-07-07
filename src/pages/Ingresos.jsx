@@ -27,6 +27,11 @@ import {
   marcarIngresoCobrado,
 } from "../services/ingresoService";
 import { getSedes } from "../services/sedeService";
+import {
+  getEntidadesCuentaCorriente,
+  normalizeDocument,
+  normalizeText,
+} from "../services/cuentaCorrienteEntidadService";
 
 import { formatMoney, formatDate, toDate } from "../utils/format";
 import { toast } from "../components/ToastProvider";
@@ -100,6 +105,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
 
   const [ingresos, setIngresos] = useState([]);
   const [sedes, setSedes] = useState([]);
+  const [clientes, setClientes] = useState([]);
 
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
@@ -135,6 +141,11 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
         promise: getSedes(),
         fallback: [],
       },
+      clientes: {
+        label: "clientes para ingresos",
+        promise: getEntidadesCuentaCorriente({ tipo: "cliente", activa: true }),
+        fallback: [],
+      },
       conceptos: {
         label: "conceptos de ingresos",
         promise: getConceptoItems("ingreso"),
@@ -144,6 +155,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
 
     setIngresos(results.ingresos.data || []);
     setSedes(results.sedes.data || []);
+    setClientes(results.clientes.data || []);
     setConceptoItems(results.conceptos.data || []);
     setForm((prev) => ({
       ...prev,
@@ -194,6 +206,50 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
   const totalCobrado = ingresosFiltrados.filter((i) => i.estado === "Cobrado").reduce((acc, i) => acc + Number(i.importe || 0), 0);
   const totalPendiente = ingresosFiltrados.filter((i) => i.estado === "Pendiente").reduce((acc, i) => acc + Number(i.importe || 0), 0);
   const ingresosFiscales = ingresosFiltrados.filter((item) => item.datosFiscales?.qrUrl);
+
+  function findCliente(value) {
+    const term = normalizeText(value);
+    const documento = normalizeDocument(value);
+    if (!term && !documento) return null;
+
+    return clientes.find((cliente) => {
+      const nombre = normalizeText(cliente.nombre);
+      const doc = normalizeDocument(cliente.documento);
+      return (
+        nombre === term ||
+        nombre.startsWith(term) ||
+        (documento && doc === documento) ||
+        (documento && doc.startsWith(documento))
+      );
+    });
+  }
+
+  function applyClienteToForm(current, cliente) {
+    if (!cliente) return current;
+
+    return {
+      ...current,
+      sociedad: cliente.nombre,
+      facturaCuit: cliente.documento || current.facturaCuit || "",
+    };
+  }
+
+  function updateClienteManual(value) {
+    setForm((prev) =>
+      applyClienteToForm({ ...prev, sociedad: value }, findCliente(value))
+    );
+  }
+
+  function updateClienteImportado(value) {
+    setIngresoPendiente((prev) => {
+      if (!prev) return prev;
+
+      return applyClienteToForm(
+        { ...prev, sociedad: value },
+        findCliente(value),
+      );
+    });
+  }
 
   function openNuevoIngreso() {
     if (!canCreateIngresos) return;
@@ -997,6 +1053,16 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
         </div>
       </div>
 
+      <datalist id="clientes-ingresos-lista">
+        {clientes.map((cliente) => (
+          <option
+            key={cliente.id}
+            value={cliente.nombre}
+            label={cliente.documento || ""}
+          />
+        ))}
+      </datalist>
+
       <div className="stats-grid small" data-tour="ingresos-resumen">
         <div className="stat-card" data-tour="ingresos-resumen-total"><div>
           <span>Total ingresos</span>
@@ -1150,8 +1216,13 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
             <label>Fecha <input type="date" required value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} /></label>
             <label>
               Entidad pagadora / Razón social
-              <input required value={form.sociedad} onChange={(e) => setForm({ ...form, sociedad: e.target.value })} />
-              <small>Obra social, prepaga, cliente particular, razón social o CUIT.</small>
+              <input
+                required
+                list="clientes-ingresos-lista"
+                value={form.sociedad}
+                onChange={(e) => updateClienteManual(e.target.value)}
+              />
+              <small>Podés elegir un cliente existente o cargarlo manualmente.</small>
             </label>
             <label>Sede
               <select value={form.sedeId} onChange={(e) => setForm({ ...form, sedeId: e.target.value })} disabled={sedeBloqueada} required>
@@ -1279,7 +1350,15 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
             </div>
             <label>Fecha <input type="date" required value={ingresoPendiente.fecha} onChange={(e) => setIngresoPendiente({ ...ingresoPendiente, fecha: e.target.value })} /></label>
             <label>Comprobante <input value={ingresoPendiente.comprobante} disabled /></label>
-            <label>Entidad pagadora / CUIT <input required value={ingresoPendiente.sociedad} onChange={(e) => setIngresoPendiente({ ...ingresoPendiente, sociedad: e.target.value })} /></label>
+            <label>
+              Entidad pagadora / CUIT
+              <input
+                required
+                list="clientes-ingresos-lista"
+                value={ingresoPendiente.sociedad}
+                onChange={(e) => updateClienteImportado(e.target.value)}
+              />
+            </label>
             <label>Sede
               <select value={ingresoPendiente.sedeId} onChange={(e) => setIngresoPendiente({ ...ingresoPendiente, sedeId: e.target.value })} required>
                 {sedes.map((sede) => <option key={sede.id} value={sede.id}>{sede.nombre}</option>)}
