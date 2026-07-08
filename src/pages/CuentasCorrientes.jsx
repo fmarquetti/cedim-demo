@@ -19,6 +19,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import { getSedes } from "../services/sedeService";
+import { toast } from "../components/ToastProvider";
 import {
   createCuentaCorriente,
   deleteCuentaCorriente,
@@ -193,7 +194,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
       }));
     } catch (error) {
       console.error("Error cargando cuentas corrientes:", error);
-      alert("No se pudieron cargar las cuentas corrientes.");
+      toast.error(error.message || "No se pudieron cargar las cuentas corrientes.");
     } finally {
       setLoading(false);
     }
@@ -803,7 +804,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
 
       setModal(null);
     } catch (err) {
-      alert(err.message || "No se pudo registrar el comprobante.");
+      toast.error(err.message || "No se pudo registrar el comprobante.");
     } finally {
       setSaving(false);
     }
@@ -818,7 +819,7 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
       await deleteCuentaCorriente(id);
       await loadData();
     } catch (err) {
-      alert(err.message || "No se pudo eliminar.");
+      toast.error(err.message || "No se pudo eliminar.");
     } finally {
       setDeletingId(null);
     }
@@ -828,8 +829,8 @@ export default function CuentasCorrientes({ selectedSede, sedeId, dbSedeId }) {
     try {
       await marcarCuentaAplicada(id);
       await loadData();
-    } catch {
-      alert("No se pudo marcar como aplicado.");
+    } catch (error) {
+      toast.error(error.message || "No se pudo marcar como aplicado.");
     }
   }
 

@@ -112,6 +112,7 @@ function mapIngreso(row) {
     estado: row.estado,
     archivo: row.archivo,
     comprobante: row.comprobante,
+    fechaVencimiento: row.fecha_vencimiento || "",
     datosFiscales: row.datos_fiscales,
     distribuciones,
     tieneDistribucion: distribuciones.length > 0,
@@ -266,6 +267,7 @@ export async function createIngreso(form) {
       sede_id: getDbSedeId(form.sedeId),
       origen: form.origen,
       importe: Number(form.importe || 0),
+      fecha_vencimiento: form.fechaVencimiento || form.fecha_vencimiento || null,
       cobro: form.cobro,
       estado: form.estado || "Pendiente",
       archivo: form.archivo || null,
@@ -406,3 +408,4 @@ export async function marcarIngresoCobrado(id) {
     despues: ingresoActualizado,
   });
 }
+

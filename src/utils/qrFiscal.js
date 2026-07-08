@@ -18,14 +18,34 @@ function decodeBase64Url(base64Url) {
 export function extraerDatosQRFiscal(qrText) {
   const url = new URL(qrText);
   const p = url.searchParams.get("p");
-  if (!p) throw new Error("El QR no contiene datos fiscales válidos.");
+  if (!p) throw new Error("El QR no contiene datos fiscales validos.");
   return decodeBase64Url(p);
 }
 
+function normalizarEspacios(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function extraerQrFiscalDesdeTexto(texto) {
+  const coincidencias = normalizarEspacios(texto).match(/https?:\/\/[^\s)]+/gi);
+  if (!coincidencias?.length) return null;
+
+  return (
+    coincidencias.find((url) => {
+      try {
+        extraerDatosQRFiscal(url);
+        return true;
+      } catch {
+        return false;
+      }
+    }) || null
+  );
+}
+
 const TIPOS_COMPROBANTE = {
-  1: "Factura A", 2: "Nota de Débito A", 3: "Nota de Crédito A",
-  6: "Factura B", 7: "Nota de Débito B", 8: "Nota de Crédito B",
-  11: "Factura C", 12: "Nota de Débito C", 13: "Nota de Crédito C",
+  1: "Factura A", 2: "Nota de Debito A", 3: "Nota de Credito A",
+  6: "Factura B", 7: "Nota de Debito B", 8: "Nota de Credito B",
+  11: "Factura C", 12: "Nota de Debito C", 13: "Nota de Credito C",
   51: "Factura M",
 };
 
@@ -42,15 +62,23 @@ export async function leerQRDesdePDF(file) {
     const viewport = page.getViewport({ scale: 2.5 });
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d", { willReadFrequently: true });
+
     canvas.width = viewport.width;
     canvas.height = viewport.height;
+
     await page.render({ canvasContext: context, viewport }).promise;
+
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
     const qr = jsQR(imageData.data, canvas.width, canvas.height);
     if (qr?.data) return qr.data;
+
+    const textContent = await page.getTextContent();
+    const text = (textContent.items || []).map((item) => item?.str || "").join(" ");
+    const qrText = extraerQrFiscalDesdeTexto(text);
+    if (qrText) return qrText;
   }
 
-  throw new Error("No se encontró ningún código QR en el PDF.");
+  throw new Error("No se encontro ningun codigo QR fiscal en el PDF.");
 }
 
 export function buildDatosFiscales(qrText) {

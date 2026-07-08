@@ -3,6 +3,7 @@ import { Download, Eye, Printer, RefreshCw, Trash2 } from "lucide-react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import Modal from "../components/Modal";
+import { toast } from "../components/ToastProvider";
 import {
   anularMovimientoCuentaCorriente,
   getEntidadesCuentaCorriente,
@@ -62,6 +63,7 @@ export default function CuentasCorrientesEntidades({ selectedSede, sedeId }) {
     } catch (err) {
       console.error("Error cargando cuentas corrientes por entidad:", err);
       setError(err.message || "No se pudieron cargar las cuentas corrientes.");
+      toast.error(err.message || "No se pudieron cargar las cuentas corrientes.");
     } finally {
       setLoading(false);
     }
@@ -110,7 +112,7 @@ export default function CuentasCorrientesEntidades({ selectedSede, sedeId }) {
       setMovimientosDetalle(movimientos || []);
     } catch (err) {
       console.error("Error cargando detalle de cuenta corriente:", err);
-      alert(err.message || "No se pudo cargar el detalle.");
+      toast.error(err.message || "No se pudo cargar el detalle.");
     } finally {
       setLoadingDetalle(false);
     }

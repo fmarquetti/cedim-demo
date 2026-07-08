@@ -37,6 +37,7 @@ import { loadSafeBatch, notifyLoadErrors } from "../utils/loadSafe";
 
 import ConceptoSelector from "../components/ConceptoSelector";
 import { getConceptoItems } from "../services/conceptoItemService";
+import { leerQRDesdePDF as leerQrFiscalDesdePdf, extraerDatosQRFiscal as extraerDatosQrFiscalUtil, tipoComprobanteLabel as tipoComprobanteLabelUtil } from "../utils/qrFiscal";
 import { extraerFiscalDesdeDatosFiscales } from "../services/fiscalService";
 import { getEntidadesCuentaCorriente, normalizeDocument, normalizeText } from "../services/cuentaCorrienteEntidadService";
 
@@ -923,10 +924,10 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
     try {
       setImportandoFactura(true);
 
-      const qrText = await leerQRDesdePDF(file);
-      const datos = extraerDatosQRFiscal(qrText);
+      const qrText = await leerQrFiscalDesdePdf(file);
+      const datos = extraerDatosQrFiscalUtil(qrText);
 
-      const tipoComprobante = tipoComprobanteLabel(datos.tipoCmp);
+      const tipoComprobante = tipoComprobanteLabelUtil(datos.tipoCmp);
       const puntoVenta = String(datos.ptoVta || "").padStart(4, "0");
       const numeroComprobante = String(datos.nroCmp || "").padStart(8, "0");
       const datosFiscales = {

@@ -21,15 +21,34 @@ useEffect(() => {
     const onError   = (e) => add(e.detail, "error");
     const onSuccess = (e) => add(e.detail, "success");
     const onInfo    = (e) => add(e.detail, "info");
+    const onWindowError = (event) => {
+      const message =
+        event?.error?.message ||
+        event?.message ||
+        "Ocurrio un error inesperado.";
+      add(message, "error");
+    };
+    const onUnhandledRejection = (event) => {
+      const reason = event?.reason;
+      const message =
+        reason?.message ||
+        (typeof reason === "string" ? reason : null) ||
+        "Ocurrio un error inesperado.";
+      add(message, "error");
+    };
 
     window.addEventListener("genetics:error",   onError);
     window.addEventListener("genetics:success", onSuccess);
     window.addEventListener("genetics:info",    onInfo);
+    window.addEventListener("error", onWindowError);
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
 
     return () => {
       window.removeEventListener("genetics:error",   onError);
       window.removeEventListener("genetics:success", onSuccess);
       window.removeEventListener("genetics:info",    onInfo);
+      window.removeEventListener("error", onWindowError);
+      window.removeEventListener("unhandledrejection", onUnhandledRejection);
     };
   }, [add]);
 
