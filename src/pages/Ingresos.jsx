@@ -40,6 +40,7 @@ import { getDbSedeId } from "../utils/sedeUtils";
 import { loadSafeBatch, notifyLoadErrors } from "../utils/loadSafe";
 
 import ConceptoSelector from "../components/ConceptoSelector";
+import EntityAutocomplete from "../components/EntityAutocomplete";
 import { getConceptoItems } from "../services/conceptoItemService";
 import { leerQRDesdePDF as leerQrFiscalDesdePdf, extraerDatosQRFiscal as extraerDatosQrFiscalUtil, tipoComprobanteLabel as tipoComprobanteLabelUtil } from "../utils/qrFiscal";
 
@@ -1056,15 +1057,6 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
         </div>
       </div>
 
-      <datalist id="clientes-ingresos-lista">
-        {clientes.map((cliente) => (
-          <option
-            key={cliente.id}
-            value={cliente.nombre}
-            label={cliente.documento || ""}
-          />
-        ))}
-      </datalist>
 
       <div className="stats-grid small" data-tour="ingresos-resumen">
         <div className="stat-card" data-tour="ingresos-resumen-total"><div>
@@ -1219,11 +1211,13 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
             <label>Fecha <input type="date" required value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} /></label>
             <label>
               Entidad pagadora / Razón social
-              <input
+              <EntityAutocomplete
                 required
-                list="clientes-ingresos-lista"
                 value={form.sociedad}
-                onChange={(e) => updateClienteManual(e.target.value)}
+                onChange={updateClienteManual}
+                items={clientes}
+                placeholder="Buscar por razon social o CUIT..."
+                emptyMessage="No hay clientes que coincidan."
               />
               <small>Podés elegir un cliente existente o cargarlo manualmente.</small>
             </label>
@@ -1356,11 +1350,13 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
             <label>Comprobante <input value={ingresoPendiente.comprobante} disabled /></label>
             <label>
               Entidad pagadora / CUIT
-              <input
+              <EntityAutocomplete
                 required
-                list="clientes-ingresos-lista"
                 value={ingresoPendiente.sociedad}
-                onChange={(e) => updateClienteImportado(e.target.value)}
+                onChange={updateClienteImportado}
+                items={clientes}
+                placeholder="Buscar por razon social o CUIT..."
+                emptyMessage="No hay clientes que coincidan."
               />
             </label>
             <label>Sede

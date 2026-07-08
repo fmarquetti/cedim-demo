@@ -9,7 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Ingresos from "./pages/Ingresos";
 import Egresos from "./pages/Egresos";
 import OrdenesPago from "./pages/OrdenesPago";
-import CuentasCorrientes from "./pages/CuentasCorrientes";
+import CuentasCorrientes from "./pages/CuentasCorrientesEntidades";
 import ClientesProveedores from "./pages/ClientesProveedores";
 import Bancos from "./pages/Bancos";
 import Reportes from "./pages/Reportes";

@@ -36,6 +36,7 @@ import { getDbSedeId } from "../utils/sedeUtils";
 import { loadSafeBatch, notifyLoadErrors } from "../utils/loadSafe";
 
 import ConceptoSelector from "../components/ConceptoSelector";
+import EntityAutocomplete from "../components/EntityAutocomplete";
 import { getConceptoItems } from "../services/conceptoItemService";
 import { leerQRDesdePDF as leerQrFiscalDesdePdf, extraerDatosQRFiscal as extraerDatosQrFiscalUtil, tipoComprobanteLabel as tipoComprobanteLabelUtil } from "../utils/qrFiscal";
 import { extraerFiscalDesdeDatosFiscales } from "../services/fiscalService";
@@ -1383,15 +1384,6 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
         </div>
       </div>
 
-      <datalist id="proveedores-egresos-lista">
-        {proveedores.map((proveedor) => (
-          <option
-            key={proveedor.id}
-            value={proveedor.nombre}
-            label={proveedor.documento || ""}
-          />
-        ))}
-      </datalist>
 
       <div className="stats-grid small">
         <div className="stat-card" data-tour="egresos-resumen-total">
@@ -1736,36 +1728,51 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
 
             <label>
               Proveedor
-              <input
+              <EntityAutocomplete
                 required
-                list="proveedores-egresos-lista"
                 value={form.proveedor}
-                onChange={(e) => updateProveedorManual(e.target.value)}
+                onChange={updateProveedorManual}
+                items={proveedores}
+                placeholder="Buscar por proveedor o CUIT..."
+                emptyMessage="No hay proveedores que coincidan."
               />
             </label>
 
             <label>
               Razón social del proveedor
-              <input
+              <EntityAutocomplete
                 required
                 value={form.sociedad}
-                onChange={(e) => setForm({ ...form, sociedad: e.target.value })}
+                onChange={(value) =>
+                  setForm((prev) =>
+                    applyProveedorToForm(
+                      { ...prev, sociedad: value },
+                      findProveedor(value)
+                    )
+                  )
+                }
+                items={proveedores}
+                placeholder="Buscar por razon social o CUIT..."
+                emptyMessage="No hay proveedores que coincidan."
               />
               <small>Nombre legal o CUIT asociado al proveedor.</small>
             </label>
 
             <label>
               CUIT proveedor
-              <input
+              <EntityAutocomplete
                 value={form.proveedorCuit}
-                onChange={(e) =>
+                onChange={(value) =>
                   setForm((prev) =>
                     applyProveedorToForm(
-                      { ...prev, proveedorCuit: e.target.value },
-                      findProveedor(e.target.value)
+                      { ...prev, proveedorCuit: value },
+                      findProveedor(value)
                     )
                   )
                 }
+                items={proveedores}
+                placeholder="Buscar por CUIT o razon social..."
+                emptyMessage="No hay proveedores que coincidan."
               />
             </label>
 
@@ -1991,37 +1998,50 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
 
             <label>
               Proveedor
-              <input
+              <EntityAutocomplete
                 required
-                list="proveedores-egresos-lista"
                 value={egresoPendiente.proveedor}
-                onChange={(e) => updateProveedorImportado(e.target.value)}
+                onChange={updateProveedorImportado}
+                items={proveedores}
+                placeholder="Buscar por proveedor o CUIT..."
+                emptyMessage="No hay proveedores que coincidan."
               />
             </label>
 
             <label>
               Razón social del proveedor
-              <input
+              <EntityAutocomplete
                 value={egresoPendiente.sociedad}
-                onChange={(e) =>
-                  setEgresoPendiente({ ...egresoPendiente, sociedad: e.target.value })
+                onChange={(value) =>
+                  setEgresoPendiente((prev) =>
+                    applyProveedorToForm(
+                      { ...prev, sociedad: value },
+                      findProveedor(value)
+                    )
+                  )
                 }
+                items={proveedores}
+                placeholder="Buscar por razon social o CUIT..."
+                emptyMessage="No hay proveedores que coincidan."
               />
               <small>Nombre legal o CUIT asociado al proveedor.</small>
             </label>
 
             <label>
               CUIT proveedor
-              <input
+              <EntityAutocomplete
                 value={egresoPendiente.proveedorCuit || ""}
-                onChange={(e) =>
+                onChange={(value) =>
                   setEgresoPendiente((prev) =>
                     applyProveedorToForm(
-                      { ...prev, proveedorCuit: e.target.value },
-                      findProveedor(e.target.value)
+                      { ...prev, proveedorCuit: value },
+                      findProveedor(value)
                     )
                   )
                 }
+                items={proveedores}
+                placeholder="Buscar por CUIT o razon social..."
+                emptyMessage="No hay proveedores que coincidan."
               />
             </label>
 
