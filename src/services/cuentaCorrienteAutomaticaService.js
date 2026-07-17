@@ -109,6 +109,8 @@ export async function generarCcDesdeIngresoCobrado(ingreso) {
       cobro: ingreso.cobro,
       origen_ingreso: ingreso.origen,
       sociedad: ingreso.sociedad,
+      fecha_vencimiento:
+        ingreso.fechaVencimiento || ingreso.fecha_vencimiento || ingreso.vencimiento || null,
     },
   });
 }
@@ -214,3 +216,4 @@ export async function regenerarCuentaCorrienteOperacion(tipo, id) {
 
   throw new Error("Tipo de operacion no soportado.");
 }
+

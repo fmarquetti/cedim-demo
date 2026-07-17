@@ -40,7 +40,9 @@ import { getDbSedeId } from "../utils/sedeUtils";
 import { loadSafeBatch, notifyLoadErrors } from "../utils/loadSafe";
 
 import ConceptoSelector from "../components/ConceptoSelector";
+import EntityAutocomplete from "../components/EntityAutocomplete";
 import { getConceptoItems } from "../services/conceptoItemService";
+import { leerQRDesdePDF as leerQrFiscalDesdePdf, extraerDatosQRFiscal as extraerDatosQrFiscalUtil, tipoComprobanteLabel as tipoComprobanteLabelUtil } from "../utils/qrFiscal";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -52,6 +54,7 @@ const emptyForm = {
   sedeId: "",
   origen: "Obra Social",
   importe: "",
+  fechaVencimiento: "",
   cobro: "Transferencia",
   estado: "Pendiente",
   distribuciones: [],
@@ -794,9 +797,9 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
     if (!file) return;
     try {
       setImportandoFactura(true);
-      const qrText = await leerQRDesdePDF(file);
-      const datos = extraerDatosQRFiscal(qrText);
-      const tipoComprobante = tipoComprobanteLabel(datos.tipoCmp);
+      const qrText = await leerQrFiscalDesdePdf(file);
+      const datos = extraerDatosQrFiscalUtil(qrText);
+      const tipoComprobante = tipoComprobanteLabelUtil(datos.tipoCmp);
       const puntoVenta = String(datos.ptoVta || "").padStart(4, "0");
       const numeroComprobante = String(datos.nroCmp || "").padStart(8, "0");
 
@@ -812,6 +815,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
         sedeId: sedeDefault?.id || "",
         origen: "Factura fiscal",
         importe: Number(datos.importe || 0),
+        fechaVencimiento: "",
         cobro: "Transferencia",
         estado: "Pendiente",
         archivo: file.name,
@@ -1068,15 +1072,6 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
         </div>
       </div>
 
-      <datalist id="clientes-ingresos-lista">
-        {clientes.map((cliente) => (
-          <option
-            key={cliente.id}
-            value={cliente.nombre}
-            label={cliente.documento || ""}
-          />
-        ))}
-      </datalist>
 
       <div className="stats-grid small" data-tour="ingresos-resumen">
         <div className="stat-card" data-tour="ingresos-resumen-total"><div>
@@ -1231,11 +1226,13 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
             <label>Fecha <input type="date" required value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} /></label>
             <label>
               Entidad pagadora / Razón social
-              <input
+              <EntityAutocomplete
                 required
-                list="clientes-ingresos-lista"
                 value={form.sociedad}
-                onChange={(e) => updateClienteManual(e.target.value)}
+                onChange={updateClienteManual}
+                items={clientes}
+                placeholder="Buscar por razon social o CUIT..."
+                emptyMessage="No hay clientes que coincidan."
               />
               <small>Podés elegir un cliente existente o cargarlo manualmente.</small>
             </label>
@@ -1250,6 +1247,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
               </select>
             </label>
             <label>Importe <input type="number" step="0.01" min="0" required value={form.importe} onChange={(e) => setForm({ ...form, importe: e.target.value })} /></label>
+            <label>Fecha de vencimiento <input type="date" value={form.fechaVencimiento} onChange={(e) => setForm({ ...form, fechaVencimiento: e.target.value })} /></label>
             <div className="full split-box">
               <div className="split-header">
                 <div>
@@ -1367,11 +1365,13 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
             <label>Comprobante <input value={ingresoPendiente.comprobante} disabled /></label>
             <label>
               Entidad pagadora / CUIT
-              <input
+              <EntityAutocomplete
                 required
-                list="clientes-ingresos-lista"
                 value={ingresoPendiente.sociedad}
-                onChange={(e) => updateClienteImportado(e.target.value)}
+                onChange={updateClienteImportado}
+                items={clientes}
+                placeholder="Buscar por razon social o CUIT..."
+                emptyMessage="No hay clientes que coincidan."
               />
             </label>
             <label>Sede
@@ -1380,6 +1380,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
               </select>
             </label>
             <label>Importe <input type="number" step="0.01" min="0" required value={ingresoPendiente.importe} onChange={(e) => setIngresoPendiente({ ...ingresoPendiente, importe: e.target.value })} /></label>
+            <label>Fecha de vencimiento <input type="date" value={ingresoPendiente.fechaVencimiento || ""} onChange={(e) => setIngresoPendiente({ ...ingresoPendiente, fechaVencimiento: e.target.value })} /></label>
             <label>Forma de cobro
               <select value={ingresoPendiente.cobro} onChange={(e) => setIngresoPendiente({ ...ingresoPendiente, cobro: e.target.value })}>
                 <option>Transferencia</option><option>Efectivo</option><option>Tarjeta</option><option>Cheque</option>
@@ -1424,3 +1425,4 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
     </section>
   );
 }
+
