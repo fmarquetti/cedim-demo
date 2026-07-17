@@ -941,12 +941,13 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
         sedeBloqueada
           ? sedes.find((s) => s.id === idSedeActiva)
           : sedes[0];
+      const proveedorDetectado = getProveedorDesdeFactura(datos);
 
       setEgresoPendiente({
         fecha: formatFechaInput(datos.fecha),
-        proveedor: `CUIT ${datos.cuit}`,
-        proveedorCuit: datos.cuit || "",
-        sociedad: "",
+        proveedor: proveedorDetectado.proveedor,
+        proveedorCuit: proveedorDetectado.proveedorCuit,
+        sociedad: proveedorDetectado.sociedad,
         fechaVencimiento: "",
         sedeId: sedeDefault?.id || "",
         concepto: "",
@@ -1061,6 +1062,16 @@ export default function Egresos({ selectedSede, dbSedeId, currentUser }) {
       proveedor: proveedor.nombre,
       sociedad: proveedor.nombre,
       proveedorCuit: proveedor.documento || current.proveedorCuit || "",
+    };
+  }
+
+  function getProveedorDesdeFactura(datos) {
+    const proveedor = findProveedor(datos?.cuit);
+
+    return {
+      proveedor: proveedor?.nombre || `CUIT ${datos?.cuit || ""}`.trim(),
+      proveedorCuit: proveedor?.documento || datos?.cuit || "",
+      sociedad: proveedor?.nombre || "",
     };
   }
 

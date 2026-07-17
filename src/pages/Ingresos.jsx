@@ -234,6 +234,21 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
     };
   }
 
+  function getEntidadPagadoraDesdeFactura(datos) {
+    const documentoReceptor = normalizeDocument(
+      datos?.nroDocRec ||
+        datos?.numeroDocumentoReceptor ||
+        datos?.documentoReceptor ||
+        ""
+    );
+
+    if (!documentoReceptor) return "";
+
+    const cliente = findCliente(documentoReceptor);
+
+    return cliente?.nombre || `CUIT ${documentoReceptor}`;
+  }
+
   function updateClienteManual(value) {
     setForm((prev) =>
       applyClienteToForm({ ...prev, sociedad: value }, findCliente(value))
@@ -793,7 +808,7 @@ export default function Ingresos({ selectedSede, sedeId, dbSedeId, currentUser }
         fecha: formatFechaInput(datos.fecha),
         concepto: "",
         conceptosItems: [],
-        sociedad: `CUIT ${datos.cuit}`,
+        sociedad: getEntidadPagadoraDesdeFactura(datos),
         sedeId: sedeDefault?.id || "",
         origen: "Factura fiscal",
         importe: Number(datos.importe || 0),
